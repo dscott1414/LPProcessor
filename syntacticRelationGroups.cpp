@@ -48,26 +48,28 @@
 		  unpacks them without being overwritten afterward.
 		- The remapping ctor sets o = -1 and does not copy timeInfo,
 		  description or tft.presType from the source SRG (those are
-		  wstring/vector and default to empty, which is intentional --
+		  lpwstring/vector and default to empty, which is intentional --
 		  positions were remapped into a different source, so old
 		  presType/description text would not apply). changeStateAdverb,
 		  speakerContinuation, printMin/printMax and the nonSemantic* match
 		  flags are plain bool/int, not copied either, and are now explicitly
 		  reset (previously left indeterminate).
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include <winsock.h>
-#include "Winhttp.h"
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
@@ -79,11 +81,11 @@
 int SRIDebugCounter = 0;
 #define NULLWORD 187
 
-// Lexicon string at source position `where`, or L"" if where < 0.
-const wchar_t *cSource::wchr(int where)
+// Lexicon string at source position `where`, or u"" if where < 0.
+const lpchar_t *cSource::wchr(int where)
 {
 	LFS
-		return (where < 0) ? L"" : m[where].word->first.c_str();
+		return (where < 0) ? u"" : m[where].word->first.c_str();
 }
 
 // End of the object spanning `wo`, or wo itself if there is no wider object.
@@ -97,26 +99,26 @@ int cSource::gmo(int wo)
 
 // Format "[id whereString]" or "[id (whereString) class]" into tmpstr.
 // Returns tmpstr.c_str() — caller must keep tmpstr alive.  Out-of-range
-// where writes "Illegal!" into tmpstr.  where < 0 returns L"".
-const wchar_t *cSource::wrti(int where, const wchar_t * id, wstring &tmpstr, bool shortFormat)
+// where writes "Illegal!" into tmpstr.  where < 0 returns u"".
+const lpchar_t *cSource::wrti(int where, const lpchar_t * id, lpwstring &tmpstr, bool shortFormat)
 {
 	LFS
-	if (where < 0) return L"";
+	if (where < 0) return u"";
 	if (where >= m.size())
 	{
-		tmpstr = L"Illegal!";
+		tmpstr = u"Illegal!";
 		return tmpstr.c_str();
 	}
-	wstring ws;
+	lpwstring ws;
 	whereString(where, ws, shortFormat);
 	tIWMM w = fullyResolveToClass(where);
-	wstring lcws = ws, lcw = w->first;
+	lpwstring lcws = ws, lcw = w->first;
 	std::transform(lcws.begin(), lcws.end(), lcws.begin(), ::tolower);
 	std::transform(lcw.begin(), lcw.end(), lcw.begin(), ::tolower);
-	if (w == wNULL || w->second.index < 0 || lcws.find(lcw) != wstring::npos)
-		tmpstr = L"[" + wstring(id) + L" " + ws + L"]";
+	if (w == wNULL || w->second.index < 0 || lcws.find(lcw) != lpwstring::npos)
+		tmpstr = u"[" + lpwstring(id) + u" " + ws + u"]";
 	else
-		tmpstr = L"[" + wstring(id) + L" (" + ws + L") " + w->first + L"]";
+		tmpstr = u"[" + lpwstring(id) + u" (" + ws + u") " + w->first + u"]";
 	return tmpstr.c_str();
 }
 
@@ -151,18 +153,18 @@ void cSource::getAllPreps(cSyntacticRelationGroup* srg, set <int> &relPreps, int
 
 // Append "prep adj* wherePrepObject: [PO ...]" (and up to 10 compound
 // POC parts) onto ps.  No-op if wherePrep or its relObject is missing.
-void cSource::prepPhraseToString(int wherePrep, wstring &ps)
+void cSource::prepPhraseToString(int wherePrep, lpwstring &ps)
 {
 	LFS
 		if (wherePrep < 0) return;
 	int wherePrepObject = m[wherePrep].getRelObject();
 	if (wherePrepObject < 0) return;
-	wstring tmpstr1, tmpstr2,ws;
-	ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + itos(wherePrepObject,ws) + L":" + wrti(wherePrepObject, L"PO", tmpstr2);
+	lpwstring tmpstr1, tmpstr2,ws;
+	ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + u" " + getWSAdjective(wherePrepObject, 0) + u" " + getWSAdjective(wherePrepObject, 1) + u" " + itos(wherePrepObject,ws) + u":" + wrti(wherePrepObject, u"PO", tmpstr2);
 	// compound nouns
 	int compoundCount = 0;
 	while (wherePrep >= 0 && wherePrepObject >= 0 && (wherePrepObject = m[wherePrepObject].nextCompoundPartObject) >= 0 && compoundCount++ < 10)
-		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + L" " + getWSAdjective(wherePrepObject, 0) + L" " + getWSAdjective(wherePrepObject, 1) + L" " + itos(wherePrepObject, ws) + L":" + wrti(wherePrepObject, L"POC", tmpstr2);
+		ps += wchr(wherePrep) + getWOSAdjective(wherePrepObject, tmpstr1) + u" " + getWSAdjective(wherePrepObject, 0) + u" " + getWSAdjective(wherePrepObject, 1) + u" " + itos(wherePrepObject, ws) + u":" + wrti(wherePrepObject, u"POC", tmpstr2);
 }
 
 // Insert wp into relPreps unless already present or wp is past m[].
@@ -258,10 +260,10 @@ void cSource::getSRIMinMax(cSyntacticRelationGroup* srg)
 // numOrder-th non-object adjective/noun/determiner inside the object span
 // at `where` (acceptableAdjective && !acceptableObjectPosition).  Empty
 // if where < 0 or the span is a single token.
-wstring cSource::getWSAdjective(int where, int numOrder)
+lpwstring cSource::getWSAdjective(int where, int numOrder)
 {
 	LFS
-		if (where < 0) return L"";
+		if (where < 0) return u"";
 	int object = m[where].getObject();
 	if (object >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1 && where > 0)
 	{
@@ -274,7 +276,7 @@ wstring cSource::getWSAdjective(int where, int numOrder)
 					numOrder--;
 			}
 	}
-	return L"";
+	return u"";
 }
 
 // Object-id of the first adjectival object inside `where`, or — if where < 0 —
@@ -295,7 +297,7 @@ int cSource::getOSAdjective(int whereVerb, int where)
 
 // whereString of the first adjectival object at `where`, else (if where < 0)
 // of the post-verbal adjectival object next to whereVerb.  Writes into tmpstr.
-wstring cSource::getWOSAdjective(int whereVerb, int where, wstring &tmpstr)
+lpwstring cSource::getWOSAdjective(int whereVerb, int where, lpwstring &tmpstr)
 {
 	LFS
 		getWOSAdjective(where, tmpstr);
@@ -324,8 +326,8 @@ int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 	//	  m[whereVerb-1].queryWinnerForm(adjectiveForm)>=0 && m[whereVerb-1].getObject()<0)
 	//	return ((i=m[whereVerb-1].word->second.index)<0) ? NULLWORD : i;
 	if (whereVerb < 0 || (whereVerb + 1 >= where && where >= 0)) return NULLWORD;
-	int maxEnd, q2IElement = queryPattern(whereVerb, L"_Q2", maxEnd);
-	if (q2IElement >= 0 && patterns[pema[q2IElement].getParentPattern()]->differentiator == L"I" && m[whereVerb].relSubject >= 0 && (i = m[m[whereVerb].relSubject].endObjectPosition) >= 0 &&
+	int maxEnd, q2IElement = queryPattern(whereVerb, u"_Q2", maxEnd);
+	if (q2IElement >= 0 && patterns[pema[q2IElement].getParentPattern()]->differentiator == u"I" && m[whereVerb].relSubject >= 0 && (i = m[m[whereVerb].relSubject].endObjectPosition) >= 0 &&
 		(m[i].queryWinnerForm(adjectiveForm) >= 0 || (m[i].queryWinnerForm(quoteForm) >= 0 && i + 1 < (signed)m.size() && m[i = i + 1].queryWinnerForm(adjectiveForm) >= 0))) // What is "WWE" short for?
 		return ((i = m[i].word->second.index) < 0) ? NULLWORD : i;
 	if (whereVerb + 1 < (signed)m.size() && acceptableAdjective(whereVerb + 1) && !acceptableObjectPosition(whereVerb + 1))
@@ -337,7 +339,7 @@ int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
 
 // Word string of the numOrder-th non-object adjective at `where`, falling
 // back to a post-verbal / _Q2-I adjective when where < 0 and numOrder == 0.
-wstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, wstring &tmpstr)
+lpwstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, lpwstring &tmpstr)
 {
 	LFS
 		tmpstr = getWSAdjective(where, numOrder);
@@ -345,8 +347,8 @@ wstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, wstring 
 		return tmpstr;
 	if (tmpstr.empty() && where < 0 && whereVerb >= 0)
 	{
-		int maxEnd, i, q2IElement = queryPattern(whereVerb, L"_Q2", maxEnd);
-		if (q2IElement >= 0 && patterns[pema[q2IElement].getParentPattern()]->differentiator == L"I" && m[whereVerb].relSubject >= 0 && (i = m[m[whereVerb].relSubject].endObjectPosition) >= 0 &&
+		int maxEnd, i, q2IElement = queryPattern(whereVerb, u"_Q2", maxEnd);
+		if (q2IElement >= 0 && patterns[pema[q2IElement].getParentPattern()]->differentiator == u"I" && m[whereVerb].relSubject >= 0 && (i = m[m[whereVerb].relSubject].endObjectPosition) >= 0 &&
 			(m[i].queryWinnerForm(adjectiveForm) >= 0 || (m[i].queryWinnerForm(quoteForm) >= 0 && i + 1 < (signed)m.size() && m[i = i + 1].queryWinnerForm(adjectiveForm) >= 0))) // What is "WWE" short for?
 			return m[i].word->first;
 		if (whereVerb + 1 < (signed)m.size() && acceptableAdjective(whereVerb + 1) && !acceptableObjectPosition(whereVerb + 1))
@@ -380,7 +382,7 @@ int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
 // Word string of an adverb next to whereVerb (prefers before, then after).
 // changeStateAdverb=true also accepts a T_START/STOP/FINISH/RESUME time
 // word immediately before the verb, same filter as getMSAdverb.
-const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
+const lpchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
 		if (whereVerb > 0 && m[whereVerb - 1].queryWinnerForm(adverbForm) >= 0)
@@ -393,7 +395,7 @@ const wchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 		if (timeFlag == T_START || timeFlag == T_STOP || timeFlag == T_FINISH || timeFlag == T_RESUME)
 			return m[whereVerb - 1].word->first.c_str();
 	}
-	return L"";
+	return u"";
 }
 
 // True if `where` has objectMatches, or a multi-token / non-general /
@@ -412,7 +414,7 @@ bool cSource::acceptableObjectPosition(int where)
 bool cSource::acceptableAdjective(int where)
 {
 	LFS
-		return m[where].queryWinnerForm(adjectiveForm) >= 0 || m[where].queryWinnerForm(nounForm) >= 0 || m[where].pma.queryPattern(L"__ADJECTIVE") != -1 ||
+		return m[where].queryWinnerForm(adjectiveForm) >= 0 || m[where].queryWinnerForm(nounForm) >= 0 || m[where].pma.queryPattern(u"__ADJECTIVE") != -1 ||
 		m[where].queryWinnerForm(demonstrativeDeterminerForm) >= 0 || m[where].queryWinnerForm(possessiveDeterminerForm) >= 0 || m[where].queryWinnerForm(quantifierForm) >= 0;
 }
 
@@ -435,10 +437,10 @@ int cSource::getOSAdjective(int where)
 
 // whereString of the first adjectival object inside the span at `where`.
 // Empty if where < 0 or none found.  Writes into tmpstr.
-wstring cSource::getWOSAdjective(int where, wstring &tmpstr)
+lpwstring cSource::getWOSAdjective(int where, lpwstring &tmpstr)
 {
 	LFS
-		if (where < 0) return L"";
+		if (where < 0) return u"";
 	int object = m[where].getObject();
 	if (object >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1 && where > 0)
 	{
@@ -446,7 +448,7 @@ wstring cSource::getWOSAdjective(int where, wstring &tmpstr)
 			if (m[I].principalWhereAdjectivalPosition >= 0 && acceptableObjectPosition(I))
 				return whereString(I, tmpstr, false);
 	}
-	return L"";
+	return u"";
 }
 
 // return the first adjective that is not an object
@@ -473,12 +475,12 @@ int cSource::getMSAdjective(int where, int numOrder)
 	return NULLWORD;
 }
 
-// Overload: render prep `ps` via prepPhraseToString then call the wstring
+// Overload: render prep `ps` via prepPhraseToString then call the lpwstring
 // printSRG.  s/ws/wo are sentence / subject / object positions for the dump.
-void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, int ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(lpwstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, int ps, bool overWrote, int matchSum, lpwstring matchInfo, int logDestination)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	prepPhraseToString(ps, tmpstr);
 	printSRG(logPrefix, srg, s, ws, wo, tmpstr, overWrote, matchSum, matchInfo, logDestination);
 }
@@ -487,12 +489,12 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 // secondary object, next objects and the prep string.  matchSum >= 0 stamps
 // SRIDebugCounter into the line (QCHECK omits the counter).  The format
 // string's 34 specifiers match the 34 arguments below one-for-one.
-void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, wstring ps, bool overWrote, int matchSum, wstring matchInfo, int logDestination)
+void cSource::printSRG(lpwstring logPrefix, cSyntacticRelationGroup* srg, int s, int ws, int wo, lpwstring ps, bool overWrote, int matchSum, lpwstring matchInfo, int logDestination)
 {
 	LFS
 		if (srg == NULL)
 			return;
-	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6, tmpstr7, tmpstr8, tmpstr9, tmpstr10, tmpstr11, tmpstr12, tmpstr14;
+	lpwstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6, tmpstr7, tmpstr8, tmpstr9, tmpstr10, tmpstr11, tmpstr12, tmpstr14;
 	bool inQuestion = (srg->whereSubject >= 0 && (m[srg->whereSubject].flags&cWordMatch::flagInQuestion));
 	inQuestion |= (srg->whereObject >= 0 && (m[srg->whereObject].flags&cWordMatch::flagInQuestion));
 	//if (SRIDebugCounter==464)
@@ -505,34 +507,34 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 		itos(SRIDebugCounter++, tmpstr12);
 		itos(matchSum, tmpstr14);
 		if (logDestination&LOG_QCHECK)
-			tmpstr14 = L"[" + tmpstr14 + L" " + matchInfo + L"]";
+			tmpstr14 = u"[" + tmpstr14 + u" " + matchInfo + u"]";
 		else
-			tmpstr14 = L"[" + tmpstr12 + L":" + tmpstr14 + L" " + matchInfo + L"]";
+			tmpstr14 = u"[" + tmpstr12 + u":" + tmpstr14 + u" " + matchInfo + u"]";
 	}
 	else if (s >= 0)
 	{
 		itos(s, tmpstr12);
-		tmpstr14 = L"S" + tmpstr12;
+		tmpstr14 = u"S" + tmpstr12;
 	}
-	const wchar_t *tmp1 = 0, *tmp2 = 0, *tmp3 = 0, *tmp4 = 0, *tmp5 = 0, *tmp6 = 0;
+	const lpchar_t *tmp1 = 0, *tmp2 = 0, *tmp3 = 0, *tmp4 = 0, *tmp5 = 0, *tmp6 = 0;
 	bool shortFormat = (logDestination&LOG_QCHECK) != 0;
-	const wchar_t *f1 = L"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
+	const lpchar_t *f1 = u"%s:%06d:%s%s%s %s %s%s %s %s %s %s %d:%s%s [V %d:%s]%s%s%s %s %s %d:%s%s%s%s%s%s%s%s%s%s%s";
 	lplog(logDestination, f1, 
 		logPrefix.c_str(), // 1
 		srg->where, // 2
 		tmpstr14.c_str(), // 3
-		(srg->whereQuestionType < 0 && srg->relationType != stLOCATION && srg->relationType != -stLOCATION && srg->relationType != stNORELATION && inQuestion) ? L"***" : L"", //4
-		(overWrote) ? L" OVERWRITE" : L"", // 5
+		(srg->whereQuestionType < 0 && srg->relationType != stLOCATION && srg->relationType != -stLOCATION && srg->relationType != stNORELATION && inQuestion) ? u"***" : u"", //4
+		(overWrote) ? u" OVERWRITE" : u"", // 5
 		relationString(srg->relationType).c_str(),  // 6
-		(srg->whereQuestionType >= 0) ? m[srg->whereQuestionType].word->first.c_str() : L"", // 7
-		wrti(srg->whereControllingEntity, L"controller", tmpstr, shortFormat),  // 8
-		(srg->whereControllingEntity < 0) ? L"" : wchr(m[srg->whereControllingEntity].getRelVerb()), // 9
+		(srg->whereQuestionType >= 0) ? m[srg->whereQuestionType].word->first.c_str() : u"", // 7
+		wrti(srg->whereControllingEntity, u"controller", tmpstr, shortFormat),  // 8
+		(srg->whereControllingEntity < 0) ? u"" : wchr(m[srg->whereControllingEntity].getRelVerb()), // 9
 		getWOSAdjective(ws, tmpstr2).c_str(), // 10
 		getWSAdjective(ws, 0).c_str(), // 11
 		getWSAdjective(ws, 1).c_str(), // 12
 		ws, // 13
-		wrti(ws, L"S", tmpstr3, shortFormat), // 14
-		(srg->tft.negation) ? L"[NOT]" : L"", // 15
+		wrti(ws, u"S", tmpstr3, shortFormat), // 14
+		(srg->tft.negation) ? u"[NOT]" : u"", // 15
 		srg->whereVerb, // 16
 		wchr(srg->whereVerb), // 17
 		tmp1 = getWSAdverb(srg->whereVerb, srg->changeStateAdverb), // 18
@@ -541,21 +543,21 @@ void cSource::printSRG(wstring logPrefix, cSyntacticRelationGroup* srg, int s, i
 		tmp4 = getWSAdjective(srg->whereVerb, wo, 1, tmpstr6).c_str(), // 21
 		tmp5 = getWSAdjective(srg->whereVerb, wo, 2, tmpstr7).c_str(), // 22
 		wo, // 23
-		tmp6 = wrti(wo, L"O", tmpstr8, shortFormat), // 24
+		tmp6 = wrti(wo, u"O", tmpstr8, shortFormat), // 24
 		wchr(srg->whereSecondaryVerb), // 25
 		getWOSAdjective(srg->whereSecondaryObject, tmpstr9).c_str(), // 26
 		getWSAdjective(srg->whereSecondaryObject, 0).c_str(), // 27
 		getWSAdjective(srg->whereSecondaryObject, 1).c_str(), // 28
-		wrti(srg->whereSecondaryObject, L"O2", tmpstr10, shortFormat), // 29
-		wrti(srg->whereNextSecondaryObject, L"nextObject2", tmpstr11, shortFormat), // 30
-		(srg->objectSubType >= 0) ? OCSubTypeStrings[srg->objectSubType] : L"", // 31
-		(srg->whereObject < 0) ? L"" : wrti(m[srg->whereObject].relNextObject, L"nextObject", tmpstr12, shortFormat), // 32
+		wrti(srg->whereSecondaryObject, u"O2", tmpstr10, shortFormat), // 29
+		wrti(srg->whereNextSecondaryObject, u"nextObject2", tmpstr11, shortFormat), // 30
+		(srg->objectSubType >= 0) ? OCSubTypeStrings[srg->objectSubType] : u"", // 31
+		(srg->whereObject < 0) ? u"" : wrti(m[srg->whereObject].relNextObject, u"nextObject", tmpstr12, shortFormat), // 32
 		ps.c_str(), //33
-		(inQuestion) ? L"?" : L"."); // 34
+		(inQuestion) ? u"?" : u"."); // 34
 }
 
 // Live constructor: fill the SVO / location slots from the caller, zero the
-// tense-flow / QA / print fields.  tft.presType (a wstring) is left at its
+// tense-flow / QA / print fields.  tft.presType (a lpwstring) is left at its
 // default empty value; semanticRelations.cpp builds it up with += later.
 cSyntacticRelationGroup::cSyntacticRelationGroup(int _where, int _o, int _whereControllingEntity, int _whereSubject, int _whereVerb, int _wherePrep, int _whereObject,
 	int _wherePrepObject, int _movingRelativeTo, int _relationType,
@@ -698,7 +700,7 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(char *buffer, int &w, unsigned 
 	if (error = !copy(whereQuestionType, buffer, w, total)) return;
 	if (error = !copy(sentenceNum, buffer, w, total)) return;
 	// flags
-	__int64 flags;
+	int64_t flags;
 	if (error = !copy(flags, buffer, w, total)) return;
 	convertToFlags(flags);
 	if (error = !copy(tft.lastOpeningPrimaryQuote, buffer, w, total)) return;
@@ -756,7 +758,7 @@ int cSyntacticRelationGroup::sanityCheck(int maxSourcePosition, int maxObjectInd
 // bits (inSecondaryQuote / inPrimaryQuote / isQuestion) are discarded —
 // write() always persists them as 0.  The top 6 questionFlags bits are
 // never unpacked.
-void cSyntacticRelationGroup::convertToFlags(__int64 flags)
+void cSyntacticRelationGroup::convertToFlags(int64_t flags)
 {
 	/*bool inSecondaryQuote=flags&1; */flags >>= 1;
 	/*bool inPrimaryQuote=flags&1;*/ flags >>= 1;
@@ -789,9 +791,9 @@ void cSyntacticRelationGroup::convertToFlags(__int64 flags)
 
 // Pack gendered/location/tense/skip/changeStateAdverb plus the three
 // quote/question bools and questionFlags<<6 into the on-disk flag word.
-__int64 cSyntacticRelationGroup::convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags)
+int64_t cSyntacticRelationGroup::convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, int64_t questionFlags)
 {
-	__int64 flags = (questionFlags << 6);
+	int64_t flags = (questionFlags << 6);
 	flags |= (genderedEntityMove) ? 1 : 0; flags <<= 1;
 	flags |= (genderedLocationRelation) ? 1 : 0; flags <<= 1;
 	flags |= (establishingLocation) ? 1 : 0; flags <<= 1;
@@ -848,7 +850,7 @@ bool cSyntacticRelationGroup::write(void *buffer, int &w, int limit)
 	if (!copy(buffer, whereQuestionType, w, limit)) return false;
 	if (!copy(buffer, sentenceNum, w, limit)) return false;
 	// flags
-	__int64 flags = convertFlags(false, false, false, 0); // while on disk, questions can be queried by the flag cWordMatch::inQuestion
+	int64_t flags = convertFlags(false, false, false, 0); // while on disk, questions can be queried by the flag cWordMatch::inQuestion
 	if (!copy(buffer, flags, w, limit)) return false;
 	if (!copy(buffer, tft.lastOpeningPrimaryQuote, w, limit)) return false;
 	if (!copy(buffer, tft.duplicateTimeTransitionFromWhere, w, limit)) return false;
@@ -866,25 +868,25 @@ bool cSyntacticRelationGroup::write(void *buffer, int &w, int limit)
 // source is copied into a question).  originalVal < 0 is copied as-is
 // (values < -1 are logged as illegal).  Unmapped positives are left
 // unchanged and logged.  Returns true only on a successful map hit.
-bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap)
+bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, lpwstring valString, unordered_map <int, int>& sourceIndexMap)
 {
 	if (originalVal < 0)
 	{
 		if (originalVal <-1)
-			lplog(LOG_WHERE|LOG_ERROR, L"Illegal value for translating %s - %d.", valString.c_str(), originalVal);
+			lplog(LOG_WHERE|LOG_ERROR, u"Illegal value for translating %s - %d.", valString.c_str(), originalVal);
 		val = originalVal;
 		return false;
 	}
 	if (sourceIndexMap.find(originalVal) != sourceIndexMap.end())
 	{
 		if (sourceIndexMap[originalVal] != originalVal)
-			lplog(LOG_WHERE, L"Translated %s from %d to %d.", valString.c_str(), originalVal, sourceIndexMap[originalVal]);
+			lplog(LOG_WHERE, u"Translated %s from %d to %d.", valString.c_str(), originalVal, sourceIndexMap[originalVal]);
 		val = sourceIndexMap[originalVal];
 		return true;
 	}
 	else
 	{
-		lplog(LOG_WHERE, L"Unable to translate %s of %d.", valString.c_str(), originalVal);
+		lplog(LOG_WHERE, u"Unable to translate %s of %d.", valString.c_str(), originalVal);
 		val = originalVal;
 	}
 	return false;
@@ -896,27 +898,27 @@ bool cSyntacticRelationGroup::adjustValue(int& val, int originalVal, wstring val
 cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *srg, unordered_map <int, int> &sourceIndexMap)
 {
 	o = -1;
-	adjustValue(where, srg->where, L"where", sourceIndexMap);
-	adjustValue(whereControllingEntity, srg->whereControllingEntity, L"whereControllingEntity", sourceIndexMap);
-	adjustValue(whereSubject, srg->whereSubject, L"whereSubject", sourceIndexMap);
-	adjustValue(whereVerb, srg->whereVerb, L"whereVerb", sourceIndexMap);
-	adjustValue(wherePrep, srg->wherePrep, L"wherePrep", sourceIndexMap);
-	adjustValue(whereObject, srg->whereObject, L"whereObject", sourceIndexMap);
-	adjustValue(wherePrepObject, srg->wherePrepObject, L"wherePrepObject", sourceIndexMap);
-	adjustValue(whereMovingRelativeTo, srg->whereMovingRelativeTo, L"whereMovingRelativeTo", sourceIndexMap);
-	adjustValue(whereSecondaryVerb, srg->whereSecondaryVerb, L"whereSecondaryVerb", sourceIndexMap);
-	adjustValue(whereSecondaryObject, srg->whereSecondaryObject, L"whereSecondaryObject", sourceIndexMap);
-	adjustValue(whereNextSecondaryObject, srg->whereNextSecondaryObject, L"whereNextSecondaryObject", sourceIndexMap);
-	adjustValue(whereSecondaryPrep, srg->whereSecondaryPrep, L"whereSecondaryPrep", sourceIndexMap);
-	adjustValue(whereQuestionType, srg->whereQuestionType, L"whereQuestionType", sourceIndexMap);
-	adjustValue(whereQuestionTypeObject, srg->whereQuestionTypeObject, L"whereQuestionTypeObject", sourceIndexMap);
+	adjustValue(where, srg->where, u"where", sourceIndexMap);
+	adjustValue(whereControllingEntity, srg->whereControllingEntity, u"whereControllingEntity", sourceIndexMap);
+	adjustValue(whereSubject, srg->whereSubject, u"whereSubject", sourceIndexMap);
+	adjustValue(whereVerb, srg->whereVerb, u"whereVerb", sourceIndexMap);
+	adjustValue(wherePrep, srg->wherePrep, u"wherePrep", sourceIndexMap);
+	adjustValue(whereObject, srg->whereObject, u"whereObject", sourceIndexMap);
+	adjustValue(wherePrepObject, srg->wherePrepObject, u"wherePrepObject", sourceIndexMap);
+	adjustValue(whereMovingRelativeTo, srg->whereMovingRelativeTo, u"whereMovingRelativeTo", sourceIndexMap);
+	adjustValue(whereSecondaryVerb, srg->whereSecondaryVerb, u"whereSecondaryVerb", sourceIndexMap);
+	adjustValue(whereSecondaryObject, srg->whereSecondaryObject, u"whereSecondaryObject", sourceIndexMap);
+	adjustValue(whereNextSecondaryObject, srg->whereNextSecondaryObject, u"whereNextSecondaryObject", sourceIndexMap);
+	adjustValue(whereSecondaryPrep, srg->whereSecondaryPrep, u"whereSecondaryPrep", sourceIndexMap);
+	adjustValue(whereQuestionType, srg->whereQuestionType, u"whereQuestionType", sourceIndexMap);
+	adjustValue(whereQuestionTypeObject, srg->whereQuestionTypeObject, u"whereQuestionTypeObject", sourceIndexMap);
 	for (int wo : srg->whereQuestionInformationSourceObjects)
 	{
 		int whereQuestionInformationSourceObject;
-		if (adjustValue(whereQuestionInformationSourceObject, wo, L"whereQuestionInformationSourceObject", sourceIndexMap))
+		if (adjustValue(whereQuestionInformationSourceObject, wo, u"whereQuestionInformationSourceObject", sourceIndexMap))
 			whereQuestionInformationSourceObjects.insert(sourceIndexMap[wo]);
 	}
-	adjustValue(transformedPrep, srg->transformedPrep, L"transformedPrep", sourceIndexMap);
+	adjustValue(transformedPrep, srg->transformedPrep, u"transformedPrep", sourceIndexMap);
 
 	relationType = srg->relationType;
 	genderedEntityMove = srg->genderedEntityMove;
@@ -955,7 +957,7 @@ cSyntacticRelationGroup::cSyntacticRelationGroup(cSyntacticRelationGroup *srg, u
 	mapPatternAnswer = srg->mapPatternAnswer;
 	mapPatternQuestion = srg->mapPatternQuestion;
 	// Not copied from srg (see the comment above): description, tft.presType
-	// and timeInfo are wstring/vector and safely default to empty/empty, but
+	// and timeInfo are lpwstring/vector and safely default to empty/empty, but
 	// these six were plain bool/int and were left truly indeterminate --
 	// initialize them explicitly instead of inheriting stack garbage.
 	printMin = -1;

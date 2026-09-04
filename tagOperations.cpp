@@ -31,15 +31,18 @@
 	Notes / gotchas:
 		compareTagSets copies both vectors by value then sort()s them.
 */
-#include <windows.h>
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include "io.h"
-#include "winhttp.h"
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
 #include "time.h"
-#include "malloc.h"
 #include "profile.h"
 
 // True if any collectTagsFocusPositions index lies in [begin, end).
@@ -135,7 +138,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 	int relativeBegin = begin - position;
 	cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + PEMAPosition;
 	if (debugTrace.traceTags)
-		lplog(L"%*s%d:%06d %s[%s](%d,%d) element #%d #tags collected=%d", recursionLevel * 2, " ", position, PEMAPosition,
+		lplog(u"%*s%d:%06d %s[%s](%d,%d) element #%d #tags collected=%d", recursionLevel * 2, " ", position, PEMAPosition,
 			patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end, cPatternElement, tagSet.size());
 	tagSet.reserve(6);
 	for (; PEMAPosition >= 0 && pem->getParentPattern() == pattern && pem->end == relativeEnd && !exitTags; PEMAPosition = pem->nextByPatternEnd, pem = pema.begin() + PEMAPosition)
@@ -155,7 +158,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 				while ((tag = patterns[pattern]->elementHasTagInSet(pem->getElement(), pem->getElementIndex(), desiredTagSetNum, beginTag, true)) >= 0)
 				{
 					if (debugTrace.traceTags)
-						lplog(L"%*s%d:TAG %s FOUND %s[%s](%d,%d) %s[*]", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
+						lplog(u"%*s%d:TAG %s FOUND %s[%s](%d,%d) %s[*]", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
 							patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end, patterns[pem->getChildPattern()]->name.c_str());
 					tagSet.push_back(cTagLocation(tag, pem->getChildPattern(), pattern, pem->getElement(), position, childEnd, -PEMAPosition, true));
 				}
@@ -163,7 +166,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 				if (blocking && patterns[pattern]->stopDescendingTagSearch(pem->getElement(), pem->getElementIndex(), pem->isChildPattern()))
 				{
 					if (debugTrace.traceTags)
-						lplog(L"%*s%d:%s[%s](%d,%d) BLOCKED element #%d index #%d", (recursionLevel + 1) * 2, " ",
+						lplog(u"%*s%d:%s[%s](%d,%d) BLOCKED element #%d index #%d", (recursionLevel + 1) * 2, " ",
 							position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
 							pem->getElement(), pem->getElementIndex());
 					//if (recursionLevel==0)
@@ -192,7 +195,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 					{
 						found = true;
 						if (debugTrace.traceTags)
-							lplog(L"%*s%d:TAG %s FOUND (pattern) %s[%s](%d,%d)", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
+							lplog(u"%*s%d:TAG %s FOUND (pattern) %s[%s](%d,%d)", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
 								patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + childEnd);
 						tagSet.push_back(cTagLocation(tag, p, pattern, pem->getElement(), position, childEnd, childPEMAPosition, true));
 					}
@@ -208,15 +211,15 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 					else if (blocking && patterns[p]->blockDescendants)
 					{
 						if (debugTrace.traceTags)
-							lplog(L"%*s%d:%s[%s](%d,%d) BLOCKED", (recursionLevel + 1) * 2, " ",
+							lplog(u"%*s%d:%s[%s](%d,%d) BLOCKED", (recursionLevel + 1) * 2, " ",
 								position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + childEnd);
 						if (!exitTags)
 							collectTags(recursionLevel, nextPEMAPosition, nextPosition, tagSet, tagSets, TagSetMap);
 					}
-					else if (!(patterns[p]->includesOneOfTagSet & ((__int64)1 << desiredTagSetNum)))
+					else if (!(patterns[p]->includesOneOfTagSet & ((int64_t)1 << desiredTagSetNum)))
 					{
 						if (debugTrace.traceTags)
-							lplog(L"%*s%d:%06d %s[%s](%d,%d) (not in tag set %s)", (recursionLevel + 1) * 2, " ",
+							lplog(u"%*s%d:%06d %s[%s](%d,%d) (not in tag set %s)", (recursionLevel + 1) * 2, " ",
 								position, childPEMAPosition, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + childEnd,
 								desiredTagSets[desiredTagSetNum].name.c_str());
 						if (!exitTags)
@@ -237,7 +240,7 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 								for (unsigned int K = 0; K < childTagSets.size(); K++)
 									if (childTagSets[K].size())
 										nonNullTagSets++;
-								lplog(L"%*s%d:childPEMAPosition %d resulted in %d tagSets (%d nonNull)", recursionLevel * 2, " ", position, childPEMAPosition,
+								lplog(u"%*s%d:childPEMAPosition %d resulted in %d tagSets (%d nonNull)", recursionLevel * 2, " ", position, childPEMAPosition,
 									childTagSets.size(), nonNullTagSets);
 							}
 						}
@@ -252,12 +255,12 @@ int cSource::collectTags(int recursionLevel, int PEMAPosition, int position, vec
 				while ((tag = patterns[pattern]->elementHasTagInSet(pem->getElement(), pem->getElementIndex(), desiredTagSetNum, beginTag, false)) >= 0)
 				{
 					if (debugTrace.traceTags)
-						lplog(L"%*s%d:TAG %s FOUND form %s", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
+						lplog(u"%*s%d:TAG %s FOUND form %s", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
 							Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str());
 					tagSet.push_back(cTagLocation(tag, m[position].getFormNum(pem->getChildForm()), pattern, pem->getElement(), position, 1, PEMAPosition, false));
 				}
 				if (debugTrace.traceTags)
-					lplog(L"%*s%d:%s[%s](%d,%d) form %s element #%d", (recursionLevel + 1) * 2, " ",
+					lplog(u"%*s%d:%s[%s](%d,%d) form %s element #%d", (recursionLevel + 1) * 2, " ",
 						position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
 						Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(),
 						pem->getElement());
@@ -277,15 +280,15 @@ bool cSource::getVerb(vector <cTagLocation>& tagSet, int& tag)
 {
 	LFS
 		int nextVerbTag = -1, nextVObjectTag = -1, nextVAgreeTag = -1;
-	int whereVerbTag = findTag(tagSet, L"VERB", nextVerbTag);
+	int whereVerbTag = findTag(tagSet, u"VERB", nextVerbTag);
 	if (whereVerbTag < 0) return false;
-	int whereVObjectTag = findTagConstrained(tagSet, L"V_OBJECT", nextVObjectTag, tagSet[whereVerbTag]);
+	int whereVObjectTag = findTagConstrained(tagSet, u"V_OBJECT", nextVObjectTag, tagSet[whereVerbTag]);
 	// if there is no vobject, take last vagree, otherwise, take last vobject.
 	if (nextVObjectTag >= 0) tag = nextVObjectTag;
 	else if (whereVObjectTag >= 0) tag = whereVObjectTag;
 	else
 	{
-		int whereVAgreeTag = findTagConstrained(tagSet, L"V_AGREE", nextVAgreeTag, tagSet[whereVerbTag]);
+		int whereVAgreeTag = findTagConstrained(tagSet, u"V_AGREE", nextVAgreeTag, tagSet[whereVerbTag]);
 		if (nextVAgreeTag >= 0) tag = nextVAgreeTag;
 		else if (whereVAgreeTag >= 0) tag = whereVAgreeTag;
 		else return false;
@@ -298,7 +301,7 @@ bool cSource::getIVerb(vector <cTagLocation>& tagSet, int& tag)
 {
 	LFS
 		int nextVObjectTag = -1;
-	int whereVObjectTag = findTag(tagSet, L"V_OBJECT", nextVObjectTag);
+	int whereVObjectTag = findTag(tagSet, u"V_OBJECT", nextVObjectTag);
 	// if there is no vobject, take last vagree, otherwise, take last vobject.
 	if (nextVObjectTag >= 0) tag = nextVObjectTag;
 	else if (whereVObjectTag >= 0) tag = whereVObjectTag;
@@ -316,7 +319,7 @@ bool cSource::tagIsCertain(int position)
 // Resolves tag to a class word (PPN/NUM/…) before objects exist. Single-token tags use
 // resolveToClass; multi-token NOUN tags collect GNOUN/MNOUN and take the first singleton.
 // Returns false if tag < 0, the pattern is not a NOUN, or no class word is found.
-bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagSet, int tag, tIWMM& word, wstring purpose)
+bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagSet, int tag, tIWMM& word, lpwstring purpose)
 {
 	LFS
 		if (tag < 0) return false;
@@ -325,12 +328,12 @@ bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagS
 	else
 	{
 		// if object is not type of NOUN, forget it. (searching for N_AGREE in an S1 would be pointless and very time-consuming).
-		if (patterns[tagSet[tag].pattern]->name.find(L"NOUN") == wstring::npos || patterns[tagSet[tag].pattern]->hasTag(GNOUN_TAG) || patterns[tagSet[tag].pattern]->hasTag(MNOUN_TAG))
+		if (patterns[tagSet[tag].pattern]->name.find(u"NOUN") == lpwstring::npos || patterns[tagSet[tag].pattern]->hasTag(GNOUN_TAG) || patterns[tagSet[tag].pattern]->hasTag(MNOUN_TAG))
 			return false;
 		vector < vector <cTagLocation> > tagSets;
 		// He gave a book.
-		if (startCollectTagsFromTag(false, nAgreeTagSet, tagSet[tag], tagSets, GNOUN_TAG, true, false, purpose + L"| resolve object - GNOUN") > 0 ||
-			startCollectTagsFromTag(false, nAgreeTagSet, tagSet[tag], tagSets, MNOUN_TAG, true, false, purpose + L"| resolve object - MNOUN") > 0)
+		if (startCollectTagsFromTag(false, nAgreeTagSet, tagSet[tag], tagSets, GNOUN_TAG, true, false, purpose + u"| resolve object - GNOUN") > 0 ||
+			startCollectTagsFromTag(false, nAgreeTagSet, tagSet[tag], tagSets, MNOUN_TAG, true, false, purpose + u"| resolve object - MNOUN") > 0)
 			for (unsigned int J = 0; J < tagSets.size(); J++)
 				if (tagSets[J].size() == 1)
 				{
@@ -382,9 +385,9 @@ int cSource::properNounCheck(int& traceSource, int begin, int end, int whereDet)
 	{
 		if (debugTrace.traceDeterminer)
 		{
-			wstring tmpName;
-			for (int I = begin; I < end; I++) tmpName += m[I].word->first + wstring(L" ");
-			lplog(L"%d:PNC name %s is an incorrectly configured proper noun %d %d %d [SOURCE=%06d].", begin, tmpName.c_str(), end - begin, whereDet, lastProperNoun, traceSource = gTraceSource);
+			lpwstring tmpName;
+			for (int I = begin; I < end; I++) tmpName += m[I].word->first + lpwstring(u" ");
+			lplog(u"%d:PNC name %s is an incorrectly configured proper noun %d %d %d [SOURCE=%06d].", begin, tmpName.c_str(), end - begin, whereDet, lastProperNoun, traceSource = gTraceSource);
 		}
 		return cSourceWordInfo::COST_OF_INCORRECT_PROPER_NOUN;
 	}
@@ -398,7 +401,7 @@ int cSource::properNounCheck(int& traceSource, int begin, int end, int whereDet)
 	if (m[I].forms.isSet(PROPER_NOUN_FORM_NUM))
 	{
 	if (t.traceDeterminer)
-	lplog(L"%d:PNC name %s has a gap in proper noun at %d %d [SOURCE=%06d].",begin,tmpName.c_str(),I,lastProperNoun,traceSource=gTraceSource);
+	lplog(u"%d:PNC name %s has a gap in proper noun at %d %d [SOURCE=%06d].",begin,tmpName.c_str(),I,lastProperNoun,traceSource=gTraceSource);
 	return cSourceWordInfo::COST_OF_INCORRECT_PROPER_NOUN;
 	}
 	}
@@ -426,11 +429,11 @@ void showDiffTagSets(vector < vector <cTagLocation> >& tagSets, vector < vector 
 	LFS
 		for (unsigned int I = 0; I < tagSets.size(); I++)
 			if (!I || !tagSetSame(tagSets[I - 1], tagSets[I]))
-				printTagSet(LOG_INFO, L"ORIGINAL", I, tagSets[I]);
+				printTagSet(LOG_INFO, u"ORIGINAL", I, tagSets[I]);
 	for (unsigned int I = 0; I < tagSetsNew.size(); I++)
 		if (!I || !tagSetSame(tagSetsNew[I - 1], tagSetsNew[I]))
-			printTagSet(LOG_INFO, L"NEW", I, tagSetsNew[I]);
-	lplog(LOG_FATAL_ERROR, L"ERROR!");
+			printTagSet(LOG_INFO, u"NEW", I, tagSetsNew[I]);
+	lplog(LOG_FATAL_ERROR, u"ERROR!");
 }
 
 // Sorts copies of both collections (by-value parameters) and fatal-errors if the unique
@@ -444,7 +447,7 @@ void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <c
 	while (J < tagSetsNew.size() && !tagSetsNew[J].size()) J++;
 	while (I < tagSets.size() && !tagSets[I].size()) I++;
 	if ((J == tagSetsNew.size() && I != tagSets.size()) || (J != tagSetsNew.size() && I == tagSets.size()))
-		lplog(LOG_FATAL_ERROR, L"New and old have differing data.");
+		lplog(LOG_FATAL_ERROR, u"New and old have differing data.");
 	for (; I < tagSets.size() && J < tagSetsNew.size(); I++, J++)
 	{
 		while (I < tagSets.size() - 1 && tagSetSame(tagSets[I], tagSets[I + 1])) I++;
@@ -452,7 +455,7 @@ void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <c
 		if (I == tagSets.size() && J == tagSetsNew.size()) break;
 		if (I == tagSets.size() || J == tagSetsNew.size() || !tagSetSame(tagSets[I], tagSetsNew[J]))
 		{
-			lplog(LOG_INFO, L"Difference at %d (new) and %d (old).", J, I);
+			lplog(LOG_INFO, u"Difference at %d (new) and %d (old).", J, I);
 			showDiffTagSets(tagSets, tagSetsNew);
 		}
 	}
@@ -462,15 +465,15 @@ void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <c
 // If PEMAOffset < 0, searches root-pattern PMA rows of that span (skipping rejectTag).
 // Returns tagSets.size() if any non-empty set was produced, else 0 (also 0 if the pattern
 // bitmap says it cannot contain tagSet).
-size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& tl, vector < vector <cTagLocation> >& tagSets, int rejectTag, bool obeyBlock, bool collectSelfTags, wstring purpose)
+size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& tl, vector < vector <cTagLocation> >& tagSets, int rejectTag, bool obeyBlock, bool collectSelfTags, lpwstring purpose)
 {
 	LFS
 		int pattern = tl.pattern, position = tl.sourcePosition, end = tl.len, PEMAOffset = tl.PEMAOffset;
 	if (obeyBlock) // in this case, if we check for descendants even with obeyBlock on, _NOUN[9] will not appear to contain prepTagSet because _PP is blocked in that pattern.  It will only contain PREP.
 	{
-		if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet & ((__int64)1 << tagSet)))
+		if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet & ((int64_t)1 << tagSet)))
 			return 0;
-		if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet & ((__int64)1 << tagSet)))
+		if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet & ((int64_t)1 << tagSet)))
 			return 0;
 	}
 	if (PEMAOffset < 0)
@@ -487,11 +490,11 @@ size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& 
 			for (; PEMAOffset >= 0 && pem->getParentPattern() == p && pem->end == end; PEMAOffset = pem->nextByPatternEnd, pem = pema.begin() + PEMAOffset)
 				if (!pem->begin) break;
 			if (PEMAOffset < 0 || pem->getParentPattern() != p || pem->end != end || pem->begin) continue;
-			startCollectTags(inTrace, tagSet, position, PEMAOffset, tagSets, obeyBlock, collectSelfTags, purpose + L"| from tag ");
+			startCollectTags(inTrace, tagSet, position, PEMAOffset, tagSets, obeyBlock, collectSelfTags, purpose + u"| from tag ");
 		}
 	}
 	else
-		startCollectTags(inTrace, tagSet, position, PEMAOffset, tagSets, obeyBlock, collectSelfTags, purpose + L"| from tag ");
+		startCollectTags(inTrace, tagSet, position, PEMAOffset, tagSets, obeyBlock, collectSelfTags, purpose + u"| from tag ");
 	for (auto ttagSet : tagSets)
 		if (ttagSet.size() > 0)
 			return tagSets.size();
@@ -502,33 +505,33 @@ size_t cSource::startCollectTagsFromTag(bool inTrace, int tagSet, cTagLocation& 
 // parent pattern's own tags, then collects. Drops empty tagSets and repairs secondary
 // indexes. Returns 0 if PEMAPosition < 0 or the includes* bitmap cannot contain tagSet;
 // otherwise tagSets.size() (even if exitTags tripped the time/count cap).
-size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEMAPosition, vector < vector <cTagLocation> >& tagSets, bool obeyBlock, bool collectSelfTags, wstring purpose)
+size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEMAPosition, vector < vector <cTagLocation> >& tagSets, bool obeyBlock, bool collectSelfTags, lpwstring purpose)
 {
 	LFS
 		secondaryPEMAPositions.clear();
 	if (PEMAPosition < 0)
 	{
-		//lplog(LOG_ERROR,L"PEMA offset is negative at position %d - all PEMA positions have been eliminated.",position);
+		//lplog(LOG_ERROR,u"PEMA offset is negative at position %d - all PEMA positions have been eliminated.",position);
 		return 0;
 	}
 	debugTrace.traceTags = inTrace && debugTrace.traceTagSetCollection;
 	int pattern = pema[PEMAPosition].getParentPattern();
-	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet & ((__int64)1 << tagSet)))
+	if (collectSelfTags && !(patterns[pattern]->includesDescendantsAndSelfAllOfTagSet & ((int64_t)1 << tagSet)))
 	{
 		if (debugTrace.traceTags)
-			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [descendants and self]) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
+			lplog(u"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [descendants and self]) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
 				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end, purpose.c_str());
 		return 0;
 	}
-	if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet & ((__int64)1 << tagSet)))
+	if (!collectSelfTags && !(patterns[pattern]->includesOnlyDescendantsAllOfTagSet & ((int64_t)1 << tagSet)))
 	{
 		if (debugTrace.traceTags)
-			lplog(L"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [only descendants]) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
+			lplog(u"%d:======== EVALUATION %06d %s %s[%s](%d,%d) SKIPPED (not enough tags [only descendants]) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
 				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end, purpose.c_str());
 		return 0;
 	}
 	if (debugTrace.traceTags)
-		lplog(L"%d:======== EVALUATING %06d %s %s[%s](%d,%d) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
+		lplog(u"%d:======== EVALUATING %06d %s %s[%s](%d,%d) - from %s", position, PEMAPosition, desiredTagSets[tagSet].name.c_str(),
 			patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end, purpose.c_str());
 	exitTags = false;
 
@@ -547,7 +550,7 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 		while ((tag = patterns[p]->hasTagInSet(desiredTagSetNum, beginTag)) >= 0)
 		{
 			if (debugTrace.traceTags)
-				lplog(L"%*s%d:TAG %s FOUND (self pattern) %s[%s](%d,%d)", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
+				lplog(u"%*s%d:TAG %s FOUND (self pattern) %s[%s](%d,%d)", recursionLevel * 2, " ", position, patternTagStrings[tag].c_str(),
 					patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + pema[PEMAPosition].end);
 			tTagSet.push_back(cTagLocation(tag, p, p, pema[PEMAPosition].getElement(), position, pema[PEMAPosition].end, PEMAPosition, true));
 		}
@@ -559,13 +562,13 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 		{
 			if (debugTrace.traceTags)
 			{
-				wstring sentence, originalIWord;
-				for (int w = max(0, position - 8); w < min(m.size(), position + 8); w++)
+				lpwstring sentence, originalIWord;
+				for (int w = max(0, position - 8); w < (int)min(m.size(), (size_t)(position + 8)); w++) // batch B12: explicit common type
 				{
 					getOriginalWord(w, originalIWord, false, false);
-					sentence += originalIWord + L" ";
+					sentence += originalIWord + u" ";
 				}
-				lplog(LOG_INFO, L"%s:%d:%d:index %d out of %d has tagSet %d! [%s]", sourcePath.c_str(), position, numTagSets, J, secondaryPEMAPositions.size(), secondaryPEMAPositions[J].getTagSet(), sentence.c_str());
+				lplog(LOG_INFO, u"%s:%d:%d:index %d out of %d has tagSet %d! [%s]", sourcePath.c_str(), position, numTagSets, J, secondaryPEMAPositions.size(), secondaryPEMAPositions[J].getTagSet(), sentence.c_str());
 			}
 			secondaryPEMAPositions.erase(secondaryPEMAPositions.begin() + J);
 		}
@@ -589,10 +592,10 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 	if (debugTrace.traceMatchedSentences || debugTrace.traceUnmatchedSentences)
 	{
 		if (tagSets.size() < MAX_TAGSETS)
-			lplog(LOG_ERROR, L"%d:Maximum time limit hit (%d microseconds) when collecting tags for %s %s[%s](%d,%d)", position, COLLECT_TAGS_TIME_LIMIT, desiredTagSets[tagSet].name.c_str(),
+			lplog(LOG_ERROR, u"%d:Maximum time limit hit (%d microseconds) when collecting tags for %s %s[%s](%d,%d)", position, COLLECT_TAGS_TIME_LIMIT, desiredTagSets[tagSet].name.c_str(),
 				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end);
 		else if (debugTrace.traceTagSetCollection)
-			lplog(LOG_ERROR, L"%d:Maximum # of tagsets hit when collecting tags for %s %s[%s](%d,%d)", position, desiredTagSets[tagSet].name.c_str(),
+			lplog(LOG_ERROR, u"%d:Maximum # of tagsets hit when collecting tags for %s %s[%s](%d,%d)", position, desiredTagSets[tagSet].name.c_str(),
 				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position, position + pema[PEMAPosition].end);
 	}
 	return tagSets.size();
@@ -642,11 +645,11 @@ tIWMM cSource::resolveToClass(int where)
 	if (m[where].getObject() >= 0)
 	{
 		int beginObjectPosition = m[where].beginObjectPosition;
-		if (m[beginObjectPosition].pma.queryPattern(L"_DATE") != -1)
+		if (m[beginObjectPosition].pma.queryPattern(u"_DATE") != -1)
 			return Words.DATE;
-		else if (m[beginObjectPosition].pma.queryPattern(L"_TIME") != -1)
+		else if (m[beginObjectPosition].pma.queryPattern(u"_TIME") != -1)
 			return Words.TIME;
-		else if (m[beginObjectPosition].pma.queryPattern(L"_TELENUM") != -1)
+		else if (m[beginObjectPosition].pma.queryPattern(u"_TELENUM") != -1)
 			return Words.TELENUM;
 	}
 	if (m[where].isPPN())
@@ -659,11 +662,11 @@ tIWMM cSource::resolveToClass(int where)
 		return Words.TIME;
 	else if (m[where].queryWinnerForm(telenumForm) >= 0)
 		return Words.TELENUM;
-	else if (m[where].pma.queryPattern(L"_DATE") != -1)
+	else if (m[where].pma.queryPattern(u"_DATE") != -1)
 		return Words.DATE;
-	else if (m[where].pma.queryPattern(L"_TIME") != -1)
+	else if (m[where].pma.queryPattern(u"_TIME") != -1)
 		return Words.TIME;
-	else if (m[where].pma.queryPattern(L"_TELENUM") != -1)
+	else if (m[where].pma.queryPattern(u"_TELENUM") != -1)
 		return Words.TELENUM;
 	return m[where].resolveToClass();
 }
@@ -703,7 +706,7 @@ tIWMM cSource::fullyResolveToClass(int where)
 {
 	LFS
 		tIWMM w = resolveToClass(where);
-	wstring word = m[where].word->first;
+	lpwstring word = m[where].word->first;
 	if (m[where].getObject() >= 0)
 	{
 		int o = m[where].getObject();
@@ -728,12 +731,12 @@ tIWMM cSource::fullyResolveToClass(int where)
 bool cSource::forcePrepObject(vector <cTagLocation>& tagSet, int tag, int& object, int& whereObject, tIWMM& word)
 {
 	LFS
-		if (identifyObject(findTag(L"NOUN"), tagSet[tag].sourcePosition, -1, false, -1, -1) >= 0 &&
+		if (identifyObject(findTag(u"NOUN"), tagSet[tag].sourcePosition, -1, false, -1, -1) >= 0 &&
 			resolveTag(tagSet, tag, object, whereObject, word))
 		{
-			wstring tmpstr;
+			lpwstring tmpstr;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%d:%s object forced by preposition phrase match", whereObject, whereString(whereObject, tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%d:%s object forced by preposition phrase match", whereObject, whereString(whereObject, tmpstr, false).c_str());
 			return true;
 		}
 	return false;

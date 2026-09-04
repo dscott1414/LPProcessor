@@ -5,11 +5,11 @@
 
 	Overview:
 		Four unrelated groups of helpers live here:
-		1) itos/dtos - format an int/double into a caller-supplied wstring using a
+		1) itos/dtos - format an int/double into a caller-supplied lpwstring using a
 		   1024-wchar stack scratch buffer (no bounds checks - see gotchas).
-		2) wTM / mTW / mTWCodePage - wchar_t <-> char conversion around the Win32
+		2) wTM / mTW / mTWCodePage - lpchar_t <-> char conversion around the Win32
 		   WideCharToMultiByte / MultiByteToWideChar APIs.  Each direction owns one
-		   __declspec(thread) scratch buffer that grows monotonically and is never
+		   thread_local scratch buffer that grows monotonically and is never
 		   freed, so conversions are allocation-free in steady state.  mTW also
 		   performs encoding *detection* (UTF-8 -> ISO-8859-1 -> CP1252 -> US-ASCII)
 		   which is what source.cpp/tokenize.cpp rely on to read Gutenberg texts.
@@ -22,7 +22,7 @@
 		   The two directions must stay exactly symmetric: a writer that emits a
 		   different number of bytes than its reader consumes silently corrupts
 		   everything that follows it in the stream.
-		4) small wstring janitors (escapeSingleQuote/trim/removeExcessSpaces/
+		4) small lpwstring janitors (escapeSingleQuote/trim/removeExcessSpaces/
 		   splitString) plus the debug-only tag-annotation printer used to dump a
 		   sentence with its matched SUBJECT/VERB/OBJECT tag brackets.
 
@@ -32,10 +32,10 @@
 		(stage 2), and the copy() family is used whenever a cache is written or read.
 
 	Key entry points:
-		- itos()/dtos() - int/double to wstring
-		- wTM() - wstring -> string (default CP_UTF8)
-		- mTW() - string -> wstring with encoding auto-detection
-		- mTWCodePage() - string -> wstring with a forced code page, returns 0 on error
+		- itos()/dtos() - int/double to lpwstring
+		- wTM() - lpwstring -> string (default CP_UTF8)
+		- mTW() - string -> lpwstring with encoding auto-detection
+		- mTWCodePage() - string -> lpwstring with a forced code page, returns 0 on error
 		- copy() - serialize/deserialize scalars, strings, sets, vectors, cName, cIntArray
 		- escapeSingleQuote()/removeSingleQuote()/removeExcessSpaces()/trim()
 		- getSentenceWithTags() - debug rendering of a sentence with tag brackets
@@ -59,272 +59,206 @@
 		  own out-string or into the per-thread scratch buffer.  Never hold such a
 		  pointer across another conversion call on the same thread.
 		- The serializing copy() overloads for scalars check `limit` BEFORE writing, and
-		  the deserializing string/wstring overloads bound their NUL-terminator scan to
+		  the deserializing string/lpwstring overloads bound their NUL-terminator scan to
 		  `limit - where` before touching `str`, so a truncated or corrupt cache file is
 		  caught before any out-of-bounds read or write happens rather than after.
 		- Most copy() overloads never actually return false on the FATAL path: they call
 		  lplog(LOG_FATAL_ERROR,...), which exits the process (EXIT_FAILURE) and does not
 		  return.  So a "return false" written after such a call is mostly unreachable;
-		  it is still correct defensive style for the few overloads (the wstring
-		  serializer, and the bounded string/wstring deserializers) that log at
+		  it is still correct defensive style for the few overloads (the lpwstring
+		  serializer, and the bounded string/lpwstring deserializers) that log at
 		  LOG_ERROR/LOG_FATAL_ERROR and return false instead.
-		- itos()/dtos() build into small fixed-size scratch buffers (a handful of wchar_t
-		  for decimal digits, or an explicit-length swprintf), not into unbounded
-		  1024-wchar wcscpy/wcscat/wsprintf targets, so a long prefix/suffix/format
+		- itos()/dtos() build into small fixed-size scratch buffers (a handful of lpchar_t
+		  for decimal digits, or an explicit-length lp_snprintf), not into unbounded
+		  1024-wchar lp_strcpy/wcscat/lp_wsprintf targets, so a long prefix/suffix/format
 		  cannot overrun the stack.
 */
-#include <windows.h>
-#define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
-#include "io.h"
-#include "winhttp.h"
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
 #include "time.h"
 #include <fcntl.h>
 #include "mysql.h"
-#include <direct.h>
 #include <sys/stat.h>
-#include <crtdbg.h>
 #include "profile.h"
 #include <sstream>
 
 // Append "before" + decimal(i) + "after" to concat.
 // concat is appended to, not overwritten - used to build up log/SQL text piecewise.
 // Builds directly into concat (via a small fixed buffer only for the digits, which
-// can never exceed 11 wchar_t for a 32-bit int) instead of the previous wcscpy/wcscat
+// can never exceed 11 lpchar_t for a 32-bit int) instead of the previous lp_strcpy/wcscat
 // into a fixed 1024-wchar stack buffer, which overran the stack for any before/after
 // combination longer than that.
-void itos(const wchar_t* before, int i, wstring& concat, wchar_t* after)
+void itos(const lpchar_t* before, int i, lpwstring& concat, lpchar_t* after)
 {
 	LFS
-		wchar_t digits[16];
-	_itow(i, digits, 10);
+		lpchar_t digits[16];
+	lp_itow(i, digits);
 	concat += before;
 	concat += digits;
 	concat += after;
 }
 
-// As above, but the suffix is already a wstring.
-void itos(const wchar_t* before, int i, wstring& concat, wstring after)
+// As above, but the suffix is already a lpwstring.
+void itos(const lpchar_t* before, int i, lpwstring& concat, lpwstring after)
 {
 	LFS
-		wchar_t digits[16];
-	_itow(i, digits, 10);
+		lpchar_t digits[16];
+	lp_itow(i, digits);
 	concat += before;
 	concat += digits;
 	concat += after;
 }
 
 // Decimal-render i into the caller-owned scratch string tmp and return it.
-// tmp exists purely so the result can be used inline (e.g. in a wstring concat or
+// tmp exists purely so the result can be used inline (e.g. in a lpwstring concat or
 // as a %s argument) without a dangling temporary.
-wstring itos(int i, wstring& tmp)
+lpwstring itos(int i, lpwstring& tmp)
 {
 	LFS
-		wchar_t temp[1024];
-	_itow(i, temp, 10);
+		lpchar_t temp[1024];
+	lp_itow(i, temp);
 	return tmp = temp;
 }
 
-// Render i using a caller-supplied printf format (e.g. L"%03d") into tmp.
-// Uses swprintf with an explicit length instead of the previous unbounded wsprintf,
+// Render i using a caller-supplied printf format (e.g. u"%03d") into tmp.
+// Uses lp_snprintf with an explicit length instead of the previous unbounded lp_wsprintf,
 // so a pathological format/width cannot overrun the stack buffer.
-wstring itos(int i, const wchar_t* format, wstring& tmp)
+lpwstring itos(int i, const lpchar_t* format, lpwstring& tmp)
 {
 	LFS
-		wchar_t temp[1024];
-	swprintf(temp, 1024, format, i);
+		lpchar_t temp[1024];
+	lp_snprintf(temp, 1024, format, i);
 	return tmp = temp;
 }
 
-// Render a double into tmp with the fixed format L"%4.2g" (2 significant digits).
+// Render a double into tmp with the fixed format u"%4.2g" (2 significant digits).
 // Used for costs/confidences in logs, so precision is deliberately low.
-wstring dtos(double fl, wstring& tmp)
+lpwstring dtos(double fl, lpwstring& tmp)
 {
 	LFS
-		wchar_t ctmp[1024];
-	swprintf(ctmp, 1024, L"%4.2g", fl);
+		lpchar_t ctmp[1024];
+	lp_snprintf(ctmp, 1024, u"%4.2g", fl);
 	return tmp = ctmp;
 }
 
-// Per-thread grow-only scratch buffer for wide->multibyte conversion.  Never freed;
-// its contents are only meaningful until the next wTM() call on the same thread.
-__declspec(thread) static void* wTMbuffer = NULL;
-__declspec(thread) static unsigned int wTMbufSize = 0;
-// Wide -> multibyte conversion (default CP_UTF8).  This is the funnel every wide SQL
-// statement passes through before being handed to libmysql, hence the "sql request"
-// wording in the error messages.
+// ---------------------------------------------------------------------------
+// Batch B7: wTM / mTW / mTWCodePage are now thin wrappers over utfConvert.h's
+// codec, replacing Win32 WideCharToMultiByte / MultiByteToWideChar (which have no
+// macOS equivalent at all).
+//
+// The behaviour that matters is preserved exactly, because real cached corpora
+// were parsed under it: mTW still tries a STRICT UTF-8 decode first and falls back
+// to ISO-8859-1-with-a-Windows-1252-table for bytes 0x80-0x9F, and still reports
+// which encoding won through the `codepage` out-parameter using the same numeric
+// values (CP_UTF8 / 28591 / 1252) that get stored alongside cached documents.
+// See utfConvert.h's header for the full rationale and for why the original
+// ladder's nominal 4th rung (20127 / US-ASCII) is unreachable in both versions.
+//
+// The grow-only thread_local scratch buffers are gone: the codec keeps its own
+// (see utfConvert.h's "Notes / gotchas"), so these functions no longer manage
+// memory at all. That also removes the four tmalloc/trealloc failure paths and
+// the "queryLength is a lpchar_t count, <<1 for bytes" sizing arithmetic, which
+// existed only to satisfy the Win32 two-call sizing protocol.
+// ---------------------------------------------------------------------------
+
+// Wide -> multibyte. Always UTF-8 now; the codePage argument is accepted for
+// source compatibility with the ~90 existing call sites but the only value any of
+// them passes is CP_UTF8 or CP_ACP, and CP_ACP ("the system ANSI code page") has no
+// macOS meaning -- there is no non-Unicode system encoding to convert to. Both are
+// therefore UTF-8, which for CP_ACP's two call sites (Internet.cpp building a local
+// cache filename) is what the filesystem wants anyway.
 // The result is copied into outString and the returned pointer aliases outString's
 // own storage, so it stays valid as long as outString does.
-// Sizing protocol: the first WideCharToMultiByte call passes the current buffer size;
-// when the buffer does not exist yet (wTMbufSize==0) that call is a pure size query
-// (cbMultiByte==0) and returns the required byte count, which is then doubled and
-// allocated.  On a later call with an existing but too-small buffer the API instead
-// returns 0/ERROR_INSUFFICIENT_BUFFER, which is the `if (!queryLength)` path below.
-// Any conversion failure is fatal (lplog(LOG_FATAL_ERROR) exits the process).
-char* wTM(wstring inString, string& outString, int codePage)
+char* wTM(lpwstring inString, string& outString, int codePage)
 {
 	LFS
-		int queryLength = WideCharToMultiByte(codePage, 0, inString.c_str(), -1, (LPSTR)wTMbuffer, wTMbufSize, NULL, NULL);
-	if (wTMbufSize == 0)
-	{
-		wTMbufSize = max(queryLength * 2, 10000);
-		wTMbuffer = tmalloc(wTMbufSize);
-		if (!WideCharToMultiByte(codePage, 0, inString.c_str(), -1, (LPSTR)wTMbuffer, wTMbufSize, NULL, NULL))
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", inString.c_str());
-	}
-	if (!queryLength)
-	{
-		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", inString.c_str());
-		queryLength = WideCharToMultiByte(codePage, 0, inString.c_str(), -1, NULL, 0, NULL, NULL);
-		unsigned int previousBufSize = wTMbufSize;
-		wTMbufSize = queryLength * 2;
-		if (!(wTMbuffer = trealloc(23, wTMbuffer, previousBufSize, wTMbufSize)))
-			lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from sql query %s!", wTMbufSize, inString.c_str());
-		if (!WideCharToMultiByte(codePage, 0, inString.c_str(), -1, (LPSTR)wTMbuffer, wTMbufSize, NULL, NULL))
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", inString.c_str());
-	}
-	if (wTMbuffer)
-		outString = (char*)wTMbuffer;
+		(void)codePage;
+	outString = lp_utf16_to_utf8(inString);
 	return (char*)outString.c_str();
 }
 
-// Per-thread grow-only scratch buffer for multibyte->wide conversion, shared by
-// mTW() and mTWCodePage().  Never freed; once grown it is at least 1MB.
-__declspec(thread) static void* mTWbuffer = NULL;
-__declspec(thread) static unsigned int mTWbufSize = 0;
-// Multibyte -> wide conversion WITH encoding auto-detection.  This is how a raw
-// Gutenberg byte stream (or any 8-bit DB/web payload) becomes wchar_t text.
-// codepage is an out-parameter: the code page that actually decoded the input, tried
-// in order UTF-8 -> 28591 (ISO-8859-1) -> 1252 (Windows Western) -> 20127 (US-ASCII).
-// MB_ERR_INVALID_CHARS is what makes each attempt fail (ERROR_NO_UNICODE_TRANSLATION)
-// on byte sequences that are illegal in that encoding, which is the whole detection
-// mechanism.
-// iso8859ControlCharactersFound is set true only when the input decoded as 8859-1 but
-// contained bytes 128-159; those are legal-but-control in 8859-1 and printable in
-// 1252, so 1252 is preferred.  NOTE it is never set to false here, so it behaves as an
-// in/out flag - the caller must initialise it (tokenize.cpp does).
-// Returns outString.c_str(); a failure to decode under all four code pages is fatal.
-const wchar_t* mTW(string inString, wstring& outString, int& codepage, bool& iso8859ControlCharactersFound)
+// Multibyte -> wide WITH encoding auto-detection.  This is how a raw Gutenberg byte
+// stream (or any 8-bit DB/web payload) becomes lpchar_t text.
+// codepage is an out-parameter: the code page that actually decoded the input.
+// iso8859ControlCharactersFound is set true only when the input decoded as 8859-1
+// but contained bytes 128-159; those are legal-but-control in 8859-1 and printable
+// in 1252, so 1252 is preferred.  NOTE it is never set to false here, so it behaves
+// as an in/out flag - the caller must initialise it (tokenize.cpp does).
+// Returns outString.c_str().  Unlike the Win32 version this cannot fail: the
+// fallback rung is total (every byte 0x00-0xFF has a mapping), so the old
+// "failure to decode under all four code pages is fatal" path was unreachable and
+// is not reproduced.
+const lpchar_t* mTW(string inString, lpwstring& outString, int& codepage, bool& iso8859ControlCharactersFound)
 {
 	LFS
-		codepage = CP_UTF8;
-	int queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-	if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
+		LpDetectedEncoding detected;
+	outString = lp_narrow_to_wide(inString, detected);
+	switch (detected)
 	{
-		codepage = 28591; // iso-8859-1	ISO 8859-1 Latin 1; Western European (ISO)
-		queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-		if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
-		{
-			codepage = 1252; // ANSI Latin 1; Western European (Windows)
-			queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-			if (!queryLength && GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
-			{
-				codepage = 20127; // ASCII: ISO-646-US (US-ASCII), ASCII, US-ASCII  // US-ASCII (7-bit)
-				queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-			}
-		}
-		else
-		{
-			// scan text for control characters 128-159.  If they exist in the text, force to 1252, because in 8859 they are legal but they are control characters.
-			int tempIndex = 0;
-			for (char ch : inString)
-			{
-				if (iso8859ControlCharactersFound = (((unsigned char)ch) >= 128 && ((unsigned char)ch) <= 159))
-					break;
-				tempIndex++;
-			}
-			if (iso8859ControlCharactersFound)
-			{
-				int tempQueryLength = MultiByteToWideChar(1252, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-				if (tempQueryLength > 0)
-				{
-					codepage = 1252;
-					queryLength = tempQueryLength;
-				}
-			}
-		}
+	case LpDetectedEncoding::UTF8:       codepage = CP_UTF8; break;
+	case LpDetectedEncoding::ISO_8859_1: codepage = 28591; break;   // ISO 8859-1 Latin 1; Western European
+	case LpDetectedEncoding::CP1252:     codepage = 1252; break;    // ANSI Latin 1; Western European (Windows)
 	}
-	if (!queryLength)
-		lplog(LOG_FATAL_ERROR, L"Error (2) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
-	// queryLength is a wchar_t count (already including the terminator, because
-	// cbMultiByte was -1); <<1 converts it to bytes, +1 is slack.
-	unsigned int desiredBufferSizeInBytes = (queryLength + 1) << 1;
-	if (mTWbufSize < desiredBufferSizeInBytes)
-	{
-		desiredBufferSizeInBytes = max(desiredBufferSizeInBytes, 1000000); // make minimum buffer 1MB to avoid repeatedly reallocating for trivially small sizes
-		unsigned int previousBufSize = mTWbufSize;
-		mTWbufSize = max(desiredBufferSizeInBytes, mTWbufSize);
-		mTWbuffer = (previousBufSize == 0) ? tmalloc(mTWbufSize) : trealloc(24, mTWbuffer, previousBufSize, mTWbufSize);
-		if (!mTWbuffer)
-			lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
-	}
-	// second pass actually decodes; mTWbufSize is bytes so /2 gives the wchar_t capacity
-	if (!(queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, mTWbufSize / 2)))
-		lplog(LOG_FATAL_ERROR, L"Error (3) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
-	outString = (wchar_t*)mTWbuffer;
+	// The codec's CP1252 rung IS "8859-1 except 0x80-0x9F came from the 1252
+	// table", which is precisely the condition this flag reported.
+	if (detected == LpDetectedEncoding::CP1252)
+		iso8859ControlCharactersFound = true;
 	return outString.c_str();
 }
 
 // Convenience overload for callers that want the detected code page but do not care
 // about the 8859-vs-1252 control character disambiguation.
-const wchar_t* mTW(string inString, wstring& outString, int& codepage)
+const lpchar_t* mTW(string inString, lpwstring& outString, int& codepage)
 {
-	bool iso8859ControlCharactersFound;
+	bool iso8859ControlCharactersFound = false;
 	return mTW(inString, outString, codepage, iso8859ControlCharactersFound);
 }
 
 // Multibyte -> wide with a FORCED code page and no detection: used when the document
-// itself declares its encoding and tokenize.cpp decides to re-decode (reDecodeNecessary).
-// Unlike mTW() this is non-fatal.  Returns 0 and sets error to
-//   -1 the input is not valid in `codepage` (size query failed)
-//   -2 the scratch buffer could not be grown
-//   -3 the decode pass failed even though the size query succeeded
-// On success returns outString.c_str() and leaves `error` untouched, so the caller must
-// initialise it.  Shares mTWbuffer with mTW(), so it invalidates any pointer previously
-// returned by mTW() on this thread.
-const wchar_t* mTWCodePage(string inString, wstring& outString, int codepage, int& error)
+// itself declares its encoding and tokenize.cpp decides to re-decode
+// (reDecodeNecessary).  Non-fatal.  Returns 0 and sets error to -1 when the input is
+// not valid in `codepage`; on success returns outString.c_str() and leaves `error`
+// untouched, so the caller must initialise it.
+// Batch B7: the -2 (buffer could not be grown) and -3 (decode pass failed after a
+// successful size query) returns are no longer reachable -- there is no separate
+// buffer to grow and no two-pass protocol -- but they remain declared in the
+// contract above so callers that switch on them still compile and behave.
+const lpchar_t* mTWCodePage(string inString, lpwstring& outString, int codepage, int& error)
 {
 	LFS
-		int queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, 0);
-	if (!queryLength)
-	{
-		lplog(LOG_ERROR, L"Error (mTWCodePage) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
-		error = -1;
-		return 0;
-	}
-	unsigned int desiredBufferSizeInBytes = (queryLength + 1) << 1;
-	if (mTWbufSize < desiredBufferSizeInBytes)
-	{
-		desiredBufferSizeInBytes = max(desiredBufferSizeInBytes, 1000000); // make minimum buffer 1MB to avoid repeatedly reallocating for trivially small sizes
-		unsigned int previousBufSize = mTWbufSize;
-		mTWbufSize = max(desiredBufferSizeInBytes, mTWbufSize);
-		mTWbuffer = (previousBufSize == 0) ? tmalloc(mTWbufSize) : trealloc(24, mTWbuffer, previousBufSize, mTWbufSize);
-		if (!mTWbuffer)
+		if (codepage == CP_UTF8)
 		{
-			lplog(LOG_ERROR, L"Out of memory requesting %d bytes from translating buffer %S!", mTWbufSize, inString.c_str());
-			error = -2;
-			return 0;
+			if (!lp_try_decode_strict_utf8(inString, outString))
+			{
+				lplog(LOG_ERROR, u"Error (mTWCodePage) in translating buffer as UTF-8: %S", inString.c_str());
+				error = -1;
+				return 0;
+			}
+			return outString.c_str();
 		}
-	}
-	if (!(queryLength = MultiByteToWideChar(codepage, MB_ERR_INVALID_CHARS, inString.c_str(), -1, (wchar_t*)mTWbuffer, mTWbufSize / 2)))
-	{
-		lplog(LOG_ERROR, L"Error (mTWCodePage 2) (%d) in translating buffer: %S", GetLastError(), inString.c_str());
-		error = -3;
-		return 0;
-	}
-	outString = (wchar_t*)mTWbuffer;
+	// Everything else this codebase forces (28591, 1252, 20127) lands on the
+	// latin1/cp1252 rung, which is total and cannot fail.
+	bool usedCp1252Table = false;
+	lp_decode_latin1_cp1252(inString, outString, usedCp1252Table);
 	return outString.c_str();
 }
 
 // Simplest overload: decode with auto-detection and discard which code page won.
-const wchar_t* mTW(string inString, wstring& outString)
+const lpchar_t* mTW(string inString, lpwstring& outString)
 {
 	int codepage;
 	return mTW(inString, outString, codepage);
 }
+
 
 // ---------------------------------------------------------------------------------
 // SERIALIZERS: copy(buf, value, where, limit) writes `value` into buf at byte offset
@@ -333,21 +267,21 @@ const wchar_t* mTW(string inString, wstring& outString)
 // the byte counts must match or the rest of the stream is misinterpreted.
 // ---------------------------------------------------------------------------------
 
-// Write a wstring as raw UTF-16 code units terminated by a wide NUL.
+// Write a lpwstring as raw UTF-16 code units terminated by a wide NUL.
 // This is the only serializer that reports an overrun by returning false instead of
 // killing the process, which is why the container serializers below can meaningfully
 // propagate a false result.
-bool copy(void* buf, wstring str, int& where, int limit)
+bool copy(void* buf, lpwstring str, int& where, int limit)
 {
 	DLFS
 		if (where + (str.length() + 1) * sizeof(str[0]) > (unsigned)limit)
 		{
-			lplog(LOG_ERROR, L"Maximum copy limit of %d bytes reached (5)!", limit);
+			lplog(LOG_ERROR, u"Maximum copy limit of %d bytes reached (5)!", limit);
 			return false;
 		}
-	wcscpy((wchar_t*)(((char*)buf) + where), str.c_str());
-	((char*)buf)[where + wcslen(str.c_str()) * sizeof(str[0])] = 0;
-	where += (wcslen(str.c_str()) + 1) * sizeof(str[0]);
+	lp_strcpy((lpchar_t*)(((char*)buf) + where), str.c_str());
+	((char*)buf)[where + lp_strlen(str.c_str()) * sizeof(str[0])] = 0;
+	where += (lp_strlen(str.c_str()) + 1) * sizeof(str[0]);
 	return true;
 }
 
@@ -358,7 +292,7 @@ bool copy(void* buf, string str, int& where, int limit)
 {
 	DLFS
 		if (where + (str.length() + 1) * sizeof(str[0]) > (unsigned)limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (6)", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (6)", limit);
 	strcpy((((char*)buf) + where), str.c_str());
 	((char*)buf)[where + str.length() * sizeof(str[0])] = 0;
 	where += (str.length() + 1) * sizeof(str[0]);
@@ -373,7 +307,7 @@ bool copy(void* buf, int num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (7)", limit);
 	* ((int*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
@@ -384,7 +318,7 @@ bool copy(void* buf, short num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (7)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (7)", limit);
 	* ((short*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
@@ -395,7 +329,7 @@ bool copy(void* buf, unsigned short num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (9)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (9)", limit);
 	* ((unsigned short*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
@@ -406,30 +340,30 @@ bool copy(void* buf, unsigned int num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (10)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (10)", limit);
 	* ((unsigned int*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
 }
 
 // Write an 8-byte signed integer.  Same check-before-store ordering as the int overload.
-bool copy(void* buf, __int64 num, int& where, int limit)
+bool copy(void* buf, int64_t num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (11)", limit);
-	* ((__int64*)(((char*)buf) + where)) = num;
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (11)", limit);
+	* ((int64_t*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
 }
 
 // Write an 8-byte unsigned integer.  Same check-before-store ordering as above.
-bool copy(void* buf, unsigned __int64 num, int& where, int limit)
+bool copy(void* buf, uint64_t num, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (12)", limit);
-	* ((unsigned __int64*)(((char*)buf) + where)) = num;
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (12)", limit);
+	* ((uint64_t*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
 }
@@ -440,7 +374,7 @@ bool copy(void* buf, char ch, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(ch) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (13)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (13)", limit);
 	((char*)buf)[where++] = ch;
 	return true;
 }
@@ -451,7 +385,7 @@ bool copy(void* buf, unsigned char ch, int& where, int limit)
 {
 	DLFS
 	if (where +sizeof(ch) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (14)", limit);
 	((char*)buf)[where++] = ch;
 	return true;
 }
@@ -480,13 +414,13 @@ bool copy(void* buf, vector <int>& s, int& where, int limit)
 	return true;
 }
 
-// Write a vector<wstring> as [int count][count x NUL-terminated UTF-16], in order.
-bool copy(void* buf, vector <wstring>& s, int& where, int limit)
+// Write a vector<lpwstring> as [int count][count x NUL-terminated UTF-16], in order.
+bool copy(void* buf, vector <lpwstring>& s, int& where, int limit)
 {
 	DLFS
 		int count = s.size();
 	if (!copy(buf, count, where, limit)) return false;
-	for (vector<wstring>::iterator is = s.begin(), isEnd = s.end(); is != isEnd; is++)
+	for (vector<lpwstring>::iterator is = s.begin(), isEnd = s.end(); is != isEnd; is++)
 		if (!copy(buf, *is, where, limit)) return false;
 	return true;
 }
@@ -523,17 +457,17 @@ bool copy(void* buf, unordered_set <string>& s, int& where, int limit)
 	return true;
 }
 
-bool copy(void* buf, set <wstring>& s, int& where, int limit)
+bool copy(void* buf, set <lpwstring>& s, int& where, int limit)
 {
 	DLFS
 		int count = s.size();
 	if (!copy(buf, count, where, limit)) return false;
-	for (set<wstring>::iterator is = s.begin(), isEnd = s.end(); is != isEnd; is++)
+	for (set<lpwstring>::iterator is = s.begin(), isEnd = s.end(); is != isEnd; is++)
 		if (!copy(buf, *is, where, limit)) return false;
 	return true;
 }
 
-bool copy(void* buf, unordered_set <wstring>& s, int& where, int limit)
+bool copy(void* buf, unordered_set <lpwstring>& s, int& where, int limit)
 {
 	DLFS
 		int count = s.size();
@@ -547,7 +481,7 @@ bool copy(void* buf, cIntArray& a, int& where, int limit)
 {
 	DLFS
 		if (where + sizeof(a.size()) + a.size() * sizeof(int) > (unsigned)limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (16)", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (16)", limit);
 	*((int*)(((char*)buf) + where)) = a.size();
 	where += sizeof(a.size());
 	memcpy(((char*)buf) + where, a.begin(), a.size() * sizeof(int));
@@ -565,7 +499,7 @@ bool copy(void* buf, cLastVerbTenses& a, int& where, int limit)
 bool copyWString(void* buf, tIWMM w, int& where, int limit)
 {
 	DLFS
-		return copy(buf, (w == wNULL) ? L"" : w->first, where, limit);
+		return copy(buf, (w == wNULL) ? u"" : w->first, where, limit);
 }
 
 bool copy(void* buf, cName& a, int& where, int limit)
@@ -593,7 +527,7 @@ bool copy(string& str, void* buf, int& where, int limit)
 	DLFS
 		if (where >= limit)
 		{
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (14)", limit);
 			return false;
 		}
 	const char* start = ((char*)buf) + where;
@@ -601,7 +535,7 @@ bool copy(string& str, void* buf, int& where, int limit)
 	size_t len = strnlen(start, maxLen);
 	if (len >= maxLen) // no NUL terminator within the remaining buffer
 	{
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (14)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (14)", limit);
 		return false;
 	}
 	str.assign(start, len);
@@ -609,31 +543,31 @@ bool copy(string& str, void* buf, int& where, int limit)
 	return true;
 }
 
-bool copy(wstring& str, void* buf, int& where, int limit)
+bool copy(lpwstring& str, void* buf, int& where, int limit)
 {
 	DLFS
 		if (where >= limit)
 		{
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (15)", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (15)", limit);
 			return false;
 		}
-	const wchar_t* start = (wchar_t*)((char*)buf + where);
-	size_t maxChars = (size_t)(limit - where) / sizeof(wchar_t);
-	size_t len = wcsnlen(start, maxChars);
+	const lpchar_t* start = (lpchar_t*)((char*)buf + where);
+	size_t maxChars = (size_t)(limit - where) / sizeof(lpchar_t);
+	size_t len = lp_strnlen(start, maxChars);
 	if (len >= maxChars) // no NUL terminator within the remaining buffer
 	{
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (15)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (15)", limit);
 		return false;
 	}
 	str.assign(start, len);
-	where += (int)(len + 1) * sizeof(wchar_t);
+	where += (int)(len + 1) * sizeof(lpchar_t);
 	return true;
 }
 
-bool copy(const wchar_t* wcstr, void* buf, int& where, int limit)
+bool copy(const lpchar_t* wcstr, void* buf, int& where, int limit)
 {
 	DLFS
-		wstring wstr = wcstr;
+		lpwstring wstr = wcstr;
 	return copy(wstr, buf, where, limit);
 }
 
@@ -655,20 +589,20 @@ bool copy(unsigned int& num, void* buf, int& where, int limit)
 	return true;
 }
 
-bool copy(__int64& num, void* buf, int& where, int limit)
+bool copy(int64_t& num, void* buf, int& where, int limit)
 {
 	DLFS
 		if (where + (int)sizeof(num) > limit) return false;
-	num = *((__int64*)(((char*)buf) + where));
+	num = *((int64_t*)(((char*)buf) + where));
 	where += sizeof(num);
 	return true;
 }
 
-bool copy(unsigned __int64& num, void* buf, int& where, int limit)
+bool copy(uint64_t& num, void* buf, int& where, int limit)
 {
 	DLFS
 		if (where + (int)sizeof(num) > limit) return false;
-	num = *((unsigned __int64*)(((char*)buf) + where));
+	num = *((uint64_t*)(((char*)buf) + where));
 	where += sizeof(num);
 	return true;
 }
@@ -714,7 +648,7 @@ bool copy(set <int>& s, void* buf, int& where, int limit)
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	for (int I = 0; I < count; I++)
@@ -733,7 +667,7 @@ bool copy(vector <int>& s, void* buf, int& where, int limit)
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	s.reserve(count);
@@ -746,20 +680,20 @@ bool copy(vector <int>& s, void* buf, int& where, int limit)
 	return true;
 }
 
-bool copy(vector <wstring>& s, void* buf, int& where, int limit)
+bool copy(vector <lpwstring>& s, void* buf, int& where, int limit)
 {
 	DLFS
 		int count;
 	if (!copy(count, buf, where, limit)) return false;
 	if (count<0 || count>(limit - where) / 2)
 	{
-		lplog(LOG_FATAL_ERROR, L"illegal count on read - %d!", count);
+		lplog(LOG_FATAL_ERROR, u"illegal count on read - %d!", count);
 		return false;
 	}
 	s.reserve(count);
 	for (int I = 0; I < count; I++)
 	{
-		wstring si;
+		lpwstring si;
 		if (!copy(si, buf, where, limit)) return false;
 		s.push_back(si);
 	}
@@ -773,7 +707,7 @@ bool copy(vector <string>& s, void* buf, int& where, int limit)
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	s.reserve(count);
@@ -793,7 +727,7 @@ bool copy(set <string>& s, void* buf, int& where, int limit)
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	for (int I = 0; I < count; I++)
@@ -805,38 +739,38 @@ bool copy(set <string>& s, void* buf, int& where, int limit)
 	return true;
 }
 
-bool copy(set <wstring>& s, void* buf, int& where, int limit)
+bool copy(set <lpwstring>& s, void* buf, int& where, int limit)
 {
 	DLFS
 		int count;
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	for (int I = 0; I < count; I++)
 	{
-		wstring str;
+		lpwstring str;
 		if (!copy(str, buf, where, limit)) return false;
 		s.insert(str);
 	}
 	return true;
 }
 
-bool copy(unordered_set <wstring>& s, void* buf, int& where, int limit)
+bool copy(unordered_set <lpwstring>& s, void* buf, int& where, int limit)
 {
 	DLFS
 		int count;
 	if (!copy(count, buf, where, limit)) return false;
 	if (count < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	for (int I = 0; I < count; I++)
 	{
-		wstring str;
+		lpwstring str;
 		if (!copy(str, buf, where, limit)) return false;
 		s.insert(str);
 	}
@@ -852,7 +786,7 @@ bool copy(cIntArray& a, void* buf, int& where, int limit)
 	if ((where + num * (int)sizeof(int)) > limit) return false;
 	if (num < 0)
 	{
-		lplog(LOG_ERROR, L"negative count on read!");
+		lplog(LOG_ERROR, u"negative count on read!");
 		return false;
 	}
 	for (int I = 0; I < num; I++, where += sizeof(int))
@@ -871,7 +805,7 @@ bool copy(cLastVerbTenses& a, void* buf, int& where, int limit)
 bool copyWString(tIWMM& w, void* buf, int& where, int limit)
 {
 	DLFS
-		wstring str;
+		lpwstring str;
 	if (!copy(str, buf, where, limit)) return false;
 	if (str.empty())
 		w = wNULL;
@@ -880,12 +814,12 @@ bool copyWString(tIWMM& w, void* buf, int& where, int limit)
 		w = Words.query(str);
 		if (w == Words.end())
 		{
-			while (str.length() > 0 && str[str.length() - 1] == L' ')
+			while (str.length() > 0 && str[str.length() - 1] == u' ')
 				str.erase(str.begin() + str.length() - 1);
 			w = Words.query(str);
 			if (w == Words.end())
 			{
-				::lplog(LOG_ERROR, L"word %s not found in creating read in object name.", str.c_str());
+				::lplog(LOG_ERROR, u"word %s not found in creating read in object name.", str.c_str());
 				w = wNULL;
 			}
 		}
@@ -911,106 +845,107 @@ bool copy(cName& a, void* buf, int& where, int limit)
 }
 
 // Function to lookup an error message from an error code.
+// Batch B5: strerror(errno) replaces GetLastError + FormatMessageA. strerror
+// returns a pointer to a static (or thread-local) buffer that the caller must not
+// free -- unlike the FormatMessage version, which allocated a buffer that every
+// call site here leaked, since none of them ever called LocalFree.
 const char* LastErrorStr(void)
 {
 	LFS
-		char* szReturn = NULL;
-	int hr = GetLastError();
-	if (FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-		NULL, hr, GetUserDefaultLangID(), (CHAR*)&szReturn, 0, NULL) == 0)
-		return "Unknown";
-
-	return szReturn;
+		return strerror(errno);
 }
 
-void checkHeap(wchar_t* desc)
+// Batch B7: the body is gone. It called MSVC's _heapchk/_CrtCheckMemory, debug-CRT
+// heap validators with no macOS equivalent -- the platform's answer to the same
+// question is a different tool entirely (MallocStackLogging, AddressSanitizer, or
+// `leaks`), not an in-process API. The function is kept as a no-op rather than
+// deleted because it is declared in general.h and calling it is harmless; a
+// maintainer wanting heap checking here should build with -fsanitize=address.
+void checkHeap(lpchar_t* desc)
 {
 	LFS
-		// Check heap status
-		int heapstatus = _heapchk();
-	switch (heapstatus)
-	{
-	case _HEAPOK:
-		break;
-	case _HEAPEMPTY:
-		printf(" OK - %ls heap is empty\n", desc);
-		break;
-	case _HEAPBADBEGIN:
-		printf("ERROR - %ls bad start of heap\n", desc);
-		break;
-	case _HEAPBADNODE:
-		printf("ERROR - %ls bad node in heap\n", desc);
-		break;
-	}
-	if (!_CrtCheckMemory())
-		printf("ERROR - %ls memory is bad", desc);
+		(void)desc;
 }
 
-void escapeSingleQuote(wstring& lobject)
+void escapeSingleQuote(lpwstring& lobject)
 {
 	LFS
-		wstring slo2;
+		lpwstring slo2;
 	for (unsigned int I = 0; I < lobject.size(); I++)
-		if (lobject[I] == L'\'')
-			slo2 += L"\\'";
+		if (lobject[I] == u'\'')
+			slo2 += u"\\'";
 		else
 			slo2 += lobject[I];
 	lobject = slo2;
 }
 
-void removeSingleQuote(wstring& lobject)
+void removeSingleQuote(lpwstring& lobject)
 {
 	LFS
-		wstring slo2;
+		lpwstring slo2;
 	for (unsigned int I = 0; I < lobject.size() - 1; I++)
-		if (lobject[I] != L'\\' || lobject[I + 1] != L'\'')
+		if (lobject[I] != u'\\' || lobject[I + 1] != u'\'')
 			slo2 += lobject[I];
 		else
 			I++;
-	if (lobject[lobject.size() - 1] != L'\'')
+	if (lobject[lobject.size() - 1] != u'\'')
 		slo2 += lobject[lobject.size() - 1];
 	lobject = slo2;
 }
 
-void removeExcessSpaces(wstring& lobject)
+void removeExcessSpaces(lpwstring& lobject)
 {
 	LFS
-		wstring slo2;
+		lpwstring slo2;
 	for (unsigned int I = 0; I < lobject.size(); I++)
-		if (lobject[I] != L' ' || I == 0 || lobject[I - 1] != ' ')
+		if (lobject[I] != u' ' || I == 0 || lobject[I - 1] != ' ')
 			slo2 += lobject[I];
 	lobject = slo2;
 }
 
-void trim(wstring& str)
+void trim(lpwstring& str)
 {
 	LFS
 		int whereSpace = 0;
-	while (str[whereSpace] == L' ')
+	while (str[whereSpace] == u' ')
 		whereSpace++;
 	if (whereSpace > 0)
 		str.erase(0, whereSpace);
 	whereSpace = str.length() - 1;
-	while (whereSpace >= 0 && str[whereSpace] == L' ')
+	while (whereSpace >= 0 && str[whereSpace] == u' ')
 		whereSpace--;
 	if (whereSpace < str.length() - 1)
 		str.erase(whereSpace + 1);
 }
 
-vector<wstring> splitString(wstring str, wchar_t wc)
+vector<lpwstring> splitString(lpwstring str, lpchar_t wc)
 {
-	vector<wstring> strings;
-	std::wistringstream f(str);
-	wstring s;
-	while (std::getline(f, s, wc))
-		strings.push_back(s);
+	// Batch B2: std::wistringstream/std::getline has no reliable char16_t support
+	// (no standard ctype<char16_t> locale facet); split manually. Matches
+	// std::getline(stream, s, delim)-in-a-loop semantics exactly, including the
+	// "no trailing empty entry after a trailing delimiter" and "empty input
+	// produces zero entries" edge cases (getline fails, extracting nothing, the
+	// instant the read position is already at the end of the string).
+	vector<lpwstring> strings;
+	size_t start = 0;
+	while (start < str.size())
+	{
+		size_t delimPos = str.find(wc, start);
+		if (delimPos == lpwstring::npos)
+		{
+			strings.push_back(str.substr(start));
+			break;
+		}
+		strings.push_back(str.substr(start, delimPos - start));
+		start = delimPos + 1;
+	}
 	return strings;
 }
 
 
-int addTagMark(wstring tag, vector<cTagLocation> tagSet, map <int, set<wstring>>& tagBeginPositionMap, map <int, set<wstring>>& tagEndPositionMap)
+int addTagMark(lpwstring tag, vector<cTagLocation> tagSet, map <int, set<lpwstring>>& tagBeginPositionMap, map <int, set<lpwstring>>& tagEndPositionMap)
 {
-	int nextTagIndex = -1, tagIndex = findTag(tagSet, (wchar_t*)tag.c_str(), nextTagIndex);
+	int nextTagIndex = -1, tagIndex = findTag(tagSet, (lpchar_t*)tag.c_str(), nextTagIndex);
 	if (tagIndex >= 0)
 	{
 		tagBeginPositionMap[tagSet[tagIndex].sourcePosition].insert(tag);
@@ -1019,9 +954,9 @@ int addTagMark(wstring tag, vector<cTagLocation> tagSet, map <int, set<wstring>>
 	return tagIndex;
 }
 
-void addTagConstrainedMark(wstring tag, int constrainByTag, vector<cTagLocation> tagSet, map <int, set<wstring>>& tagBeginPositionMap, map <int, set<wstring>>& tagEndPositionMap)
+void addTagConstrainedMark(lpwstring tag, int constrainByTag, vector<cTagLocation> tagSet, map <int, set<lpwstring>>& tagBeginPositionMap, map <int, set<lpwstring>>& tagEndPositionMap)
 {
-	int nextConstrainedTagIndex = -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (wchar_t*)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
+	int nextConstrainedTagIndex = -1, constrainedTagIndex = (constrainByTag >= 0) ? findTagConstrained(tagSet, (lpchar_t*)tag.c_str(), nextConstrainedTagIndex, tagSet[constrainByTag]) : -1;
 	if (constrainedTagIndex >= 0)
 	{
 		tagBeginPositionMap[tagSet[constrainedTagIndex].sourcePosition].insert(tag);
@@ -1029,25 +964,25 @@ void addTagConstrainedMark(wstring tag, int constrainByTag, vector<cTagLocation>
 	}
 }
 
-void getTagPositionsFromTagSet(vector<cTagLocation> tagSet, map <int, set<wstring>>& tagBeginPositionMap, map <int, set<wstring>>& tagEndPositionMap)
+void getTagPositionsFromTagSet(vector<cTagLocation> tagSet, map <int, set<lpwstring>>& tagBeginPositionMap, map <int, set<lpwstring>>& tagEndPositionMap)
 {
-	if (addTagMark(L"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+	if (addTagMark(u"SUBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
 		return;
-	if (addTagMark(L"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+	if (addTagMark(u"VERB", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
 		return;
-	if (addTagMark(L"OBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
+	if (addTagMark(u"OBJECT", tagSet, tagBeginPositionMap, tagEndPositionMap) < 0)
 		return;
-	int nextMainVerbTag = -1, mainVerbTag = findTag(tagSet, L"VERB", nextMainVerbTag);
-	addTagConstrainedMark(L"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"past", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
-	addTagConstrainedMark(L"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	int nextMainVerbTag = -1, mainVerbTag = findTag(tagSet, u"VERB", nextMainVerbTag);
+	addTagConstrainedMark(u"V_AGREE", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(u"conditional", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(u"past", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
+	addTagConstrainedMark(u"future", mainVerbTag, tagSet, tagBeginPositionMap, tagEndPositionMap);
 }
 
-void getTagPositions(cSource& source, int position, int pemaByPatternEnd, map <int, set<wstring>>& tagBeginPositionMap, map <int, set<wstring>>& tagEndPositionMap)
+void getTagPositions(cSource& source, int position, int pemaByPatternEnd, map <int, set<lpwstring>>& tagBeginPositionMap, map <int, set<lpwstring>>& tagEndPositionMap)
 {
 	vector < vector <cTagLocation> > tagSets;
-	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, L"tags for debugging") > 0)
+	if (source.startCollectTags(false, subjectVerbRelationTagSet, position, pemaByPatternEnd, tagSets, true, false, u"tags for debugging") > 0)
 	{
 		for (unsigned int J = 0; J < tagSets.size(); J++)
 		{
@@ -1057,42 +992,42 @@ void getTagPositions(cSource& source, int position, int pemaByPatternEnd, map <i
 	}
 }
 
-void getSentenceWithTags(cSource& source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, wstring& sentence)
+void getSentenceWithTags(cSource& source, int patternBegin, int patternEnd, int sentenceBegin, int sentenceEnd, int PEMAPosition, lpwstring& sentence)
 {
-	map <int, set<wstring>> tagBeginPositionMap, tagEndPositionMap;
+	map <int, set<lpwstring>> tagBeginPositionMap, tagEndPositionMap;
 	getTagPositions(source, patternBegin, PEMAPosition, tagBeginPositionMap, tagEndPositionMap);
-	wstring originalIWord;
+	lpwstring originalIWord;
 	bool inPattern = false;
 	for (int I = sentenceBegin; I < sentenceEnd; I++)
 	{
 		source.getOriginalWord(I, originalIWord, false, false);
 		if (I == patternBegin)
 		{
-			sentence += L"**";
+			sentence += u"**";
 			inPattern = true;
 		}
 		if (tagBeginPositionMap.find(I) != tagBeginPositionMap.end())
 		{
-			for (wstring tag : tagBeginPositionMap[I])
-				sentence += tag + L"{";
+			for (lpwstring tag : tagBeginPositionMap[I])
+				sentence += tag + u"{";
 		}
 		sentence += originalIWord;
 		if (tagEndPositionMap.find(I) != tagEndPositionMap.end())
 		{
 			bool notFoundInBeginPositions = tagBeginPositionMap.find(I) == tagBeginPositionMap.end();
-			for (wstring tag : tagEndPositionMap[I])
+			for (lpwstring tag : tagEndPositionMap[I])
 			{
 				if (notFoundInBeginPositions || tagBeginPositionMap[I].find(tag) == tagBeginPositionMap[I].end())
-					sentence += L" " + tag;
-				sentence += L"}";
+					sentence += u" " + tag;
+				sentence += u"}";
 			}
 		}
 		if (I == patternEnd - 1)
 		{
-			sentence += L"**";
+			sentence += u"**";
 			inPattern = false;
 		}
-		sentence += L" ";
+		sentence += u" ";
 	}
 }
 

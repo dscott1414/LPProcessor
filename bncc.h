@@ -19,14 +19,19 @@
 	Key data structures / globals:
 		- unknownCount - words whose BNC tag could not be matched to a form.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 class bncc
 {
 public:
-  int process(cSource &source,int sourceId,wstring id);
-  int processSentence(cSource &source,int sourceId,wchar_t *s,int &lastSentenceEnd,int &printLocation,int sentenceNum);
-  int processWord(cSource &source,int sourceId, wchar_t * buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentenceNum);
-  int findPreferredForm(vector <cWordMatch>::iterator im,int tag,bool optional,const wchar_t *location,int sentenceNum,bool depositPreference,bool reportNotFound);
-  bool findMultiplePreferredForm(vector <cWordMatch>::iterator im,int tag,const wchar_t *location,int sentence,int &f,bool reportNotFound);
+  int process(cSource &source,int sourceId,lpwstring id);
+  int processSentence(cSource &source,int sourceId,lpchar_t *s,int &lastSentenceEnd,int &printLocation,int sentenceNum);
+  int processWord(cSource &source,int sourceId, lpchar_t * buffer,int tag,int secondTag,int &lastSentenceEnd,int &printLocation,int sentenceNum);
+  int findPreferredForm(vector <cWordMatch>::iterator im,int tag,bool optional,const lpchar_t *location,int sentenceNum,bool depositPreference,bool reportNotFound);
+  bool findMultiplePreferredForm(vector <cWordMatch>::iterator im,int tag,const lpchar_t *location,int sentence,int &f,bool reportNotFound);
   int unknownCount;
   bncc(void);
 };

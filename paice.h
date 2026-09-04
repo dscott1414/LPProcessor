@@ -48,6 +48,11 @@ using namespace std;
 //#include "intarray.h"
 
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 class cStemmer
 {
 
@@ -55,10 +60,10 @@ public:
 	class cSuffixRule
 	{
 	public:
-		wstring text; /* To return stemmer output */
-		wstring keystr; /* Key wstring,ie,suffix to remove */
-		wstring repstr; /* wstring  to replace deleted letters */
-		wstring form;
+		lpwstring text; /* To return stemmer output */
+		lpwstring keystr; /* Key lpwstring,ie,suffix to remove */
+		lpwstring repstr; /* lpwstring  to replace deleted letters */
+		lpwstring form;
 		int inflection;
 		int rulenum; /* Line number of rule in rule list file */
 		bool intact; /* Boolean-must word be intact? */
@@ -81,8 +86,8 @@ public:
 		cSuffixRule(const cSuffixRule &rhs)
 		{
 			text = rhs.text; // To return stemmer output 
-			keystr = rhs.keystr; // Key wstring,ie,suffix to remove 
-			repstr = rhs.repstr; // wstring  to replace deleted letters 
+			keystr = rhs.keystr; // Key lpwstring,ie,suffix to remove 
+			repstr = rhs.repstr; // lpwstring  to replace deleted letters 
 			form = rhs.form;
 			inflection = rhs.inflection;
 			rulenum = rhs.rulenum; // Line number of rule in rule list file 
@@ -95,27 +100,27 @@ public:
 	};
 
 	typedef struct {
-		wstring keystr; /* Key wstring,ie,suffix to remove */
-		wstring repstr; /* wstring  to replace deleted letters */
+		lpwstring keystr; /* Key lpwstring,ie,suffix to remove */
+		lpwstring repstr; /* lpwstring  to replace deleted letters */
 		int rulenum; /* Line number of rule in rule list file */
 	} tPrefixRule;
 
-	static int findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, wstring &form, int &inflection);
-	static size_t stem(MYSQL mysql, wstring s, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule);
+	static int findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator &r, lpwstring &form, int &inflection);
+	static size_t stem(MYSQL mysql, lpwstring s, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule);
 	// Clears the process-wide stemRules/prefixRules vectors (not usually needed -
 	// they are static and live for the process).
 	~cStemmer();
-	static bool isWordDBUnknown(MYSQL mysql, wstring word);
+	static bool isWordDBUnknown(MYSQL mysql, lpwstring word);
 	static bool wordIsNotUnknownAndOpen(tIWMM iWord, bool log);
 
 private:
 	static unordered_set<int> unacceptableCombinationForms;
 	static vector <cSuffixRule> stemRules;
 	static vector <tPrefixRule> prefixRules;
-	static int applyStemRule(wstring sWord, cSuffixRule rule, vector <cSuffixRule> &rulesUsed, cIntArray trail);
-	static int applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule> &rulesUsed, int originalSize, wstring sWord);
+	static int applyStemRule(lpwstring sWord, cSuffixRule rule, vector <cSuffixRule> &rulesUsed, cIntArray trail);
+	static int applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule> &rulesUsed, int originalSize, lpwstring sWord);
 	static int readStemRules(void);
 	static int readPrefixRules(void);
-	static int getInflectionNum(wchar_t const *inflection);
-	static int stripPrefix(MYSQL mysql, wstring s, vector <cSuffixRule> &rulesUsed);
+	static int getInflectionNum(lpchar_t const *inflection);
+	static int stripPrefix(MYSQL mysql, lpwstring s, vector <cSuffixRule> &rulesUsed);
 };

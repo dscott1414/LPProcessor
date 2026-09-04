@@ -33,11 +33,24 @@
 			status; they do not hang waiting on stdin.
 		- LOG_FATAL_ERROR is also treated as LOG_INFO for file routing (writes main.lplog)
 			and lplog() ORs in LOG_ERROR, but logstring() exits before the error-file pass.
-		- lplogNR is "no newline" (it skips the wcscat L"\\n"), not "no return" - both
+		- lplogNR is "no newline" (it skips the wcscat u"\\n"), not "no return" - both
 			lplog and lplogNR abort on FATAL via logstring().
 		- When LOG_BUFFER is defined (it is), the FILE* handles are TLS, same as
 			logFileExtension, so two threads never share the same handle.
 */
+#pragma once
+// Batch B3: general.h now includes this header for sTrace, and several .cpp files
+// already include it directly as well -- so it needs an include guard, which it
+// never had (nothing included it twice before).
+// Batch B2: logging.h has no #includes of its own and is (per its own header
+// comment above) included from word.h BEFORE general.h -- so it cannot rely on
+// general.h having already pulled in lpchar.h by the time lplog()'s own
+// lpchar_t-typed declarations below are parsed. Self-sufficient fix: include it
+// directly here rather than depend on caller include order (this is what
+// actually surfaced the bug: envConfig.cpp reaches logging.h without going
+// through word.h at all, and every OTHER file that reaches windows.h first
+// masked the same latent issue behind a fatal "windows.h not found" error).
+#include "lpchar.h"
 //#define LOG_RELATIVE_LOCATION
 //#define LOG_OLD_MATCH
 #define LOG_BUFFER
@@ -105,10 +118,10 @@ enum LogLevels { LOG_INFO=1, LOG_ERROR=2, LOG_RESOLUTION=4, LOG_NOTMATCHED=8, LO
 //#define LOG_WORD_FLOW
 extern int logDatabaseDetails;
 int lplog(void);
-int lplog(const wchar_t *format,...);
-int lplog(int logLevel,const wchar_t *format,...);
-int lplogNR(int logLevel,const wchar_t *format,...);
-int logstring(int logLevel,const wchar_t *s);
+int lplog(const lpchar_t *format,...);
+int lplog(int logLevel,const lpchar_t *format,...);
+int lplogNR(int logLevel,const lpchar_t *format,...);
+int logstring(int logLevel,const lpchar_t *s);
 #define SCREEN_WIDTH 280
 // Per-document (copied onto cSource::debugTrace) switches that gate the expensive
 // resolution / pattern / Wikipedia traces.  Default-constructed to all-false so a
@@ -177,7 +190,7 @@ extern int logRDFDetail;
 extern bool log_net;  
 extern bool logTraceOpen;
 
-extern __declspec(thread) wstring logFileExtension; // parallel processing will overload this variable
+extern thread_local lpwstring logFileExtension; // parallel processing will overload this variable
 // 0 = single-process (write next to cwd).  Non-zero child workers also set
 // logFileExtension so logstring() prefixes "multiprocessor logs\\".
-extern __declspec(thread) int multiProcess; // initialized
+extern thread_local int multiProcess; // initialized

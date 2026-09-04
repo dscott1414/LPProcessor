@@ -36,8 +36,13 @@
 		- clear() NULLs content after freeing it (matching the destructor and
 		  PEMA::clear), so a later push_back trealloc's from a clean NULL.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #define IOHANDLE int
-int lplog(const wchar_t *format,...);
+int lplog(const lpchar_t *format,...);
 extern short logCache;
 
 class cPatternMatchArray
@@ -120,20 +125,20 @@ public:
 	tPatternMatch *find(unsigned int p,short end);
 	tPatternMatch *lower_bound(unsigned int p,short end);
 	bool consolidateWinners(int lastPEMAConsolidationIndex,cPatternElementMatchArray &pema,int *wa,int position,int &maxMatch,sTrace &t);
-	bool findMaxLen(wstring pattern,int &element);
+	bool findMaxLen(lpwstring pattern,int &element);
 	int findMaxLen(void);
-	int queryPatternDiff(wstring pattern,wstring differentiator,int &maxLen);
-	int queryPatternDiffLessThenLength(wstring pattern, wstring differentiator, int &maxLen);
-	int queryPatternDiff(wstring pattern,wstring differentiator);
+	int queryPatternDiff(lpwstring pattern,lpwstring differentiator,int &maxLen);
+	int queryPatternDiffLessThenLength(lpwstring pattern, lpwstring differentiator, int &maxLen);
+	int queryPatternDiff(lpwstring pattern,lpwstring differentiator);
 	int findAgent(int &element,int maximumMaxEnd,bool allowPronouns);
-	int queryPattern(wstring pattern);
-	int queryPattern(wstring pattern,int &len);
-	int queryAllPattern(wstring pattern,int startAt);
+	int queryPattern(lpwstring pattern);
+	int queryPattern(lpwstring pattern,int &len);
+	int queryAllPattern(lpwstring pattern,int startAt);
 	int queryPattern(int pattern,int &len);
 	int queryPattern(int pattern);
-	int queryPatternWithLen(wstring pattern,int len);
+	int queryPatternWithLen(lpwstring pattern,int len);
 	int queryPatternWithLen(int pattern,int len);
-	int queryMaximumLowestCostPattern(wstring pattern,int &len);
+	int queryMaximumLowestCostPattern(lpwstring pattern,int &len);
 	int queryQuestionFlagPattern();
 	int queryTagSet(unsigned int &element,int desiredTagSetNum,int &maxLen);
 	// Longest PMA slot whose pattern carries `tag`, or -1 if none does.

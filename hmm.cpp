@@ -41,10 +41,14 @@
 		  foundParsedSentence's) and then escapes both (escaped()/escapeStr) before
 		  interpolating into SQL.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include "word.h"
 #include "ontology.h"
@@ -74,13 +78,17 @@ double alpha = 0.001;
 //http://www.melanietosik.com/posts/Viterbi-POS-tagger
 bool unlockTables(MYSQL& mysql);
 
-// Create a JNI 1.8 VM with a hardcoded F:\lp Stanford ParserDemo classpath.
+// Create a JNI VM for the Stanford ParserDemo.
+// Batch B11: the classpath comes from envConfig's getStanfordClasspath()
+// (LP_STANFORD_CLASSPATH, defaulting under getMainDir()) rather than being a
+// hardcoded F:\lp Windows path with ';' separators.
 // Returns JNI_CreateJavaVM's jint (0 = JNI_OK).
 int createJavaVM(JavaVM*& vm, JNIEnv*& env)
 {
 	JavaVMOption options[5];
 	memset(&options, 0, sizeof(options));
-	options[0].optionString = (char *)"-Djava.class.path=.;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar";
+	static const std::string stanfordClassPathOption = "-Djava.class.path=" + getStanfordClasspath();
+	options[0].optionString = (char *)stanfordClassPathOption.c_str();
 	options[1].optionString = (char*)"-Xms10m"; // 10MB initial heap
 	options[2].optionString = (char*)"-Xmx3g"; // 3GB max heap
 	options[3].optionString = (char*)"-mx2400m"; // 2.4GB
@@ -96,63 +104,63 @@ int createJavaVM(JavaVM*& vm, JNIEnv*& env)
 }
 
 // https://www.clips.uantwerpen.be/pages/mbsp-tags
-unordered_map<wstring, vector<wstring>> pennMapToLP = {
-{ L"CC",{ L"conjunction" }},
-{ L"CD",{L"numeral_cardinal" }},
-{ L"DT",{L"determiner" }},
-{ L"EX",{L"there" }},
-{ L"FW",{L"" }},
-{ L"IN",{L"preposition",L"conjunction" }},
-{ L"JJ",{L"adjective" }},
-{ L"JJR",{L"adjective" }},
-{ L"JJS",{L"adjective" }},
-{ L"LS",{L"|||" }},
-{ L"MD",{L"modal_auxiliary" }},
-{ L"NN",{L"noun" }},
-{ L"NNS",{L"noun" }},
-{ L"NNP",{L"Proper Noun" }},
-{ L"NNPS",{L"Proper Noun" }},
-{ L"PDT",{L"predeterminer" }},
-{ L"POS",{L"" }},
-{ L"PRP",{L"personal_pronoun_accusative",L"personal_pronoun_nominative",L"personal_pronoun",L"reflexive_pronoun" }},
-{ L"PRP$",{L"possessive_determiner" }},
-{ L"RB",{L"adverb" }},
-{ L"RBR",{L"adverb" }},
-{ L"RBS",{L"adverb" }},
-{ L"RP",{L"particle" }},
-{ L"SYM",{L"symbol" }},
-{ L"TO",{L"to" }},
-{ L"UH",{L"interjection" }},
-{ L"VB",{L"verb" }},
-{ L"VBD",{L"verb" }},
-{ L"VBG",{L"verb" }},
-{ L"VBN",{L"verb" }},
-{ L"VBP",{L"verb" }},
-{ L"VBZ",{L"verb" }},
-{ L"WDT",{L"relativizer",L"interrogative_determiner",L"demonstrative_determiner",L"which",L"what",L"whose" }}, // wh-determiner: which, whatever, whichever 
-{ L"WP",{L"interrogative_pronoun",L"what" }}, // wh-pronoun, personal:	what, who, whom 
-{ L"WP$",{L"interrogative_determiner",L"whose",L"relativizer" }}, // wh-pronoun, possessive:	whose, whosever 
-{ L"WRB",{L"adverb",L"relativizer",L"how"} }, // wh-adverb:	where, when - LP does not distinguish WRB used to introduce a relative phrase (which is true) and its adverbial use (also true)
-{ L".",{ }}, // punctuation mark, sentence closer	.; ? *
-{ L",",{ }}, //	punctuation mark, comma	,
-{ L":",{ }}, // punctuation mark, colon :
-{ L"(",{ }}, // contextual separator, left paren (
-{ L")",{ }}, //	contextual separator, right paren )
-{ L"''",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
-{ L"``",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
-{ L"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
+unordered_map<lpwstring, vector<lpwstring>> pennMapToLP = {
+{ u"CC",{ u"conjunction" }},
+{ u"CD",{u"numeral_cardinal" }},
+{ u"DT",{u"determiner" }},
+{ u"EX",{u"there" }},
+{ u"FW",{u"" }},
+{ u"IN",{u"preposition",u"conjunction" }},
+{ u"JJ",{u"adjective" }},
+{ u"JJR",{u"adjective" }},
+{ u"JJS",{u"adjective" }},
+{ u"LS",{u"|||" }},
+{ u"MD",{u"modal_auxiliary" }},
+{ u"NN",{u"noun" }},
+{ u"NNS",{u"noun" }},
+{ u"NNP",{u"Proper Noun" }},
+{ u"NNPS",{u"Proper Noun" }},
+{ u"PDT",{u"predeterminer" }},
+{ u"POS",{u"" }},
+{ u"PRP",{u"personal_pronoun_accusative",u"personal_pronoun_nominative",u"personal_pronoun",u"reflexive_pronoun" }},
+{ u"PRP$",{u"possessive_determiner" }},
+{ u"RB",{u"adverb" }},
+{ u"RBR",{u"adverb" }},
+{ u"RBS",{u"adverb" }},
+{ u"RP",{u"particle" }},
+{ u"SYM",{u"symbol" }},
+{ u"TO",{u"to" }},
+{ u"UH",{u"interjection" }},
+{ u"VB",{u"verb" }},
+{ u"VBD",{u"verb" }},
+{ u"VBG",{u"verb" }},
+{ u"VBN",{u"verb" }},
+{ u"VBP",{u"verb" }},
+{ u"VBZ",{u"verb" }},
+{ u"WDT",{u"relativizer",u"interrogative_determiner",u"demonstrative_determiner",u"which",u"what",u"whose" }}, // wh-determiner: which, whatever, whichever 
+{ u"WP",{u"interrogative_pronoun",u"what" }}, // wh-pronoun, personal:	what, who, whom 
+{ u"WP$",{u"interrogative_determiner",u"whose",u"relativizer" }}, // wh-pronoun, possessive:	whose, whosever 
+{ u"WRB",{u"adverb",u"relativizer",u"how"} }, // wh-adverb:	where, when - LP does not distinguish WRB used to introduce a relative phrase (which is true) and its adverbial use (also true)
+{ u".",{ }}, // punctuation mark, sentence closer	.; ? *
+{ u",",{ }}, //	punctuation mark, comma	,
+{ u":",{ }}, // punctuation mark, colon :
+{ u"(",{ }}, // contextual separator, left paren (
+{ u")",{ }}, //	contextual separator, right paren )
+{ u"''",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
+{ u"``",{ }}, //	not listed in standard PennBank tag list but emitted by Stanford
+{ u"$",{ }} //	not listed in standard PennBank tag list but emitted by Stanford
 };
 
 // Map every single- and double-quote character to ASCII '"' so the string can
 // sit inside a single-quoted SQL literal.  Does not escape remaining apostrophes
 // that cWord::isSingleQuote does not classify.
-wstring replaceQuotes(wstring ws)
+lpwstring replaceQuotes(lpwstring ws)
 {
-	wstring replacement;
+	lpwstring replacement;
 	replacement.reserve(ws.length());
-	for (wchar_t wsc : ws)
+	for (lpchar_t wsc : ws)
 		if (cWord::isSingleQuote(wsc) || cWord::isDoubleQuote(wsc))
-			replacement += L'"';
+			replacement += u'"';
 		else
 			replacement += wsc;
 	return replacement;
@@ -164,20 +172,20 @@ wstring replaceQuotes(wstring ws)
 // Truncates to 2999 chars.  Out: parse, with " rewritten to ' and a trailing space.
 // Returns true if non-empty.  lockTable: take/release a READ lock around the select
 // (callers may lock higher up).
-bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool lockTable)
+bool foundParsedSentence(cSource& source, lpwstring sentence, lpwstring& parse, bool lockTable)
 {
 	if (lockTable)
 	{
 		printf("Waiting for read lock.                        \r");
-		if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences READ")) return false; // moved out to higher level for performance
+		if (!myquery(&source.mysql, u"LOCK TABLES stanfordPCFGParsedSentences READ")) return false; // moved out to higher level for performance
 		printf("Acquired lock. Selecting sentence.\r");
 	}
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (sentence.length() >= 3000)
 		sentence = sentence.substr(0, 2999);
 	sentence = replaceQuotes(sentence);
-	size_t sentencehash = std::hash<std::wstring>{}(sentence);
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d and sentence = '%s'", (__int64)sentencehash, escaped(sentence).c_str()); // must be %I64d because of BIGINT signed considerations
+	size_t sentencehash = std::hash<lpwstring>{}(sentence);
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select parse from stanfordPCFGParsedSentences where sentencehash = %I64d and sentence = '%s'", (int64_t)sentencehash, escaped(sentence).c_str()); // must be %I64d because of BIGINT signed considerations
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow = NULL;
 	parse.erase();
@@ -185,9 +193,9 @@ bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool
 	{
 		mTW(sqlrow[0], parse);
 		if (parse.empty())
-			lplog(LOG_ERROR, L"Parse is empty to %s", sentence.c_str());
-		parse += L" ";
-		std::replace(parse.begin(), parse.end(), L'"', L'\'');
+			lplog(LOG_ERROR, u"Parse is empty to %s", sentence.c_str());
+		parse += u" ";
+		std::replace(parse.begin(), parse.end(), u'"', u'\'');
 	}
 	mysql_free_result(result);
 	if (lockTable)
@@ -203,22 +211,22 @@ bool foundParsedSentence(cSource& source, wstring sentence, wstring& parse, bool
 // escaped()) before being interpolated into VALUES('%s','%s').  Returns 0, or -1
 // on lock/query fail.  On query fail the WRITE lock is released even if this call
 // did not take it.
-int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool lockTable)
+int setParsedSentence(cSource& source, lpwstring sentence, lpwstring parse, bool lockTable)
 {
 	if (lockTable)
 	{
 		printf("Waiting for write lock.                           \r");
-		if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out to higher level for performance
+		if (!myquery(&source.mysql, u"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out to higher level for performance
 			return -1;
 		printf("Acquired lock. Inserting sentence in table.\r");
 	}
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
 	if (sentence.length() >= 3000)
 		sentence = sentence.substr(0, 2999);
 	sentence = replaceQuotes(sentence);
 	parse = replaceQuotes(parse);
-	size_t sentencehash = std::hash<std::wstring>{}(sentence);
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", escaped(parse).c_str(), escaped(sentence).c_str(), (__int64)sentencehash);
+	size_t sentencehash = std::hash<lpwstring>{}(sentence);
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"insert stanfordPCFGParsedSentences (parse,sentence,sentencehash) VALUES('%s','%s',%I64d)", escaped(parse).c_str(), escaped(sentence).c_str(), (int64_t)sentencehash);
 	if (!myquery(&source.mysql, qt, true))
 	{
 		unlockTables(source.mysql);
@@ -237,7 +245,7 @@ int setParsedSentence(cSource& source, wstring sentence, wstring parse, bool loc
 // MySQL cache first.  Returns 0 or a negative JNI/cache code (-1..-7).
 // Static jclass/jmethodID are cached without NewGlobalRef (invalid after detach).
 // Local JNI refs are not deleted.  Logs "Did not find sentence!" on every cache miss.
-int parseSentence(cSource& source, JNIEnv* env, wstring sentence, wstring& parse, bool pcfg, bool lockTable)
+int parseSentence(cSource& source, JNIEnv* env, lpwstring sentence, lpwstring& parse, bool pcfg, bool lockTable)
 {
 	static jclass parserDemoClass;
 	static jmethodID parseSentenceMethod;
@@ -266,7 +274,7 @@ int parseSentence(cSource& source, JNIEnv* env, wstring sentence, wstring& parse
 		}
 		initialized = true;
 	}
-	lplog(LOG_ERROR, L"Did not find sentence! %s", sentence.c_str());
+	lplog(LOG_ERROR, u"Did not find sentence! %s", sentence.c_str());
 	// Construct the sentence argument - Java takes UTF8
 	string out;
 	jstring parseSentenceArgumentString = env->NewStringUTF(wTM(sentence, out));
@@ -304,35 +312,35 @@ int parseSentence(cSource& source, JNIEnv* env, wstring sentence, wstring& parse
 // duplicateSkip skips earlier occurrences of the same surface word in the sentence.
 // 's is stripped only in the pcfg branch.  originalWord[length-2] is unguarded
 // if the word is shorter than 2.  Header declares an extra JNIEnv* that is unused.
-int findLPPOSEquivalents(wstring sentence, wstring& parse, wstring originalWord, vector<wstring>& posList, int duplicateSkip, bool pcfg)
+int findLPPOSEquivalents(lpwstring sentence, lpwstring& parse, lpwstring originalWord, vector<lpwstring>& posList, int duplicateSkip, bool pcfg)
 {
-	parse = L" " + parse; // take care of the edge case where the match is at the beginning
+	parse = u" " + parse; // take care of the edge case where the match is at the beginning
 	// pcfg output:
 	// parse=(ROOT (PRN (: ;) (S (NP (NP (NP (QP (CC and) (CD Bunny))) (, ,) (CC and) (NP (NNP Bobtail)) (, ,)) (CC and) (NP (NNP Billy))) (VP (VBD were) (ADVP (RB always)) (VP (VBG doing) (NP (JJ *) (NN something)))))))
 	if (pcfg)
 	{
-		if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == L'\'' && originalWord[originalWord.length() - 1] == L's')
+		if (originalWord.length() >= 2 && originalWord[originalWord.length() - 2] == u'\'' && originalWord[originalWord.length() - 1] == u's')
 			originalWord.erase(originalWord.length() - 2);
-		originalWord = L" " + originalWord + L")";
+		originalWord = u" " + originalWord + u")";
 		size_t wow = parse.find(originalWord);
 		for (int dup = 0; dup < duplicateSkip; dup++)
 		{
-			if (wow != wstring::npos)
+			if (wow != lpwstring::npos)
 				wow = parse.find(originalWord, wow + 1);
 		}
-		if (wow != wstring::npos)
+		if (wow != lpwstring::npos)
 		{
-			auto firstparen = parse.rfind(L'(', wow);
-			if (firstparen != wstring::npos)
+			auto firstparen = parse.rfind(u'(', wow);
+			if (firstparen != lpwstring::npos)
 			{
-				wstring partofspeech = parse.substr(firstparen + 1, wow - firstparen - 1);
+				lpwstring partofspeech = parse.substr(firstparen + 1, wow - firstparen - 1);
 				auto lpPOS = pennMapToLP.find(partofspeech);
 				if (lpPOS != pennMapToLP.end())
 				{
 					posList = lpPOS->second;
 				}
 				else
-					lplog(LOG_ERROR, L"Part of Speech %s not found.", partofspeech.c_str());
+					lplog(LOG_ERROR, u"Part of Speech %s not found.", partofspeech.c_str());
 			}
 		}
 	}
@@ -340,32 +348,32 @@ int findLPPOSEquivalents(wstring sentence, wstring& parse, wstring originalWord,
 	{
 		// tagger output:
 		// ;_: and_CC bunny_NN ,_, and_CC bobtail_NN ,_, and_CC billy_NNP were_VBD always_RB doing_VBG something_NN 
-		originalWord = L" " + originalWord + L"_";
+		originalWord = u" " + originalWord + u"_";
 		size_t wow = parse.find(originalWord);
-		if (wow == wstring::npos)
+		if (wow == lpwstring::npos)
 		{
 			transform(originalWord.begin(), originalWord.end(), originalWord.begin(), (int(*)(int)) tolower);
 			wow = parse.find(originalWord);
 		}
 		for (int dup = 0; dup < duplicateSkip; dup++)
 		{
-			if (wow != wstring::npos)
+			if (wow != lpwstring::npos)
 				wow = parse.find(originalWord, wow + 1);
 		}
-		if (wow != wstring::npos)
+		if (wow != lpwstring::npos)
 		{
 			wow += originalWord.length();
-			auto nextspace = parse.find(L' ', wow);
-			if (nextspace != wstring::npos)
+			auto nextspace = parse.find(u' ', wow);
+			if (nextspace != lpwstring::npos)
 			{
-				wstring partofspeech = parse.substr(wow, nextspace - wow);
+				lpwstring partofspeech = parse.substr(wow, nextspace - wow);
 				auto lpPOS = pennMapToLP.find(partofspeech);
 				if (lpPOS != pennMapToLP.end())
 				{
 					posList = lpPOS->second;
 				}
 				else
-					lplog(LOG_ERROR, L"Part of Speech %s not found.", partofspeech.c_str());
+					lplog(LOG_ERROR, u"Part of Speech %s not found.", partofspeech.c_str());
 			}
 		}
 	}
@@ -380,14 +388,14 @@ void destroyJavaVM(JavaVM* vm)
 }
 
 // Vocabulary = distinct source.m word strings that occur at least min_cnt times, sorted.
-vector <wstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
+vector <lpwstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
 {
 	//Generate vocabulary
-	unordered_map <wstring, int> vocabAll;
+	unordered_map <lpwstring, int> vocabAll;
 
 	for (cWordMatch& im : source.m)
 		vocabAll[im.word->first] += 1;
-	vector <wstring> vocabvector;
+	vector <lpwstring> vocabvector;
 	// Remove words appearing only once
 	for (auto const& [word, count] : vocabAll)
 		if (count >= min_cnt)
@@ -399,33 +407,33 @@ vector <wstring> generateVocabFromSource(cSource& source, int min_cnt = 2)
 	return vocabvector;
 }
 
-wstring startTag = L"--s--";
+lpwstring startTag = u"--s--";
 // Count winner-form transitions and emissions.  Spaces in tag/word names become '*'.
 // Words that never had a winner form are back-filled from words/wordforms/forms
 // (one count each) so the emission matrix is not all zeros.  Each word is escaped
 // (escaped()) before being quoted into the IN(...) list, and the SELECT result is
 // mysql_free_result'd once the row loop finishes.
-void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
+void trainModelFromSource(cSource& source, unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagTransitionCountsMap, unordered_map <lpwstring, int>& tagCountsMap)
 {
 	// Train part-of-speech (POS) tagger model
-	set<wstring> taggedWords, allWords;
+	set<lpwstring> taggedWords, allWords;
 	// Start state
-	vector<wstring> previousTags = { startTag };
+	vector<lpwstring> previousTags = { startTag };
 	tagCountsMap[startTag] = 1;
 	for (cWordMatch im : source.m)
 	{
 		vector <int> winnerForms;
 		im.getWinnerForms(winnerForms);
-		vector <wstring> tags;
-		wstring word = im.word->first;
+		vector <lpwstring> tags;
+		lpwstring word = im.word->first;
 		for (int wf : winnerForms)
 		{
-			wstring tag = Forms[wf]->name;
+			lpwstring tag = Forms[wf]->name;
 			std::replace(tag.begin(), tag.end(), ' ', '*');
-			for (wstring ptag : previousTags)
-				tagTransitionCountsMap[ptag + L" " + tag] += 1;
+			for (lpwstring ptag : previousTags)
+				tagTransitionCountsMap[ptag + u" " + tag] += 1;
 			std::replace(word.begin(), word.end(), ' ', '*');
-			wordTagCountsMap[tag + L" " + word] += 1;
+			wordTagCountsMap[tag + u" " + word] += 1;
 			tagCountsMap[tag] += 1;
 			tags.push_back(tag);
 		}
@@ -436,92 +444,92 @@ void trainModelFromSource(cSource& source, unordered_map <wstring, int>& wordTag
 		// not compatible with winner - startTag is never winner
 		//if (source.isEOS(im - source.m.begin()))
 		//{
-		//	wstring word = L"--n--";
-		//	wstring tag = startTag;
-		//	for (wstring ptag : previousTags)
+		//	lpwstring word = u"--n--";
+		//	lpwstring tag = startTag;
+		//	for (lpwstring ptag : previousTags)
 		//	{
 		//		std::replace(ptag.begin(), ptag.end(), ' ', '*');
-		//		tagTransitionCountsMap[ptag + L" " + tag] += 1;
+		//		tagTransitionCountsMap[ptag + u" " + tag] += 1;
 		//	}
-		//	wordTagCountsMap[tag + L" " + word] += 1;
+		//	wordTagCountsMap[tag + u" " + word] += 1;
 		//	tagCountsMap[tag] += 1;
 		//	previousTags = { tag };
 		//}
 	}
-	set<wstring> untaggedWords;
+	set<lpwstring> untaggedWords;
 	set_difference(allWords.begin(), allWords.end(), taggedWords.begin(), taggedWords.end(), std::inserter(untaggedWords, untaggedWords.begin()));
-	lplog(LOG_ERROR, L"allWords=%d taggedWords=%d untaggedWords=%d", allWords.size(), taggedWords.size(), untaggedWords.size());
+	lplog(LOG_ERROR, u"allWords=%d taggedWords=%d untaggedWords=%d", allWords.size(), taggedWords.size(), untaggedWords.size());
 	if (untaggedWords.size())
 	{
-		wstring wordsToAdd;
-		for (wstring utw : untaggedWords)
-			wordsToAdd += L"\"" + escaped(utw) + L"\",";
+		lpwstring wordsToAdd;
+		for (lpwstring utw : untaggedWords)
+			wordsToAdd += u"\"" + escaped(utw) + u"\",";
 		MYSQL_RES* result;
 		MYSQL_ROW sqlrow;
-		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-		_snwprintf(qt, QUERY_BUFFER_LEN, L"select w.word, f.name as formname, MAX(count) from words w, wordforms wf, forms f where wf.formId = f.id and w.id = wf.wordId and w.word in(%s) group by word", wordsToAdd.substr(0, wordsToAdd.length() - 1).c_str());
+		lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+		lp_snprintf(qt, QUERY_BUFFER_LEN, u"select w.word, f.name as formname, MAX(count) from words w, wordforms wf, forms f where wf.formId = f.id and w.id = wf.wordId and w.word in(%s) group by word", wordsToAdd.substr(0, wordsToAdd.length() - 1).c_str());
 		if (!myquery(&source.mysql, qt, result))
-			lplog(LOG_FATAL_ERROR, L"Error in model training.");
+			lplog(LOG_FATAL_ERROR, u"Error in model training.");
 		//insert words that never got matched with any tag.
 		// this is to prevent null probabilities in hmm matrix.
 		for (int row = 0; sqlrow = mysql_fetch_row(result); row++)
 		{
-			wstring word, tag;
+			lpwstring word, tag;
 			mTW(sqlrow[0], word);
 			mTW(sqlrow[1], tag);
-			wordTagCountsMap[tag + L" " + word] = 1;
+			wordTagCountsMap[tag + u" " + word] = 1;
 		}
 		mysql_free_result(result);
 	}
 }
 
 // Write T/E/C lines (transition / emission / tag-count) as UNICODE.  Returns an
-// empty vector (and writes nothing) if _wfopen fails.  Returns the same lines in
+// empty vector (and writes nothing) if lp_wfopen fails.  Returns the same lines in
 // a vector for in-memory load.
-vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
+vector <lpwstring> writeModelFile(lpwstring modelPath, unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagTransitionCountsMap, unordered_map <lpwstring, int>& tagCountsMap)
 {
-	vector <wstring> model;
+	vector <lpwstring> model;
 
-	FILE* out_fp = _wfopen(modelPath.c_str(), L"w, ccs=UNICODE");
+	FILE* out_fp = lp_wfopen(modelPath.c_str(), "w, ccs=UNICODE");
 	if (!out_fp) return model;
 
 	// Write transition counts
 	for (auto const& [tags, count] : tagTransitionCountsMap)
 	{
-		wstring tline = L"T " + tags + L" " + std::to_wstring(count);
+		lpwstring tline = u"T " + tags + u" " + lp_narrow_to_wide(std::to_string(count));
 		model.push_back(tline);
-		fwprintf(out_fp, L"%s\n", tline.c_str());
+		lp_fwprintf(out_fp, u"%s\n", tline.c_str());
 	}
 	// Write emission counts
 	for (auto const& [tagword, count] : wordTagCountsMap)
 	{
-		wstring eline = L"E " + tagword + L" " + std::to_wstring(count);
+		lpwstring eline = u"E " + tagword + u" " + lp_narrow_to_wide(std::to_string(count));
 		model.push_back(eline);
-		fwprintf(out_fp, L"%s\n", eline.c_str());
+		lp_fwprintf(out_fp, u"%s\n", eline.c_str());
 	}
 	// Write tagCountsMap unordered_map
 	for (auto const& [tag, count] : tagCountsMap)
 	{
-		wstring cline = L"C " + tag + L" " + std::to_wstring(count);
+		lpwstring cline = u"C " + tag + u" " + lp_narrow_to_wide(std::to_string(count));
 		model.push_back(cline);
-		fwprintf(out_fp, L"%s\n", cline.c_str());
+		lp_fwprintf(out_fp, u"%s\n", cline.c_str());
 	}
 	fclose(out_fp);
 	return model;
 }
 
-// Read the T/E/C model file.  Returns an empty vector if _wfopen fails.  An empty
+// Read the T/E/C model file.  Returns an empty vector if lp_wfopen fails.  An empty
 // line is left as-is rather than underflowing line[-1].  Lines are capped at 100 chars.
-vector <wstring> readModelFile(wstring modelPath)
+vector <lpwstring> readModelFile(lpwstring modelPath)
 {
-	vector <wstring> model;
-	FILE* model_fp = _wfopen(modelPath.c_str(), L"r, ccs=UNICODE");
+	vector <lpwstring> model;
+	FILE* model_fp = lp_wfopen(modelPath.c_str(), "r, ccs=UNICODE");
 	if (!model_fp) return model; 
 	// Start state
-	wchar_t line[100 + 1];
-	while (fgetws(line, 100, model_fp) != NULL)
+	lpchar_t line[100 + 1];
+	while (lp_fgetws(line, 100, model_fp) != NULL)
 	{
-		size_t n = wcslen(line);
+		size_t n = lp_strlen(line);
 		if (n) line[n - 1] = 0;
 		model.push_back(line);
 	}
@@ -529,43 +537,64 @@ vector <wstring> readModelFile(wstring modelPath)
 	return model;
 }
 
+// Batch B2: the model file lines are whitespace-separated tokens (2-3 lpwstring
+// fields plus a trailing integer count); loadModel() below used to read them via
+// std::wstringstream's operator>>, but that relies on locale facets (ctype<T> for
+// whitespace-skipping, num_get<T> for the integer) that the standard library only
+// guarantees for char/wchar_t, not char16_t -- manual whitespace split instead.
+static vector<lpwstring> tokenizeWhitespaceLine(const lpwstring& line)
+{
+	vector<lpwstring> tokens;
+	size_t p = 0, n = line.size();
+	while (p < n)
+	{
+		while (p < n && (line[p] == u' ' || line[p] == u'\t')) ++p;
+		if (p >= n) break;
+		size_t start = p;
+		while (p < n && line[p] != u' ' && line[p] != u'\t') ++p;
+		tokens.push_back(line.substr(start, p - start));
+	}
+	return tokens;
+}
+
 // Load model
 // Parse T/E/C lines back into the three count maps.  '*' in tags/words becomes space.
-void loadModel(vector <wstring>& model, unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap)
+void loadModel(vector <lpwstring>& model, unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagTransitionCountsMap, unordered_map <lpwstring, int>& tagCountsMap)
 {
-	for (vector <wstring>::iterator mi = model.begin(), miEnd = model.end(); mi != miEnd; mi++)
+	for (vector <lpwstring>::iterator mi = model.begin(), miEnd = model.end(); mi != miEnd; mi++)
 	{
 		if ((mi - model.begin()) % 5000 == 0)
-			printf("Loading model processed: %03d%%:%09I64d\r", (int)(100 * (mi - model.begin()) / model.size()), (__int64)(mi - model.begin()));
-		wstring type, tag, x;
-		int count;
-		std::wstringstream convertor(*mi);
-		if (mi->at(0) == L'C')
+			printf("Loading model processed: %03d%%:%09I64d\r", (int)(100 * (mi - model.begin()) / model.size()), (int64_t)(mi - model.begin()));
+		lpwstring type, tag, x;
+		int count = 0;
+		vector<lpwstring> tok = tokenizeWhitespaceLine(*mi);
+		if (mi->at(0) == u'C')
 		{
-			convertor >> type >> tag >> count;
+			bool extracted = tok.size() >= 3;
+			if (extracted) { type = tok[0]; tag = tok[1]; count = lp_wtoi(tok[2].c_str()); }
 			std::replace(tag.begin(), tag.end(), '*', ' ');
-			if (convertor.fail() == true)
-				lplog(LOG_ERROR, L"failed to read in tagCountsMap data %s", mi->c_str());
+			if (!extracted)
+				lplog(LOG_ERROR, u"failed to read in tagCountsMap data %s", mi->c_str());
 			else
 				tagCountsMap[tag] = int(count);
 			continue;
 		}
-		convertor >> type >> tag >> x >> count;
+		if (tok.size() >= 4) { type = tok[0]; tag = tok[1]; x = tok[2]; count = lp_wtoi(tok[3].c_str()); }
 		std::replace(tag.begin(), tag.end(), '*', ' ');
 		std::replace(x.begin(), x.end(), '*', ' ');
-		if (mi->at(0) == L'T')
+		if (mi->at(0) == u'T')
 		{
-			tagTransitionCountsMap[tag + L" " + x] = int(count);
+			tagTransitionCountsMap[tag + u" " + x] = int(count);
 		}
 		else
 		{
-			wordTagCountsMap[tag + L" " + x] = int(count);
+			wordTagCountsMap[tag + u" " + x] = int(count);
 		}
 	}
 }
 
 // P(tag_j | tag_i) = (count(i->j) + alpha) / (count(i) + alpha * |tags|).
-vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap, vector <wstring>& tags)
+vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <lpwstring, int>& tagTransitionCountsMap, unordered_map <lpwstring, int>& tagCountsMap, vector <lpwstring>& tags)
 {
 	int tagsSize = tags.size();
 	vector <vector<double>> tagTransitionProbabilityMatrix(tagsSize, vector(tagsSize, (double)0));
@@ -574,11 +603,11 @@ vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <ws
 	{
 		for (int currentTagIndex = 0; currentTagIndex < tagsSize; currentTagIndex++)
 		{
-			wstring prevTag = tags[previousTagIndex];
-			wstring tag = tags[currentTagIndex];
+			lpwstring prevTag = tags[previousTagIndex];
+			lpwstring tag = tags[currentTagIndex];
 			// Compute smoothed transition probability
 			int tagTransitionCount = 0;
-			unordered_map <wstring, int>::iterator ti = tagTransitionCountsMap.find(prevTag + L" " + tag);
+			unordered_map <lpwstring, int>::iterator ti = tagTransitionCountsMap.find(prevTag + u" " + tag);
 			if (ti != tagTransitionCountsMap.end())
 				tagTransitionCount = ti->second;
 
@@ -592,7 +621,7 @@ vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <ws
 // [wordTagProbabilityMatrix[i][j] stores the probability of observing o_j from state s_i]
 // P(word_j | tag_i).  Default (USE_ALPHA_FOR_WORDTAG off): raw count/tagCount, and
 // unseen pairs stay 0.  With the define: same additive smoothing as transitions.
-vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagCountsMap, vector <wstring>& tags, vector<wstring>& vocab)
+vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagCountsMap, vector <lpwstring>& tags, vector<lpwstring>& vocab)
 {
 	int tagsSize = tags.size();
 	int vocabSize = vocab.size();
@@ -602,11 +631,11 @@ vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring,
 	{
 		for (int vocabIndex = 0; vocabIndex < vocabSize; vocabIndex++)
 		{
-			wstring tag = tags[tagIndex];
-			wstring word = vocab[vocabIndex];
+			lpwstring tag = tags[tagIndex];
+			lpwstring word = vocab[vocabIndex];
 			// Compute smoothed emission probability
 			int wordTagCount = 0;
-			unordered_map <wstring, int>::iterator ei = wordTagCountsMap.find(tag + L" " + word);
+			unordered_map <lpwstring, int>::iterator ei = wordTagCountsMap.find(tag + u" " + word);
 			if (ei != wordTagCountsMap.end())
 			{
 				wordTagCount = ei->second;
@@ -635,15 +664,15 @@ vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring,
 // Allocate probability/path matrices (disk-backed if the DIYDiskArray path is set)
 // and seed column 0 from startTag -> each tag * P(firstWord | tag).
 // vocabReverseLookup[firstWord] inserts 0 if firstWord is not in vocab.
-void initViterbiStartProbabilities(int numWords, wstring firstWord, vector<wstring>& vocab, vector <wstring>& tags,
+void initViterbiStartProbabilities(int numWords, lpwstring firstWord, vector<lpwstring>& vocab, vector <lpwstring>& tags,
 	vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix,
 	DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
-	unordered_map <wstring, int>& vocabReverseLookup)
+	unordered_map <lpwstring, int>& vocabReverseLookup)
 {
 	printf("initializing viterbi                                                \r");
 	// Word index vocabReverseLookup map
 	int count = 0;
-	for (vector<wstring>::iterator vi = vocab.begin(), viEnd = vocab.end(); vi != viEnd; vi++, count++)
+	for (vector<lpwstring>::iterator vi = vocab.begin(), viEnd = vocab.end(); vi != viEnd; vi++, count++)
 		vocabReverseLookup[*vi] = count;
 
 	int numTags = tags.size();
@@ -671,10 +700,10 @@ void initViterbiStartProbabilities(int numWords, wstring firstWord, vector<wstri
 
 // Sentence window around wordSourceIndex (EOS-bounded, else �20).  If star, prefix
 // the target word with '*'.  duplicateSkip counts earlier same-surface tokens (in/out).
-wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplicateSkip)
+lpwstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplicateSkip)
 {
-	wstring context;
-	int begin = max(0, wordSourceIndex - 20), end = min(source.m.size(), wordSourceIndex + 20);
+	lpwstring context;
+	int begin = max(0, wordSourceIndex - 20), end = (int)min(source.m.size(), (size_t)(wordSourceIndex + 20)); // batch B11: explicit common type
 	for (int I = wordSourceIndex - 1; I >= 0 && I > wordSourceIndex - 20; I--)
 		if (source.isEOS(I))
 		{
@@ -687,17 +716,17 @@ wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplica
 			end = I;
 			break;
 		}
-	wstring originalWord;
+	lpwstring originalWord;
 	source.getOriginalWord(wordSourceIndex, originalWord, false, false);
 	for (int I = begin; I < end; I++)
 	{
-		wstring originalIWord;
+		lpwstring originalIWord;
 		source.getOriginalWord(I, originalIWord, false, false);
 		if (I < wordSourceIndex && originalIWord == originalWord)
 			duplicateSkip++;
 		if (I == wordSourceIndex && star)
-			context += L"*";
-		context += originalIWord + L" ";
+			context += u"*";
+		context += originalIWord + u" ";
 	}
 	return context;
 }
@@ -712,7 +741,7 @@ wstring getContext(cSource& source, int wordSourceIndex, bool star, int& duplica
 // (default 0 = first vocab word).  Low-prob + flagOnlyConsiderProperNounForms
 // clears the flag and retries the same index.
 void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
-	vector <wstring>& tags, unordered_map <wstring, int>& wordSourceIndexLookup, unordered_map <wstring, int>& tagLookup)
+	vector <lpwstring>& tags, unordered_map <lpwstring, int>& wordSourceIndexLookup, unordered_map <lpwstring, int>& tagLookup)
 {
 	int numWordsInSource = source.m.size();
 	double probMult = 1.0 * numWordsInSource * numWordsInSource; // CHANGE from log add to multiplication
@@ -727,7 +756,7 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 		{
 			if (tag == UNDEFINED_FORM_NUM)
 				continue;
-			unordered_map <wstring, int>::iterator tli = tagLookup.find(Forms[tag]->name);
+			unordered_map <lpwstring, int>::iterator tli = tagLookup.find(Forms[tag]->name);
 			if (tli == tagLookup.end())
 				continue; // this tag occurs for the word but is nowhere in the training model, because the form was never winner
 			int tagIndex = tli->second;
@@ -744,8 +773,8 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 				//double prob = probabilityMatrix[prevTagIndex][wordSourceIndex - 1] +	log(tagTransitionProbabilityMatrix[prevTagIndex][tagIndex]) + log(wordTagProbabilityMatrix[tagIndex][wordVocabIndex]); // CHANGE from log add to multiplication
 				double prob = probMult * probabilityMatrix.get(prevTagIndex, wordSourceIndex - 1) * tagTransitionProbabilityMatrix[prevTagIndex][tagIndex] * wordTagProbabilityMatrix[tagIndex][wordVocabIndex];
 				if (prob < 0)
-					lplog(LOG_ERROR, L"probability:%d:%s%s:tag %s:previous %.14f*tag transition %.14f*word tag %.14f=%.14f", wordSourceIndex, source.m[wordSourceIndex].word->first.c_str(),
-						(source.m[wordSourceIndex].flags & cWordMatch::flagOnlyConsiderProperNounForms) ? L"[onlyProperNounSet]" : L"",
+					lplog(LOG_ERROR, u"probability:%d:%s%s:tag %s:previous %.14f*tag transition %.14f*word tag %.14f=%.14f", wordSourceIndex, source.m[wordSourceIndex].word->first.c_str(),
+						(source.m[wordSourceIndex].flags & cWordMatch::flagOnlyConsiderProperNounForms) ? u"[onlyProperNounSet]" : u"",
 						Forms[tag]->name.c_str(), probabilityMatrix.get(prevTagIndex, wordSourceIndex - 1), tagTransitionProbabilityMatrix[prevTagIndex][tagIndex], wordTagProbabilityMatrix[tagIndex][wordVocabIndex], prob);
 				if (prob > best_prob)
 				{
@@ -762,14 +791,14 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 			probabilityMatrix.put(tagIndex, wordSourceIndex, best_prob);
 #ifdef USE_ALPHA_FOR_WORDTAG
 			if (best_prob < 0.000000001)
-				lplog(LOG_ERROR, L"Low probability detected:word:%s,tagIndex=%d:%s,wordSourceIndex=%d:%.14f", source.m[wordSourceIndex].word->first.c_str(), tagIndex, Forms[tag]->name.c_str(), wordSourceIndex, best_prob);
+				lplog(LOG_ERROR, u"Low probability detected:word:%s,tagIndex=%d:%s,wordSourceIndex=%d:%.14f", source.m[wordSourceIndex].word->first.c_str(), tagIndex, Forms[tag]->name.c_str(), wordSourceIndex, best_prob);
 #else
 			if (wordSourceIndex == 75)
-				lplog(LOG_ERROR, L"Low probability detected:word:%s,tagIndex=%d:%s,wordSourceIndex=%d:%.14f", source.m[wordSourceIndex].word->first.c_str(), tagIndex, Forms[tag]->name.c_str(), wordSourceIndex, best_prob);
+				lplog(LOG_ERROR, u"Low probability detected:word:%s,tagIndex=%d:%s,wordSourceIndex=%d:%.14f", source.m[wordSourceIndex].word->first.c_str(), tagIndex, Forms[tag]->name.c_str(), wordSourceIndex, best_prob);
 #endif	
 			pathMatrix.put(tagIndex, wordSourceIndex, previousTagOfHighestProbability);
 			if (previousTagOfHighestProbability >= 0 && !source.m[wordSourceIndex - 1].testPreferredViterbiForm(tags[previousTagOfHighestProbability]))
-				lplog(LOG_ERROR, L"%d:*InterimForward Error setting word %s to tag %s (%d) [probability=%f=(prevProb=%f+log(tagTransitionProbability=%f [prevTag=%s][toTag=%s])+log(wordTagProbability=%f [tag=%s,word=%s])]",
+				lplog(LOG_ERROR, u"%d:*InterimForward Error setting word %s to tag %s (%d) [probability=%f=(prevProb=%f+log(tagTransitionProbability=%f [prevTag=%s][toTag=%s])+log(wordTagProbability=%f [tag=%s,word=%s])]",
 					wordSourceIndex - 1, source.m[wordSourceIndex - 1].word->first.c_str(), tags[previousTagOfHighestProbability].c_str(), previousTagOfHighestProbability, best_prob,
 					probabilityMatrix.get(previousTagOfHighestProbability, wordSourceIndex), // prevProb
 					(tagTransitionProbabilityMatrix[previousTagOfHighestProbability][tagIndex]), tags[previousTagOfHighestProbability].c_str(), tags[tagIndex].c_str(),// tagTransitionProbability, prevTagIndex, toTag
@@ -780,23 +809,23 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 			if (source.m[wordSourceIndex].flags & cWordMatch::flagOnlyConsiderProperNounForms)
 			{
 				int duplicateSkip = 0;
-				lplog(LOG_ERROR, L"%d:MAXREDO forceProperNoun incorrect:[%s]", wordSourceIndex, getContext(source, wordSourceIndex, true, duplicateSkip).c_str());
+				lplog(LOG_ERROR, u"%d:MAXREDO forceProperNoun incorrect:[%s]", wordSourceIndex, getContext(source, wordSourceIndex, true, duplicateSkip).c_str());
 				source.m[wordSourceIndex].flags &= ~cWordMatch::flagOnlyConsiderProperNounForms;
 				wordSourceIndex--;
 				continue;
 			}
 			else
-				lplog(LOG_ERROR, L"Low MAXIMUM probability detected:wordSourceIndex=%d:%.14f", wordSourceIndex, maximumProbabilityPerWordIndex);
+				lplog(LOG_ERROR, u"Low MAXIMUM probability detected:wordSourceIndex=%d:%.14f", wordSourceIndex, maximumProbabilityPerWordIndex);
 		}
 		if (maximumProbabilityPerWordIndex != (double)-std::numeric_limits<double>::infinity())
 			probMult = ((double)numWordsInSource * numWordsInSource) / maximumProbabilityPerWordIndex; // CHANGE from log add to multiplication
 	if (isnan(probMult))
 	{
-			lplog(LOG_FATAL_ERROR, L"Viterbi: forward probability multiplier is not a number: %f", maximumProbabilityPerWordIndex);
+			lplog(LOG_FATAL_ERROR, u"Viterbi: forward probability multiplier is not a number: %f", maximumProbabilityPerWordIndex);
 			return;
 		}
 		if (probMult < 0.000000001)
-			lplog(LOG_ERROR, L"Low probMult probability detected:%d:%.14f %.14f/%.14f", wordSourceIndex, probMult, ((double)numWordsInSource * numWordsInSource), maximumProbabilityPerWordIndex);
+			lplog(LOG_ERROR, u"Low probMult probability detected:%d:%.14f %.14f/%.14f", wordSourceIndex, probMult, ((double)numWordsInSource * numWordsInSource), maximumProbabilityPerWordIndex);
 		source.m[wordSourceIndex].preferredViterbiMaximumProbability = maximumProbabilityPerWordIndex;
 		source.m[wordSourceIndex].preferredViterbiPreviousTagOfHighestProbability = previousTagOfHighestProbabilityPerWordIndex;
 		source.m[wordSourceIndex].preferredViterbiCurrentTagOfHighestProbability = currentTagOfHighestProbabilityPerWordIndex;
@@ -806,7 +835,7 @@ void forwardFromSource(cSource& source, vector<vector<double>>& tagTransitionPro
 // Walk pathMatrix from the last word's best tag back to 0, calling
 // setPreferredViterbiForm.  tagLookup[name] inserts 0 if the form is unknown.
 // Returns the number of setPreferred / illegal-path failures.
-int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <wstring, int>& tagLookup, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix)
+int backwardFromSource(cSource& source, vector <lpwstring>& tags, unordered_map <lpwstring, int>& tagLookup, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix)
 {
 	int numWordsInSource = source.m.size(), criticalErrors = 0;
 	vector <int> z = vector(numWordsInSource, (int)-1);
@@ -820,10 +849,10 @@ int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <w
 			z[numWordsInSource - 1] = tagIndex;
 		}
 	}
-	lplog(LOG_INFO, L"Viterbi maximum probability=%.14f", maximumProbability);
+	lplog(LOG_INFO, u"Viterbi maximum probability=%.14f", maximumProbability);
 	if (z[numWordsInSource - 1] < 0 || !source.m[numWordsInSource - 1].setPreferredViterbiForm(tags[z[numWordsInSource - 1]], probabilityMatrix.get(z[numWordsInSource - 1], numWordsInSource - 1)))
 	{
-		lplog(LOG_ERROR, L"%d:(1)Error setting word %s to tag %s (%d)", numWordsInSource - 1, source.m[numWordsInSource - 1].word->first.c_str(), (z[numWordsInSource - 1] >= 0) ? tags[z[numWordsInSource - 1]].c_str() : L"ILLEGAL TAG", z[numWordsInSource - 1]);
+		lplog(LOG_ERROR, u"%d:(1)Error setting word %s to tag %s (%d)", numWordsInSource - 1, source.m[numWordsInSource - 1].word->first.c_str(), (z[numWordsInSource - 1] >= 0) ? tags[z[numWordsInSource - 1]].c_str() : u"ILLEGAL TAG", z[numWordsInSource - 1]);
 		criticalErrors++;
 	}
 	for (int i = numWordsInSource - 1; i > 0; i--)
@@ -832,7 +861,7 @@ int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <w
 			printf("Words backward processed: %03d%%:%09d\r", 100 * (numWordsInSource - i) / numWordsInSource, i);
 		if (z[i] < 0)
 		{
-			lplog(LOG_ERROR, L"%d:Error setting next path (%d)", i, z[i]);
+			lplog(LOG_ERROR, u"%d:Error setting next path (%d)", i, z[i]);
 			criticalErrors++;
 			break;
 		}
@@ -840,7 +869,7 @@ int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <w
 		// remove the previous path probability - just assess the probability of the tag at that word alone.
 		if (z[i - 1] < 0 || !source.m[i - 1].setPreferredViterbiForm(tags[z[i - 1]], probabilityMatrix.get(z[i - 1], i - 1)))
 		{
-			lplog(LOG_ERROR, L"%d:(2)Error setting word %s to tag %s (%d)", i - 1, source.m[i - 1].word->first.c_str(), (z[i - 1] >= 0) ? tags[z[i - 1]].c_str() : L"ILLEGAL TAG", z[i - 1]);
+			lplog(LOG_ERROR, u"%d:(2)Error setting word %s to tag %s (%d)", i - 1, source.m[i - 1].word->first.c_str(), (z[i - 1] >= 0) ? tags[z[i - 1]].c_str() : u"ILLEGAL TAG", z[i - 1]);
 			criticalErrors++;
 		}
 	}
@@ -849,18 +878,18 @@ int backwardFromSource(cSource& source, vector <wstring>& tags, unordered_map <w
 
 
 
-unordered_map<wstring, vector <wstring> > viterbiAssociationMap = {
+unordered_map<lpwstring, vector <lpwstring> > viterbiAssociationMap = {
 
 	// amplification
-	//{L"sectionheader", L"noun"},
+	//{u"sectionheader", u"noun"},
 
 	// similarity 
-	{L"coordinator",{ L"conjunction"} },
+	{u"coordinator",{ u"conjunction"} },
 
 	// include possible subclasses
-	{L"verb", { L"verbverb",L"SYNTAX:Accepts S as Object"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
-	{L"noun",{ L"dayUnit",L"timeUnit",L"simultaneousUnit",L"quantifier",L"Proper Noun" } }, // all, some etc
-	{L"adjective",{ L"quantifier" } } // many
+	{u"verb", { u"verbverb",u"SYNTAX:Accepts S as Object"} }, // feel, see, watch, hear, tell etc // fancy, say (thinksay verbs)
+	{u"noun",{ u"dayUnit",u"timeUnit",u"simultaneousUnit",u"quantifier",u"Proper Noun" } }, // all, some etc
+	{u"adjective",{ u"quantifier" } } // many
 };
 
 // include subclasses of forms with their parents.
@@ -871,16 +900,16 @@ unordered_map<wstring, vector <wstring> > viterbiAssociationMap = {
 // gerunds tagged adjective/noun.  Stops at the first token with an empty list.
 void appendAssociatedFormsToViterbiTags(cSource& source)
 {
-	unordered_map<wstring, vector <wstring> > originalViterbiAssociationMap = viterbiAssociationMap;
+	unordered_map<lpwstring, vector <lpwstring> > originalViterbiAssociationMap = viterbiAssociationMap;
 	for (auto const& [form, vectorforms] : originalViterbiAssociationMap)
-		for (wstring f : vectorforms)
+		for (lpwstring f : vectorforms)
 			viterbiAssociationMap[f].push_back(form);
 
 	int wordIndex = 0;
 	for (cWordMatch& im : source.m)
 	{
 		if (wordIndex % 5000 == 0)
-			printf("Appending associated forms: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordIndex / source.m.size()), wordIndex);
+			printf("Appending associated forms: %03I64d%%:%09d\r", (int64_t)(((int64_t)100) * wordIndex / source.m.size()), wordIndex);
 		if (im.preferredViterbiForms.empty())
 			break;
 		im.originalPreferredViterbiForm = im.preferredViterbiForms[0];
@@ -888,11 +917,11 @@ void appendAssociatedFormsToViterbiTags(cSource& source)
 		if (im.formsSize() > 1)
 			for (int vf : im.preferredViterbiForms)
 			{
-				wstring formName = Forms[im.getFormNum(vf)]->name;
+				lpwstring formName = Forms[im.getFormNum(vf)]->name;
 				// if the form is the word itself, then actually match all forms.
 				if (formName == im.word->first)
 				{
-					//lplog(LOG_ERROR, L"%d:viterbi extended %s to all forms (word match)", wordIndex, formName.c_str());
+					//lplog(LOG_ERROR, u"%d:viterbi extended %s to all forms (word match)", wordIndex, formName.c_str());
 					viterbiFormMatchedWord = true;
 					im.preferredViterbiForms.clear();
 					for (unsigned int f = 0; f < im.formsSize(); f++)
@@ -904,17 +933,17 @@ void appendAssociatedFormsToViterbiTags(cSource& source)
 		{
 			for (int vf : im.preferredViterbiForms)
 			{
-				wstring formName = Forms[im.getFormNum(vf)]->name;
-				unordered_map<wstring, vector <wstring>>::iterator mi = viterbiAssociationMap.find(formName);
+				lpwstring formName = Forms[im.getFormNum(vf)]->name;
+				unordered_map<lpwstring, vector <lpwstring>>::iterator mi = viterbiAssociationMap.find(formName);
 				if (mi != viterbiAssociationMap.end())
 				{
-					for (wstring associatedForm : mi->second)
+					for (lpwstring associatedForm : mi->second)
 					{
 						int formOffset = im.queryForm(cForms::findForm(associatedForm));
 						if (formOffset >= 0)
 						{
 							im.preferredViterbiForms.push_back(formOffset);
-							//lplog(LOG_ERROR, L"%d:viterbi subClass/superClass extended %s->%s", wordIndex, formName.c_str(), associatedForm.c_str());
+							//lplog(LOG_ERROR, u"%d:viterbi subClass/superClass extended %s->%s", wordIndex, formName.c_str(), associatedForm.c_str());
 						}
 					}
 					break;
@@ -928,7 +957,7 @@ void appendAssociatedFormsToViterbiTags(cSource& source)
 				if (formOffset >= 0)
 				{
 					im.preferredViterbiForms.push_back(formOffset);
-					//lplog(LOG_ERROR, L"%d:viterbi extended to word match %s", wordIndex, im.word->first.c_str());
+					//lplog(LOG_ERROR, u"%d:viterbi extended to word match %s", wordIndex, im.word->first.c_str());
 				}
 			}
 		}
@@ -944,21 +973,21 @@ void appendAssociatedFormsToViterbiTags(cSource& source)
 }
 
 // Fill prevTag/tag and the raw transition/emission counts for logging a mismatch.
-void getInternalViterbiInfo(cSource& source, int viterbiOriginalTagIndex, int wordSourceIndex, wstring& prevTag, wstring& tag, int& tagTransitionCount, int& wordTagCount,
-	vector <wstring>& tags, //vector <wstring> &vocab,
+void getInternalViterbiInfo(cSource& source, int viterbiOriginalTagIndex, int wordSourceIndex, lpwstring& prevTag, lpwstring& tag, int& tagTransitionCount, int& wordTagCount,
+	vector <lpwstring>& tags, //vector <lpwstring> &vocab,
 	DIYDiskArray<int>& pathMatrix,
-	unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap)
+	unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagTransitionCountsMap)
 {
 	prevTag = tags[pathMatrix.get(viterbiOriginalTagIndex, wordSourceIndex)];
 	tag = tags[viterbiOriginalTagIndex];
 	// Compute smoothed transition probability
 	tagTransitionCount = 0;
-	unordered_map <wstring, int>::iterator ti = tagTransitionCountsMap.find(prevTag + L" " + tag);
+	unordered_map <lpwstring, int>::iterator ti = tagTransitionCountsMap.find(prevTag + u" " + tag);
 	if (ti != tagTransitionCountsMap.end())
 		tagTransitionCount = ti->second;
 	// Compute smoothed emission probability
 	wordTagCount = 0;
-	unordered_map <wstring, int>::iterator ei = wordTagCountsMap.find(tag + L" " + source.m[wordSourceIndex].word->first);
+	unordered_map <lpwstring, int>::iterator ei = wordTagCountsMap.find(tag + u" " + source.m[wordSourceIndex].word->first);
 	if (ei != wordTagCountsMap.end())
 		wordTagCount = ei->second;
 }
@@ -969,25 +998,25 @@ void getInternalViterbiInfo(cSource& source, int viterbiOriginalTagIndex, int wo
 // viterbiMismatchesNotWinner with no zero guard.
 void compareViterbiAgainstStructuredTagging(cSource& source,
 	vector<vector<double>>& tagTransitionProbabilityMatrix, vector<vector<double>>& wordTagProbabilityMatrix, DIYDiskArray<double>& probabilityMatrix, DIYDiskArray<int>& pathMatrix,
-	unordered_map <wstring, int>& wordSourceIndexLookup,
-	unordered_map <wstring, int>& tagLookup,
-	vector <wstring>& tags, //vector <wstring> &vocab,
-	unordered_map <wstring, int>& wordTagCountsMap, unordered_map <wstring, int>& tagTransitionCountsMap, unordered_map <wstring, int>& tagCountsMap,
+	unordered_map <lpwstring, int>& wordSourceIndexLookup,
+	unordered_map <lpwstring, int>& tagLookup,
+	vector <lpwstring>& tags, //vector <lpwstring> &vocab,
+	unordered_map <lpwstring, int>& wordTagCountsMap, unordered_map <lpwstring, int>& tagTransitionCountsMap, unordered_map <lpwstring, int>& tagCountsMap,
 	JNIEnv* env, bool pcfg)
 {
-	wstring winnerFormsString;
+	lpwstring winnerFormsString;
 	int viterbiMismatchesSetToSeparator = 0, viterbiMismatchesNotSet = 0, viterbiMismatchesIllegal = 0, viterbiMismatchesNotWinner = 0, wordSourceIndex = 0;
 	int totalNumWinnerForms = 0, totalNumForms = 0, totalViterbiSpecifiedForms = 0, totalViterbiPathViolatedForms = 0;
 	double averageViterbiProbability = 0;
-	unordered_map<wstring, int> winnerViolationFormCountMap, winnerViolationWordCountMap;
+	unordered_map<lpwstring, int> winnerViolationFormCountMap, winnerViolationWordCountMap;
 	int pathViolations = 0;
 	int stanfordNotIdentifiedNum = 0, stanfordIsLPWinnerNum = 0, stanfordIsViterbiWinnerNum = 0;
-	if (!myquery(&source.mysql, L"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out parseSentence (actually in foundParseSentence and setParsedSentence) for performance
+	if (!myquery(&source.mysql, u"LOCK TABLES stanfordPCFGParsedSentences WRITE")) // moved out parseSentence (actually in foundParseSentence and setParsedSentence) for performance
 		return;
 	for (vector <cWordMatch>::iterator im = source.m.begin(), imEnd = source.m.end(); im != imEnd; im++, wordSourceIndex++)
 	{
 		if (wordSourceIndex % 5000 == 0)
-			printf("Comparing viterbi against structured tagging: %03I64d%%:%09d\r", (__int64)(((__int64)100) * wordSourceIndex / source.m.size()), wordSourceIndex);
+			printf("Comparing viterbi against structured tagging: %03I64d%%:%09d\r", (int64_t)(((int64_t)100) * wordSourceIndex / source.m.size()), wordSourceIndex);
 		averageViterbiProbability += im->preferredViterbiProbability;
 		totalNumWinnerForms += im->getNumWinners();
 		totalNumForms += im->formsSize();
@@ -996,13 +1025,13 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 		{
 			if (im->forms.isSet(quoteForm) || im->isTopLevel())
 				continue;
-			lplog(LOG_ERROR, L"%d:preferredViterbiForm on word %s is set to separator", wordSourceIndex, im->word->first.c_str());
+			lplog(LOG_ERROR, u"%d:preferredViterbiForm on word %s is set to separator", wordSourceIndex, im->word->first.c_str());
 			viterbiMismatchesSetToSeparator++;
 			continue;
 		}
 		if (im->preferredViterbiForms.empty())
 		{
-			lplog(LOG_ERROR, L"%d:preferredViterbiForm on word %s is not set", wordSourceIndex, im->word->first.c_str());
+			lplog(LOG_ERROR, u"%d:preferredViterbiForm on word %s is not set", wordSourceIndex, im->word->first.c_str());
 			viterbiMismatchesNotSet++;
 			continue;
 		}
@@ -1012,7 +1041,7 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 		{
 			if (preferredViterbiForm > (signed)im->formsSize())
 			{
-				lplog(LOG_ERROR, L"%d:preferredViterbiForm on word %s is set to an illegal form offset (%d out of %d possible)", wordSourceIndex, im->word->first.c_str(), preferredViterbiForm, im->formsSize());
+				lplog(LOG_ERROR, u"%d:preferredViterbiForm on word %s is set to an illegal form offset (%d out of %d possible)", wordSourceIndex, im->word->first.c_str(), preferredViterbiForm, im->formsSize());
 				viterbiMismatchesIllegal++;
 				continue;
 			}
@@ -1031,7 +1060,7 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 		if (!winnerFound)
 		{
 			vector <double> best_probs, bestProbabilitiesAtWordOnly;
-			vector <wstring> currentTagOfHighestProbabilities;
+			vector <lpwstring> currentTagOfHighestProbabilities;
 			// get top 3 tags - this rescans all tags and gives them in best order.
 			// the path in pathMatrix sometimes bypasses the highest probability tag for a particular spot, because the transition to the NEXT tag is not optimal (pathMatrix is the entire optimized path)
 			for (auto const& [tag, tagIndex] : tagLookup)
@@ -1039,7 +1068,7 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 				// pm=probability of path up to this point
 				// ttpm=what is the probability that each tag transitions into this one?
 				// wtpm=what is the probability that the word has this tag?
-				// pathMatrixColumn += L" " + std::to_wstring(pathMatrix[prevTagIndex][viterbiOriginalTagIndex]);
+				// pathMatrixColumn += u" " + std::to_wstring(pathMatrix[prevTagIndex][viterbiOriginalTagIndex]);
 				//double ttpm = tagTransitionProbabilityMatrix[prevTagIndex][tagIndex];
 				//double wtpm = wordTagProbabilityMatrix[tagIndex][wordVocabIndex];
 				double prob = probabilityMatrix.get(tagIndex, wordSourceIndex);
@@ -1056,40 +1085,40 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 			}
 			if (best_probs[0] != probabilityMatrix.get(viterbiOriginalTagIndex, wordSourceIndex))
 			{
-				lplog(LOG_ERROR, L"%d:path free is best=%f(%s) != %f(%s) (winner=%s)", wordSourceIndex, best_probs[0], currentTagOfHighestProbabilities[0].c_str(),
+				lplog(LOG_ERROR, u"%d:path free is best=%f(%s) != %f(%s) (winner=%s)", wordSourceIndex, best_probs[0], currentTagOfHighestProbabilities[0].c_str(),
 					probabilityMatrix.get(viterbiOriginalTagIndex, wordSourceIndex), im->word->second.Form(im->originalPreferredViterbiForm)->name.c_str(),
 					im->winnerFormString(winnerFormsString).c_str());
-				lplog(LOG_ERROR, L"%d:forward/backward %f previous=%s current=%s", wordSourceIndex, im->preferredViterbiMaximumProbability, Forms[im->preferredViterbiPreviousTagOfHighestProbability]->name.c_str(), Forms[im->preferredViterbiCurrentTagOfHighestProbability]->name.c_str());
+				lplog(LOG_ERROR, u"%d:forward/backward %f previous=%s current=%s", wordSourceIndex, im->preferredViterbiMaximumProbability, Forms[im->preferredViterbiPreviousTagOfHighestProbability]->name.c_str(), Forms[im->preferredViterbiCurrentTagOfHighestProbability]->name.c_str());
 			}
 			//else
 			if (!winnerFound)
 			{
 				int duplicateSkip = 0;
-				wstring contextSentence = getContext(source, wordSourceIndex, false, duplicateSkip), parse;
+				lpwstring contextSentence = getContext(source, wordSourceIndex, false, duplicateSkip), parse;
 				if (parseSentence(source, env, contextSentence, parse, pcfg, false) < 0)
-					lplog(LOG_FATAL_ERROR, L"Parse failed.");
-				vector <wstring> posList;
-				wstring out, originalWord = source.getOriginalWord(wordSourceIndex, out, false, false);
+					lplog(LOG_FATAL_ERROR, u"Parse failed.");
+				vector <lpwstring> posList;
+				lpwstring out, originalWord = source.getOriginalWord(wordSourceIndex, out, false, false);
 				findLPPOSEquivalents(contextSentence, parse, originalWord, posList, duplicateSkip, pcfg);
 				contextSentence = getContext(source, wordSourceIndex, true, duplicateSkip);
 				bool stanfordNotIdentified = posList.empty(), stanfordIsLPWinner = false, stanfordIsViterbiWinner = false;
-				wstring viterbiForms;
+				lpwstring viterbiForms;
 				for (int preferredViterbiForm : im->preferredViterbiForms)
 				{
 					if (std::find(posList.begin(), posList.end(), im->word->second.Form(preferredViterbiForm)->name) != posList.end())
 						stanfordIsViterbiWinner = true;
-					viterbiForms += im->word->second.Form(preferredViterbiForm)->name + L" ";
+					viterbiForms += im->word->second.Form(preferredViterbiForm)->name + u" ";
 				}
-				lplog(LOG_ERROR, L"%d:context %s [%s]", wordSourceIndex, contextSentence.c_str(), parse.c_str());
+				lplog(LOG_ERROR, u"%d:context %s [%s]", wordSourceIndex, contextSentence.c_str(), parse.c_str());
 				winnerViolationFormCountMap[im->winnerFormString(winnerFormsString, false)]++;
 				winnerViolationWordCountMap[im->word->first]++;
-				wstring prevTag, tag;
+				lpwstring prevTag, tag;
 				int tagTransitionCount, wordTagCount;
-				wstring winnerWordTagProbability;
+				lpwstring winnerWordTagProbability;
 				vector <int> winnerForms;
 				im->getWinnerForms(winnerForms);
 				if (winnerForms.size() > 0)
-					winnerWordTagProbability = L"(";
+					winnerWordTagProbability = u"(";
 				for (int wf : winnerForms)
 				{
 					if (std::find(posList.begin(), posList.end(), Forms[wf]->name) != posList.end())
@@ -1099,24 +1128,24 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 					{
 						int path = pathMatrix.get(tli->second, wordSourceIndex);
 						double winnerProb = probabilityMatrix.get(tli->second, wordSourceIndex) / ((wordSourceIndex > 0 && path >= 0) ? probabilityMatrix.get(path, wordSourceIndex - 1) : 1);
-						wstring wtp;
-						wchar_t ctmp[32];
-						swprintf(ctmp, 32, L"%f", winnerProb);
+						lpwstring wtp;
+						lpchar_t ctmp[32];
+						lp_snprintf(ctmp, 32, u"%f", winnerProb);
 						wtp = ctmp;
 						if (winnerForms.size() > 1)
-							winnerWordTagProbability += L"[" + Forms[wf]->name + L"=" + wtp + L"]";
+							winnerWordTagProbability += u"[" + Forms[wf]->name + u"=" + wtp + u"]";
 						else
 							winnerWordTagProbability += wtp;
 					}
 				}
 				if (winnerForms.size() > 0)
-					winnerWordTagProbability += L")";
+					winnerWordTagProbability += u")";
 				getInternalViterbiInfo(source, viterbiOriginalTagIndex, wordSourceIndex, prevTag, tag, tagTransitionCount, wordTagCount, tags, pathMatrix, wordTagCountsMap, tagTransitionCountsMap);
-				lplog(LOG_ERROR, L"stanfordNotIdentified = %s stanfordIsLPWinner=%s stanfordIsViterbiWinner=%s", (stanfordNotIdentified) ? L"true" : L"false", (stanfordIsLPWinner) ? L"true" : L"false", (stanfordIsViterbiWinner) ? L"true" : L"false");
+				lplog(LOG_ERROR, u"stanfordNotIdentified = %s stanfordIsLPWinner=%s stanfordIsViterbiWinner=%s", (stanfordNotIdentified) ? u"true" : u"false", (stanfordIsLPWinner) ? u"true" : u"false", (stanfordIsViterbiWinner) ? u"true" : u"false");
 				if (stanfordNotIdentified) stanfordNotIdentifiedNum++;
 				if (stanfordIsLPWinner) stanfordIsLPWinnerNum++;
 				if (stanfordIsViterbiWinner) stanfordIsViterbiWinnerNum++;
-				lplog(LOG_ERROR, L"%d:preferredViterbiForms %s is/are not among the winner forms %s%s for word %s [%f tagTransition=%f (#previousTag[%s]=%d #transition=%d) wordTagProbability=%f (#tag[%s]=%d #wordTag=%d)]",
+				lplog(LOG_ERROR, u"%d:preferredViterbiForms %s is/are not among the winner forms %s%s for word %s [%f tagTransition=%f (#previousTag[%s]=%d #transition=%d) wordTagProbability=%f (#tag[%s]=%d #wordTag=%d)]",
 					wordSourceIndex, viterbiForms.c_str(), // %d:preferredViterbiForms %s 
 					im->winnerFormString(winnerFormsString).c_str(), winnerWordTagProbability.c_str(), im->word->first.c_str(), // is/are not among the winner forms %s%s for word %s 
 					im->preferredViterbiProbability,
@@ -1134,12 +1163,12 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 			{
 				for (int p = 0; p < 5 && p < ((int)best_probs.size()); p++)
 				{
-					wstring prevTag, tag;
+					lpwstring prevTag, tag;
 					int tagTransitionCount, wordTagCount;
 					int currentTagIndex = tagLookup[currentTagOfHighestProbabilities[p]];
 					getInternalViterbiInfo(source, currentTagIndex, wordSourceIndex, prevTag, tag, tagTransitionCount, wordTagCount,
 						tags, pathMatrix, wordTagCountsMap, tagTransitionCountsMap);
-					lplog(LOG_ERROR, L"%d:preferredViterbiTags %d: %s [%f tagTransition=%f (#previousTag[%s]=%d #transition=%d) wordTagProbability=%f (#tag[%s]=%d #wordTag=%d)]",
+					lplog(LOG_ERROR, u"%d:preferredViterbiTags %d: %s [%f tagTransition=%f (#previousTag[%s]=%d #transition=%d) wordTagProbability=%f (#tag[%s]=%d #wordTag=%d)]",
 						wordSourceIndex, p, currentTagOfHighestProbabilities[p].c_str(), bestProbabilitiesAtWordOnly[p],
 						tagTransitionProbabilityMatrix[pathMatrix.get(currentTagIndex, wordSourceIndex)][currentTagIndex],
 						//(tagTransitionCount + alpha) / (tagCountsMap[prevTag] + alpha * tags.size()),  // check
@@ -1151,40 +1180,40 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 			}
 		}
 		//else
-		//	lplog(LOG_ERROR, L"%d:preferredViterbiForms %s is/are among the winner forms %s for word %s [%f]",
+		//	lplog(LOG_ERROR, u"%d:preferredViterbiForms %s is/are among the winner forms %s for word %s [%f]",
 		//		wordSourceIndex, viterbiForms.c_str(), im->winnerFormString(winnerForms).c_str(), im->word->first.c_str(), im->preferredViterbiProbability);
 	}
 	unlockTables(source.mysql);
-	map<int, wstring, std::greater<int>> orderedFormCountMap;
+	map<int, lpwstring, std::greater<int>> orderedFormCountMap;
 	for (auto const& [winnerForm, count] : winnerViolationFormCountMap)
 		orderedFormCountMap[count] = winnerForm;
 	for (auto const& [count, winnerForm] : orderedFormCountMap)
-		lplog(LOG_ERROR, L"wrong viterbi matched winnerForms %s %d (%d%%)", winnerForm.c_str(), count, count * 100 / viterbiMismatchesNotWinner);
+		lplog(LOG_ERROR, u"wrong viterbi matched winnerForms %s %d (%d%%)", winnerForm.c_str(), count, count * 100 / viterbiMismatchesNotWinner);
 
-	map<int, wstring, std::greater<int>> orderedWordCountMap;
+	map<int, lpwstring, std::greater<int>> orderedWordCountMap;
 	for (auto const& [winnerWord, count] : winnerViolationWordCountMap)
 		orderedWordCountMap[count] = winnerWord;
 	for (auto const& [count, winnerWord] : orderedWordCountMap)
-		lplog(LOG_ERROR, L"wrong viterbi matched winnerWord %s %d (%d%%)", winnerWord.c_str(), count, count * 100 / viterbiMismatchesNotWinner);
+		lplog(LOG_ERROR, u"wrong viterbi matched winnerWord %s %d (%d%%)", winnerWord.c_str(), count, count * 100 / viterbiMismatchesNotWinner);
 
 	int viterbiMismatches = viterbiMismatchesSetToSeparator + viterbiMismatchesNotSet + viterbiMismatchesIllegal + viterbiMismatchesNotWinner;
 	if (viterbiMismatches > 0)
 	{
 		if (viterbiMismatchesSetToSeparator > 0)
-			lplog(LOG_ERROR, L"preferredViterbiForm is set to separator %d times (%d%%)", viterbiMismatchesSetToSeparator, viterbiMismatchesSetToSeparator * 100 / source.m.size());
+			lplog(LOG_ERROR, u"preferredViterbiForm is set to separator %d times (%d%%)", viterbiMismatchesSetToSeparator, viterbiMismatchesSetToSeparator * 100 / source.m.size());
 		if (viterbiMismatchesNotSet > 0)
-			lplog(LOG_ERROR, L"preferredViterbiForm is not set %d times (%d%%)", viterbiMismatchesNotSet, viterbiMismatchesNotSet * 100 / source.m.size());
+			lplog(LOG_ERROR, u"preferredViterbiForm is not set %d times (%d%%)", viterbiMismatchesNotSet, viterbiMismatchesNotSet * 100 / source.m.size());
 		if (viterbiMismatchesIllegal > 0)
-			lplog(LOG_ERROR, L"preferredViterbiForm is set to an illegal form offset %d times (%d%%)", viterbiMismatchesIllegal, viterbiMismatchesIllegal * 100 / source.m.size());
+			lplog(LOG_ERROR, u"preferredViterbiForm is set to an illegal form offset %d times (%d%%)", viterbiMismatchesIllegal, viterbiMismatchesIllegal * 100 / source.m.size());
 		if (viterbiMismatchesNotWinner > 0)
-			lplog(LOG_ERROR, L"preferredViterbiForm is not among the winner forms %d times (%2.3f%%)", viterbiMismatchesNotWinner, ((double)viterbiMismatchesNotWinner * 100) / source.m.size());
+			lplog(LOG_ERROR, u"preferredViterbiForm is not among the winner forms %d times (%2.3f%%)", viterbiMismatchesNotWinner, ((double)viterbiMismatchesNotWinner * 100) / source.m.size());
 		if (viterbiMismatchesSetToSeparator > 0 || viterbiMismatchesNotSet > 0 || viterbiMismatchesIllegal > 0)
-			lplog(LOG_ERROR, L"preferredViterbiForm error %d times (%2.3f%%)", viterbiMismatches, ((double)viterbiMismatches * 100) / source.m.size());
+			lplog(LOG_ERROR, u"preferredViterbiForm error %d times (%2.3f%%)", viterbiMismatches, ((double)viterbiMismatches * 100) / source.m.size());
 		if (pathViolations > 0)
-			lplog(LOG_ERROR, L"preferredViterbi pathViolations=%d addedForms=%d (%d%%)", pathViolations, totalViterbiPathViolatedForms, 100 * pathViolations / source.m.size());
-		lplog(LOG_ERROR, L"preferredViterbi form %% of total winners: %f%% of total forms %f%%", 100.0 * totalViterbiSpecifiedForms / totalNumWinnerForms, 100.0 * (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms) / totalNumForms);
-		lplog(LOG_ERROR, L"preferredViterbi forms (%d) per word=%f -> viterbiForms (%d) per word=%f", totalNumForms, totalNumForms * 1.0 / source.m.size(), (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms), (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms) * 1.0 / source.m.size());
-		lplog(LOG_ERROR, L"stanfordNotIdentifiedNum=%d(%d%%) stanfordIsLPWinnerNum=%d(%d%%) stanfordIsViterbiWinnerNum=%d(%d%%)",
+			lplog(LOG_ERROR, u"preferredViterbi pathViolations=%d addedForms=%d (%d%%)", pathViolations, totalViterbiPathViolatedForms, 100 * pathViolations / source.m.size());
+		lplog(LOG_ERROR, u"preferredViterbi form %% of total winners: %f%% of total forms %f%%", 100.0 * totalViterbiSpecifiedForms / totalNumWinnerForms, 100.0 * (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms) / totalNumForms);
+		lplog(LOG_ERROR, u"preferredViterbi forms (%d) per word=%f -> viterbiForms (%d) per word=%f", totalNumForms, totalNumForms * 1.0 / source.m.size(), (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms), (totalViterbiSpecifiedForms + totalViterbiPathViolatedForms) * 1.0 / source.m.size());
+		lplog(LOG_ERROR, u"stanfordNotIdentifiedNum=%d(%d%%) stanfordIsLPWinnerNum=%d(%d%%) stanfordIsViterbiWinnerNum=%d(%d%%)",
 			stanfordNotIdentifiedNum, (stanfordNotIdentifiedNum * 100) / viterbiMismatchesNotWinner,
 			stanfordIsLPWinnerNum, (stanfordIsLPWinnerNum * 100) / viterbiMismatchesNotWinner,
 			stanfordIsViterbiWinnerNum, (stanfordIsViterbiWinnerNum * 100) / viterbiMismatchesNotWinner);
@@ -1195,33 +1224,33 @@ void compareViterbiAgainstStructuredTagging(cSource& source,
 // wordCountLimit - use words that occur across the corpus no less than this number
 // Load model, build matrices, run Viterbi.  wordCountLimit is the vocab min count.
 // Huge sources spill probability/path matrices to M:\caches.
-void tagFromSource(cSource& source, vector <wstring>& model, int wordCountLimit, JNIEnv* env, bool compare)
+void tagFromSource(cSource& source, vector <lpwstring>& model, int wordCountLimit, JNIEnv* env, bool compare)
 {
 	if (source.m.empty())
 	{
-		lplog(LOG_ERROR, L"tagFromSource: empty source, nothing to tag.");
+		lplog(LOG_ERROR, u"tagFromSource: empty source, nothing to tag.");
 		return;
 	}
-	unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
+	unordered_map <lpwstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
 	loadModel(model, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
 	printf("constructing transition and emission matrices                                              \r");
-	vector <wstring> tags;
+	vector <lpwstring> tags;
 	for (auto const& ic : tagCountsMap)
 		tags.push_back(ic.first);
 	// Transition matrix: the probability of state x+1 given state x (bigram case).  state=tag
 	vector<vector<double>> tagTransitionProbabilityMatrix = constructTagTransitionProbabilityMatrix(tagTransitionCountsMap, tagCountsMap, tags);
 	// Emission matrix: the probability that a word is tagged as a certain tag
-	vector <wstring> vocab = generateVocabFromSource(source, wordCountLimit);
+	vector <lpwstring> vocab = generateVocabFromSource(source, wordCountLimit);
 	vector<vector<double>> wordTagProbabilityMatrix = constructWordTagProbabilityMatrix(wordTagCountsMap, tagCountsMap, tags, vocab);
-	DIYDiskArray<double> probabilityMatrix((source.m.size() > 12000000) ? L"M:\\caches\\ViterbiProbabilityMatrixArray.tmp" : NULL);
-	DIYDiskArray<int> pathMatrix((source.m.size() > 25000000) ? L"M:\\caches\\ViterbiPathMatrixArray.tmp" : NULL);
+	DIYDiskArray<double> probabilityMatrix((source.m.size() > 12000000) ? u"M:\\caches\\ViterbiProbabilityMatrixArray.tmp" : NULL);
+	DIYDiskArray<int> pathMatrix((source.m.size() > 25000000) ? u"M:\\caches\\ViterbiPathMatrixArray.tmp" : NULL);
 	// Decode
-	unordered_map <wstring, int> vocabReverseLookup;
+	unordered_map <lpwstring, int> vocabReverseLookup;
 	// Initialize start probabilities
 	initViterbiStartProbabilities(source.m.size(), source.m[0].word->first, vocab, tags, tagTransitionProbabilityMatrix, wordTagProbabilityMatrix, probabilityMatrix, pathMatrix, vocabReverseLookup);
-	unordered_map <wstring, int> tagLookup;
+	unordered_map <lpwstring, int> tagLookup;
 	int tagNum = 0;
-	for (wstring tag : tags)
+	for (lpwstring tag : tags)
 		tagLookup[tag] = tagNum++;
 	forwardFromSource(source, tagTransitionProbabilityMatrix, wordTagProbabilityMatrix, probabilityMatrix, pathMatrix, tags, vocabReverseLookup, tagLookup);
 	if (!backwardFromSource(source, tags, tagLookup, probabilityMatrix, pathMatrix))
@@ -1240,13 +1269,13 @@ void tagFromSource(cSource& source, vector <wstring>& model, int wordCountLimit,
 }
 
 // Load sourcePath+".model.txt" if present, else train and write it.
-void createModelFromSource(cSource& source, vector <wstring>& model)
+void createModelFromSource(cSource& source, vector <lpwstring>& model)
 {
-	wstring modelPath = source.sourcePath + L".model.txt";
-	if (_waccess(modelPath.c_str(), 0) != 0)
+	lpwstring modelPath = source.sourcePath + u".model.txt";
+	if (lp_waccess(modelPath.c_str(), 0) != 0)
 	{
 		printf("creating model                                                \r");
-		unordered_map <wstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
+		unordered_map <lpwstring, int> wordTagCountsMap, tagTransitionCountsMap, tagCountsMap;
 		trainModelFromSource(source, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
 		model = writeModelFile(modelPath, wordTagCountsMap, tagTransitionCountsMap, tagCountsMap);
 	}
@@ -1260,7 +1289,7 @@ void createModelFromSource(cSource& source, vector <wstring>& model)
 // End-to-end: create/load model, JNI VM, tagFromSource(..., compare=true), destroy VM.
 void testViterbiFromSource(cSource& source)
 {
-	vector <wstring> model;
+	vector <lpwstring> model;
 	createModelFromSource(source, model);
 	JavaVM* vm;
 	JNIEnv* env;

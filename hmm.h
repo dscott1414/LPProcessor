@@ -17,23 +17,28 @@
 		  hmm.cpp ever instantiated); the declarations below now match hmm.cpp.
 		- createJavaVM hard-codes F:\lp\Stanford\... in hmm.cpp.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #include "DIYDiskArray.h"
-void tagFromSource(cSource &source, vector <wstring> &model, int wordCountLimit, JNIEnv *env, bool compare);
-void createModelFromSource(cSource &source, vector <wstring> &model);
-vector <wstring> writeModelFile(wstring modelPath, unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap);
-vector <wstring> readModelFile(wstring modelPath);
-void trainModelFromSource(cSource &source, unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap);
-void initViterbiStartProbabilities(int numWords, wstring firstWord, vector<wstring> &vocab, vector <wstring> &tags,
+void tagFromSource(cSource &source, vector <lpwstring> &model, int wordCountLimit, JNIEnv *env, bool compare);
+void createModelFromSource(cSource &source, vector <lpwstring> &model);
+vector <lpwstring> writeModelFile(lpwstring modelPath, unordered_map <lpwstring, int> &wordTagCountsMap, unordered_map <lpwstring, int> &tagTransitionCountsMap, unordered_map <lpwstring, int> &tagCountsMap);
+vector <lpwstring> readModelFile(lpwstring modelPath);
+void trainModelFromSource(cSource &source, unordered_map <lpwstring, int> &wordTagCountsMap, unordered_map <lpwstring, int> &tagTransitionCountsMap, unordered_map <lpwstring, int> &tagCountsMap);
+void initViterbiStartProbabilities(int numWords, lpwstring firstWord, vector<lpwstring> &vocab, vector <lpwstring> &tags,
 	vector<vector<double>> &tagTransitionProbabilityMatrix, vector<vector<double>> &wordTagProbabilityMatrix,
-	DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix, unordered_map <wstring, int> &vocabReverseLookup);
-void loadModel(vector <wstring> &model, unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap);
-vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <wstring, int> &tagTransitionCountsMap, unordered_map <wstring, int> &tagCountsMap, vector <wstring> &tags);
-vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <wstring, int> &wordTagCountsMap, unordered_map <wstring, int> &tagCountsMap, vector <wstring> &tags, vector<wstring> &vocab);
+	DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix, unordered_map <lpwstring, int> &vocabReverseLookup);
+void loadModel(vector <lpwstring> &model, unordered_map <lpwstring, int> &wordTagCountsMap, unordered_map <lpwstring, int> &tagTransitionCountsMap, unordered_map <lpwstring, int> &tagCountsMap);
+vector<vector<double>> constructTagTransitionProbabilityMatrix(unordered_map <lpwstring, int> &tagTransitionCountsMap, unordered_map <lpwstring, int> &tagCountsMap, vector <lpwstring> &tags);
+vector<vector<double>> constructWordTagProbabilityMatrix(unordered_map <lpwstring, int> &wordTagCountsMap, unordered_map <lpwstring, int> &tagCountsMap, vector <lpwstring> &tags, vector<lpwstring> &vocab);
 void forwardFromSource(cSource &source, vector<vector<double>> &tagTransitionProbabilityMatrix, vector<vector<double>> &wordTagProbabilityMatrix,
 	DIYDiskArray<double> &probabilityMatrix, DIYDiskArray<int> &pathMatrix,
-	vector <wstring> &tags, unordered_map <wstring, int> &wordSourceIndexLookup, unordered_map <wstring, int> &tagLookup);
+	vector <lpwstring> &tags, unordered_map <lpwstring, int> &wordSourceIndexLookup, unordered_map <lpwstring, int> &tagLookup);
 void testViterbiFromSource(cSource &source);
 int createJavaVM(JavaVM *&vm, JNIEnv *&env);
-int parseSentence(cSource &source,JNIEnv *env, wstring sentence, wstring &parse, bool pcfg,bool lockTable);
-int findLPPOSEquivalents(wstring sentence, wstring &parse, wstring originalWord, vector<wstring> &posList, int duplicateSkip, bool pcfg);
+int parseSentence(cSource &source,JNIEnv *env, lpwstring sentence, lpwstring &parse, bool pcfg,bool lockTable);
+int findLPPOSEquivalents(lpwstring sentence, lpwstring &parse, lpwstring originalWord, vector<lpwstring> &posList, int duplicateSkip, bool pcfg);
 void destroyJavaVM(JavaVM *vm);

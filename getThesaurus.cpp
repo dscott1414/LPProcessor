@@ -27,32 +27,32 @@
 		getSynonymsFromDB escapes the word (escaped(), source.h) before concatenating into SQL.
 		splitPrimarySynonyms guards totalRows==0 before the percentage divide, then logs and
 		exit(0)s by design (one-shot diagnostic). testThesaurus/processIntoTokens/stripTags/
-		resolveTables all validate fd before calling _filelength/malloc'ing (three of the four
-		declared fl as size_t, so a failed open's _filelength()==-1 would previously wrap to a
+		resolveTables all validate fd before calling lp_filelength/malloc'ing (three of the four
+		declared fl as size_t, so a failed open's lp_filelength()==-1 would previously wrap to a
 		huge unsigned length) and free() their malloc'd scratch buffer on every path. Many
 		helpers assume a global token buffer set by processIntoTokens.
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include <winsock.h>
-#include "Winhttp.h"
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
 #include "profile.h"
-#include <share.h>
-#include <tchar.h>
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4996)
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
@@ -65,41 +65,41 @@
 using namespace std;
 #include "mysql.h"
 #include "wn.h"
-bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
-void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& d);
+bool myquery(MYSQL* mysql, const lpchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
+void scrapeNewThesaurus(lpwstring word, int synonymType, vector <sDefinition>& d);
 
 // SELECT primary/accumulated synonyms for mainEntry=word (wordType bitmask). word is escaped
 // (escaped(), source.h) before being concatenated into SQL. Also builds alternatives from the
 // last token of primarySynonyms plus the first accumulated synonym. Does not LOCK.
-void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring> >& synonyms, vector <wstring >& alternatives, int synonymType)
+void getSynonymsFromDB(MYSQL mysql, lpwstring word, vector <unordered_set <lpwstring> >& synonyms, vector <lpwstring >& alternatives, int synonymType)
 {
-	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += escaped(word) + L"'";
+	lpwstring query = u"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
+	query += escaped(word) + u"'";
 	// thesaurus mappings
 	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
 	if (synonymType == 1) // NOUN
-		query += L" and (wordType&128)=128";
+		query += u" and (wordType&128)=128";
 	else if (synonymType == 2) // VERB
-		query += L" and (wordType&256)=256";
+		query += u" and (wordType&256)=256";
 	else if (synonymType == 3) // ADJ
-		query += L" and (wordType&1)=1";
+		query += u" and (wordType&1)=1";
 	else if (synonymType == 4) // ADV
-		query += L" and (wordType&2)=2";
+		query += u" and (wordType&2)=2";
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (wchar_t*)query.c_str(), result))
+	if (myquery(&mysql, (lpchar_t*)query.c_str(), result))
 	{
 		while ((sqlrow = mysql_fetch_row(result)) != NULL)
 		{
-			unordered_set <wstring> ss;
+			unordered_set <lpwstring> ss;
 			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
 			string properties = (sqlrow[1] == NULL) ? "" : sqlrow[1];
-			wstring firstWordSynonym;
+			lpwstring firstWordSynonym;
 			int lastBegin = 0;
 			for (unsigned int s = 0; s < properties.size(); s++)
 				if (properties[s] == ';')
 				{
-					wstring wtmp;
+					lpwstring wtmp;
 					mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
 					if (wtmp.length() > 0 && wtmp[wtmp.length() - 1] == '*')
 						wtmp.erase(wtmp.length() - 1);
@@ -119,9 +119,9 @@ void getSynonymsFromDB(MYSQL mysql, wstring word, vector <unordered_set <wstring
 			}
 			else
 				primarySynonyms.clear();
-			wstring pslast;
+			lpwstring pslast;
 			mTW(primarySynonyms, pslast);
-			wstring alternative = pslast + L" " + firstWordSynonym;
+			lpwstring alternative = pslast + u" " + firstWordSynonym;
 			alternatives.push_back(alternative);
 		}
 		mysql_free_result(result);
@@ -147,10 +147,10 @@ string vectorString(vector <string>& vstr, string& tmpstr, string separator);
 // then exit(0). Does not UPDATE the table. Division-by-zero if the SELECT returns no rows.
 void splitPrimarySynonyms(MYSQL mysql)
 {
-	wstring query = L"select primarySynonyms from thesaurus where primarySynonyms like '% or %'";
+	lpwstring query = u"select primarySynonyms from thesaurus where primarySynonyms like '% or %'";
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (wchar_t*)query.c_str(), result))
+	if (myquery(&mysql, (lpchar_t*)query.c_str(), result))
 	{
 		int totalRows = 0;
 		int rowsNotProcessed = 0;
@@ -186,51 +186,51 @@ void splitPrimarySynonyms(MYSQL mysql)
 			if (caseMet)
 			{
 				string tmpstr;
-				lplog(LOG_WHERE, L"%S:%S", primarySynonyms.c_str(), vectorString(syns, tmpstr, " | ").c_str());
+				lplog(LOG_WHERE, u"%S:%S", primarySynonyms.c_str(), vectorString(syns, tmpstr, " | ").c_str());
 			}
 			else
 				rowsNotProcessed++;
 		}
 		if (totalRows > 0)
-			lplog(LOG_WHERE, L"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed) * 100 / totalRows);
+			lplog(LOG_WHERE, u"%d out of %d processed (%d%%).", totalRows - rowsNotProcessed, totalRows, (totalRows - rowsNotProcessed) * 100 / totalRows);
 		else
-			lplog(LOG_WHERE, L"0 rows matched '%% or %%'.");
+			lplog(LOG_WHERE, u"0 rows matched '%% or %%'.");
 	}
 	logCache = 0;
-	lplog(LOG_WHERE, L"STOP");
+	lplog(LOG_WHERE, u"STOP");
 	exit(0);
 }
 
 // Parses an already-fetched old-thesaurus HTML buffer for the Synonyms: comma list.
-void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& synonyms)
+void scrapeOldThesaurus(lpwstring word, lpwstring buffer, unordered_set <lpwstring>& synonyms)
 {
-	wstring match;
+	lpwstring match;
 	int lastNewLine = 1000;
-	size_t beginPos = buffer.find(L"Main Entry:", 0);
-	if (beginPos == wstring::npos)
+	size_t beginPos = buffer.find(u"Main Entry:", 0);
+	if (beginPos == lpwstring::npos)
 		return;
-	beginPos += wcslen(L"Main Entry:");
+	beginPos += lp_strlen(u"Main Entry:");
 	size_t endPos = 1000000, tmpPos;
-	const wchar_t* endStr[] = { L"Main Entry:", L"Roget's 21st Century Thesaurus", L"Adjective Finder", L"Synonym Collection", L"Search another word", L"Antonyms:", L"* = informal/non-formal usage", NULL };
+	const lpchar_t* endStr[] = { u"Main Entry:", u"Roget's 21st Century Thesaurus", u"Adjective Finder", u"Synonym Collection", u"Search another word", u"Antonyms:", u"* = informal/non-formal usage", NULL };
 	for (int I = 0; endStr[I] != NULL; I++)
-		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos < endPos)
+		if ((tmpPos = buffer.find(endStr[I], beginPos)) != lpwstring::npos && tmpPos < endPos)
 			endPos = tmpPos;
-	if (endPos == wstring::npos)
+	if (endPos == lpwstring::npos)
 		return;
 	match = buffer.substr(beginPos, endPos - beginPos);
-	bool addressEncountered = false; // noMainEntryMatch = (match.find(word) == wstring::npos), 
-	size_t pos = match.find(L"Synonyms:");
-	if (pos != wstring::npos)
+	bool addressEncountered = false; // noMainEntryMatch = (match.find(word) == lpwstring::npos), 
+	size_t pos = match.find(u"Synonyms:");
+	if (pos != lpwstring::npos)
 	{
-		wstring s;
-		for (pos += wcslen(L"Synonyms:"); pos < (signed)match.length(); pos++)
-			if (iswalpha(match[pos]) || match[pos] == L'\'')
+		lpwstring s;
+		for (pos += lp_strlen(u"Synonyms:"); pos < (signed)match.length(); pos++)
+			if (iswalpha(match[pos]) || match[pos] == u'\'')
 				s += match[pos];
-			else if (match[pos] == L' ')
+			else if (match[pos] == u' ')
 			{
 				if (!s.empty()) s += match[pos];
 			}
-			else if (match[pos] == L',')
+			else if (match[pos] == u',')
 			{
 				while (s.length() > 0 && iswspace(s[s.length() - 1]))
 					s.erase(s.length() - 1);
@@ -241,14 +241,14 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& s
 				}
 				s.clear();
 			}
-			else if (match[pos - 1] != L',' && match[pos] == 13 && match[pos + 1] == 10 &&
+			else if (match[pos - 1] != u',' && match[pos] == 13 && match[pos + 1] == 10 &&
 				(iswupper(match[pos + 2]) || iswdigit(match[pos + 2]) || !iswalpha(match[pos + 2]))) // Ads start with unpredictable strings, but always capitalized, after a newline.
 			{
 				break;
 			}
 			else if (match[pos] == 13 && match[pos + 1] == 10)
 				lastNewLine = s.length();
-			else if (addressEncountered = match[pos] == L'.' && pos > 3 && match[pos - 1] == L'w' && match[pos - 2] == L'w' && match[pos - 3] == L'w')
+			else if (addressEncountered = match[pos] == u'.' && pos > 3 && match[pos - 1] == u'w' && match[pos - 2] == u'w' && match[pos - 3] == u'w')
 				break;
 		transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
 		if (s.length() > 0)
@@ -256,18 +256,18 @@ void scrapeOldThesaurus(wstring word, wstring buffer, unordered_set <wstring>& s
 			if ((s.length() >= 64 || addressEncountered) && lastNewLine < (signed)s.length())
 				s = s.substr(0, lastNewLine);
 			if (s.length() >= 64)
-				wprintf(L"\nSynonym of %s (%s) is too long.\n", word.c_str(), s.c_str());
+				lp_wprintf(u"\nSynonym of %s (%s) is too long.\n", word.c_str(), s.c_str());
 			else
 				synonyms.insert(s);
 		}
 	}
 	extern int logSynonymDetail;
 	//if (noMainEntryMatch && synonyms.find(word) == synonyms.end())
-	//	wprintf(L"%s itself not found in synonyms.\n", word.c_str());
+	//	lp_wprintf(u"%s itself not found in synonyms.\n", word.c_str());
 }
 
 // Maps a small set of Latin-1 accented letters onto ASCII; logs each unseen codepoint once.
-void convert(wchar_t& c)
+void convert(lpchar_t& c)
 {
 	if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
 		return;
@@ -282,7 +282,7 @@ void convert(wchar_t& c)
 	case 234: c = 'e'; break;
 	case 244: c = 'o'; break;
 	default:
-		static set <wchar_t> unknowns;
+		static set <lpchar_t> unknowns;
 		if (unknowns.find(c) == unknowns.end())
 		{
 			unknowns.insert(c);
@@ -292,37 +292,37 @@ void convert(wchar_t& c)
 }
 
 // Strips / * | and punctuation from me1, lowercases, then convert() each remaining char.
-wstring reduce(wstring me1)
+lpwstring reduce(lpwstring me1)
 {
 	size_t ws = 0;
-	ws = me1.find_first_of(L"/");
-	if (ws != wstring::npos)
+	ws = me1.find_first_of(u"/");
+	if (ws != lpwstring::npos)
 		me1.erase(me1.begin() + ws, me1.end());
-	ws = me1.find_first_of(L"*");
-	if (ws != wstring::npos)
+	ws = me1.find_first_of(u"*");
+	if (ws != lpwstring::npos)
 		me1.erase(me1.begin() + ws, me1.end());
-	ws = me1.find_first_of(L"|");
-	if (ws != wstring::npos)
+	ws = me1.find_first_of(u"|");
+	if (ws != lpwstring::npos)
 		me1.erase(me1.begin() + ws, me1.end());
-	while ((ws = me1.find_first_of(L"&.\r\n \'-)(")) != wstring::npos)
+	while ((ws = me1.find_first_of(u"&.\r\n \'-)(")) != lpwstring::npos)
 		me1.erase(me1.begin() + ws);
-	_wcslwr((wchar_t*)me1.c_str());
+	lp_towlower_str((lpchar_t*)me1.c_str());
 	for (int r = 0; r < me1.size(); r++)
 		convert(me1[r]);
 	return me1;
 }
 
 // True if every reduce()d member of s1 is in reduce()d s2 (s2 may be a superset).
-bool compareWordSets(unordered_set <wstring>& s1, unordered_set <string>& s2)
+bool compareWordSets(unordered_set <lpwstring>& s1, unordered_set <string>& s2)
 {
-	set <wstring> s11, s21;
+	set <lpwstring> s11, s21;
 	for (auto ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
 	{
 		s11.insert(reduce(*ss));
 	}
 	for (auto ss = s2.begin(), ssEnd = s2.end(); ss != ssEnd; ss++)
 	{
-		wstring t;
+		lpwstring t;
 		mTW(*ss, t);
 		s21.insert(reduce(t));
 	}
@@ -338,19 +338,19 @@ bool compareWordSets(unordered_set <wstring>& s1, unordered_set <string>& s2)
 // firstWordSynonymFromDB == "catch flies"
 // alternative == fatiguecatch flies
 // True if every reduce()d member of s1 is in synonymsFromDB or equals reduce(alternative).
-bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromDB, wstring alternative)
+bool compareWordSets(vector <string>& s1, unordered_set <lpwstring>& synonymsFromDB, lpwstring alternative)
 {
-	set <wstring> s11, synonymsFromDBR;
+	set <lpwstring> s11, synonymsFromDBR;
 	for (vector <string>::iterator ss = s1.begin(), ssEnd = s1.end(); ss != ssEnd; ss++)
 	{
-		wstring t;
+		lpwstring t;
 		s11.insert(reduce(mTW(*ss, t)));
 	}
 	for (auto ss = synonymsFromDB.begin(), ssEnd = synonymsFromDB.end(); ss != ssEnd; ss++)
 	{
 		synonymsFromDBR.insert(reduce(*ss));
 	}
-	wstring alternativeR = reduce(alternative);
+	lpwstring alternativeR = reduce(alternative);
 	for (auto ss = s11.begin(), ssEnd = s11.end(); ss != ssEnd; ss++)
 	{
 		if (synonymsFromDBR.find(*ss) == synonymsFromDBR.end() && *ss != alternativeR)
@@ -365,11 +365,9 @@ bool compareWordSets(vector <string>& s1, unordered_set <wstring>& synonymsFromD
 // closed on all paths).
 void testThesaurus()
 {
-	WIN32_FIND_DATA ffd;
-	HANDLE hFind;
 	MYSQL mysql;
 	if (mysql_init(&mysql) == NULL)
-		wprintf(L"Failed to initialize MySQL");
+		lp_wprintf(u"Failed to initialize MySQL");
 	bool keep_connect = true;
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 	string sqlStr;
@@ -377,63 +375,65 @@ void testThesaurus()
 	{
 		mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
 		if (mysql_set_character_set(&mysql, "utf8"))
-			wprintf(L"Error setting default client character set to utf8.  Default now: %S\n", mysql_character_set_name(&mysql));
+			lp_wprintf(u"Error setting default client character set to utf8.  Default now: %S\n", mysql_character_set_name(&mysql));
 	}
 	mysql_options(&mysql, MYSQL_OPT_RECONNECT, &keep_connect);
-	wstring thesaurusDir = wstring(LMAINDIR) + L"\\old thesaurus entries";
-	if (_wchdir(thesaurusDir.c_str()) < 0)
+	lpwstring thesaurusDir = lpwstring(LMAINDIR) + u"\\old thesaurus entries";
+	if (chdir(lp_utf16_to_utf8(thesaurusDir.c_str()).c_str()) < 0)
 	{
 		printf("Error changing directory.");
 		return;
 	}
-	hFind = FindFirstFile(L"*.thesaurus.txt.*", &ffd);
-	if (hFind == INVALID_HANDLE_VALUE)
+	// Batch B10: lpDirectoryEntries replaces FindFirstFile/FindNextFile/FindClose.
+	std::vector<lpwstring> thesaurusFiles = lpDirectoryEntries(u".", u"*.thesaurus.txt.*");
+	if (thesaurusFiles.empty())
 	{
-		printf("FindFirstFile failed (%d)\n", (int)GetLastError());
+		printf("No thesaurus files found in %s\n", lp_utf16_to_utf8(thesaurusDir).c_str());
 		return;
 	}
 	else
 	{
 		int total = 0, nonMatched = 0, dbEmpty = 0; // removed = 0, 
-		do
+		for (const lpwstring& thesaurusEntry : thesaurusFiles)
 		{
-			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			const lpchar_t* entryName = thesaurusEntry.c_str();
+			if (lp_wIsDirectory(thesaurusEntry))
 			{
-				_tprintf(TEXT("  %s   <DIR>\n"), ffd.cFileName);
+				lp_wprintf(u"  %s   <DIR>\n", entryName);
 			}
 			else
 			{
 				int synonymType = -1;
-				if (isdigit(ffd.cFileName[wcslen(ffd.cFileName) - 1]))
-					synonymType = ffd.cFileName[wcslen(ffd.cFileName) - 1] - '1';
+				if (isdigit(entryName[lp_strlen(entryName) - 1]))
+					synonymType = entryName[lp_strlen(entryName) - 1] - '1';
 				if (synonymType < 0)
 					continue;
 				int fd;
-				_wsopen_s(&fd, ffd.cFileName, _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE); // error =
+				fd = lp_wopen(entryName, O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE); // error =
 				total++;
 				if (fd < 0)
 				{
-					// fl is a size_t: _filelength(-1) would wrap to a huge unsigned value, so bail
+					// fl is a size_t: lp_filelength(-1) would wrap to a huge unsigned value, so bail
 					// before computing it / malloc'ing off an invalid fd.
-					lplog(LOG_ERROR, L"ERROR:testThesaurus cannot open %s.", ffd.cFileName);
+					lplog(LOG_ERROR, u"ERROR:testThesaurus cannot open %s.", entryName);
 					continue;
 				}
-				size_t fl = _filelength(fd);
-				wchar_t* buffer = (wchar_t*)malloc(fl + 2);
-				if (_read(fd, buffer, (unsigned int)fl) < 0)
-					lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
-				_close(fd);
-				unordered_set <wstring> scrapedSynonyms;
-				wstring word = ffd.cFileName;
+				size_t fl = lp_filelength(fd);
+				lpchar_t* buffer = (lpchar_t*)malloc(fl + 2);
+				if (::read(fd, buffer, (unsigned int)fl) < 0)
+					lplog(LOG_FATAL_ERROR, u"Error reading thesaurus file.");
+				::close(fd);
+				unordered_set <lpwstring> scrapedSynonyms;
+				lpwstring word = entryName;
 				int where = word.find('.');
 				word.erase(where);
 				word.erase(word.begin() + 0, word.begin() + 1);
 				int space;
-				while ((space = word.find('+')) != wstring::npos)
+				while ((space = word.find('+')) != lpwstring::npos)
 					word[space] = ' ';
 				scrapeOldThesaurus(word, buffer, scrapedSynonyms);
-				vector < wstring > dbAlternatives;
-				vector < unordered_set <wstring> > dbSynonyms;
+				vector < lpwstring > dbAlternatives;
+				vector < unordered_set <lpwstring> > dbSynonyms;
 				if (synonymType >= 0)
 				{
 					getSynonymsFromDB(mysql, word, dbSynonyms, dbAlternatives, synonymType);
@@ -445,7 +445,7 @@ void testThesaurus()
 						bool atLeastOneNewScrapedIdenticalWithDB = false;
 						for (int J = 0; J < d.size(); J++)
 						{
-							atLeastOneScrapedIdenticalWithNewScraped |= compareWordSets(d[J].accumulatedSynonyms, scrapedSynonyms, L"");
+							atLeastOneScrapedIdenticalWithNewScraped |= compareWordSets(d[J].accumulatedSynonyms, scrapedSynonyms, u"");
 							atLeastOneNewScrapedIdenticalWithDB |= compareWordSets(d[J].accumulatedSynonyms, dbSynonyms[I], dbAlternatives[I]);
 						}
 						if (!atLeastOneNewScrapedIdenticalWithDB && !atLeastOneScrapedIdenticalWithNewScraped)
@@ -468,10 +468,10 @@ void testThesaurus()
 									printf("\n[%d]:", J);
 								for (vector <string>::iterator ss = d[J].accumulatedSynonyms.begin(), ssEnd = d[J].accumulatedSynonyms.end(); ss != ssEnd; ss++)
 								{
-									wstring s;
+									lpwstring s;
 									mTW(*ss, s);
-									int whereBar = s.find(L'|');
-									if (whereBar != wstring::npos)
+									int whereBar = s.find(u'|');
+									if (whereBar != lpwstring::npos)
 										s.erase(whereBar);
 									if (dbSynonyms[I].find(s) == dbSynonyms[I].end())
 										printf("%S;", s.c_str());
@@ -485,9 +485,9 @@ void testThesaurus()
 				}
 				free(buffer);
 			}
-		} while (FindNextFile(hFind, &ffd) != 0);
+		}
 		printf("dbempty=%d nonMatched=%d total=%d (%d%%)\n", dbEmpty, nonMatched, total, 100 * nonMatched / (total - dbEmpty));
-		FindClose(hFind);
+
 	}
 }
 
@@ -593,17 +593,17 @@ string trim(string& s, string& tmp)
 }
 
 // Wide-string trim into tmp; returns tmp.
-wstring trim(wstring& s, wstring& tmp)
+lpwstring trim(lpwstring& s, lpwstring& tmp)
 {
 	tmp = s;
 	size_t J;
 	for (J = tmp.length() - 1; J; J--)
-		if (!iswspace((wchar_t)tmp[J]))
+		if (!iswspace((lpchar_t)tmp[J]))
 			break;
 	if (J < tmp.length() - 1)
 		tmp.erase(J + 1);
 	for (J = 0; tmp[J]; J++)
-		if (!iswspace((wchar_t)tmp[J]))
+		if (!iswspace((lpchar_t)tmp[J]))
 			break;
 	if (J > 0)
 		tmp.erase(0, J);
@@ -612,12 +612,12 @@ wstring trim(wstring& s, wstring& tmp)
 
 // Tokenizes tokens[t] on comma/semicolon/"or" into words. Returns the index of the last
 // ';' piece, or -1. primarySemiColon changes how a trailing semicolon is kept.
-__int64 breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiColon)
+int64_t breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiColon)
 {
 	string tmp;
 	string token = trim(tokens[t], tmp);
 	string word;
-	__int64 semicolonIndex = -1;
+	int64_t semicolonIndex = -1;
 	bool 	printWordsTemp = false;
 	for (unsigned int w = 0; w < token.size(); w++)
 		if (token[w] == ',')
@@ -630,7 +630,7 @@ __int64 breakByCommaSemiColon(vector <string>& words, int t, bool primarySemiCol
 			else
 			{
 				int whereSemiColon = token.find(';', w);
-				__int64 whereOr = token.find("or", w);
+				int64_t whereOr = token.find("or", w);
 				if (whereOr > 0 && (isalpha(token[whereOr - 1]) || isalpha(token[whereOr + 2])))
 				{
 					whereOr = string::npos;
@@ -681,20 +681,20 @@ void processIntoTokens()
 {
 	int fd;
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags_noTables.html";
-	_sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	fd = ::open(tablesPath.c_str(), O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (fd < 0)
 	{
-		lplog(LOG_ERROR, L"ERROR:processIntoTokens cannot open %S.", tablesPath.c_str());
+		lplog(LOG_ERROR, u"ERROR:processIntoTokens cannot open %S.", tablesPath.c_str());
 		return;
 	}
-	int fl = _filelength(fd);
+	int fl = lp_filelength(fd);
 	char* buffer = (char*)malloc(fl + 4);
 	string buf;
 	//int numTable = 0;
 	{
-		if (_read(fd, buffer, fl) < 0)
-			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
-		_close(fd);
+		if (::read(fd, buffer, fl) < 0)
+			lplog(LOG_FATAL_ERROR, u"Error reading thesaurus HTML file.");
+		::close(fd);
 	}
 	string tag, beginTag, endTag, words;
 	set <string> tags;
@@ -883,8 +883,8 @@ bool compareOK(string me1, string me2)
 		me1.erase(me1.begin() + ws);
 	while ((ws = me2.find_first_of("&.\r\n \'-)(")) != string::npos)
 		me2.erase(me2.begin() + ws);
-	_strlwr((char*)me1.c_str());
-	_strlwr((char*)me2.c_str());
+	lp_towlower_str((char*)me1.c_str());
+	lp_towlower_str((char*)me2.c_str());
 	size_t len = min(me1.length(), me2.length());
 	return strncmp(me2.c_str(), me1.c_str(), len) <= 0;
 }
@@ -938,16 +938,16 @@ int numDashedWords = 0, numconvertedWords = 0;
 // If possibleDashedWord contains '-', looks up the undashed form in Words/DB and rewrites it.
 void removeDash(MYSQL mysql, string& possibleDashedWord)
 {
-	__int64 whereDash = possibleDashedWord.find('-');
+	int64_t whereDash = possibleDashedWord.find('-');
 	if (whereDash == string::npos)
 		return;
 	bool extraStar = false;
 	if (extraStar = possibleDashedWord[possibleDashedWord.size() - 1] == '*')
 		possibleDashedWord.erase(possibleDashedWord.size() - 1);
 	numDashedWords++;
-	wstring rd;
+	lpwstring rd;
 	mTW(possibleDashedWord, rd);
-	__int64 whereSpace = rd.find(' ');
+	int64_t whereSpace = rd.find(' ');
 	while (whereSpace != string::npos)
 	{
 		if (whereSpace > 0 && !(rd[whereSpace - 1] == '-' || rd[whereSpace + 1] == '-'))
@@ -959,7 +959,7 @@ void removeDash(MYSQL mysql, string& possibleDashedWord)
 		whereSpace = rd.find(' ', whereSpace);
 	}
 	whereSpace = rd.find(' ');
-	if (whereSpace != wstring::npos)
+	if (whereSpace != lpwstring::npos)
 	{
 		string tmp;
 		wTM(rd, tmp);
@@ -973,7 +973,7 @@ void removeDash(MYSQL mysql, string& possibleDashedWord)
 			if (I < words.size() - 1)
 				tmp += " ";
 		}
-		wstring wtmp;
+		lpwstring wtmp;
 		mTW(tmp, wtmp);
 		if (wtmp != rd)
 		{
@@ -981,7 +981,7 @@ void removeDash(MYSQL mysql, string& possibleDashedWord)
 			numconvertedWords++;
 			printf("%d:%d:%s -> %S                                            \n", numDashedWords, numconvertedWords, possibleDashedWord.c_str(), rd.c_str());
 			if (extraStar)
-				rd += L'*';
+				rd += u'*';
 			wTM(rd, possibleDashedWord);
 		}
 		else
@@ -1000,7 +1000,7 @@ void removeDash(MYSQL mysql, string& possibleDashedWord)
 		numconvertedWords++;
 		printf("%d:%d:%s -> %S                                            \n", numDashedWords, numconvertedWords, possibleDashedWord.c_str(), rd.c_str());
 		if (extraStar)
-			rd += L'*';
+			rd += u'*';
 		wTM(rd, possibleDashedWord);
 	}
 	else
@@ -1065,7 +1065,7 @@ int getThesaurus(MYSQL mysql)
 			bool allowEndScan = false;
 			if (isBeginToken(I + 8, "i") && isWord(I + 9) && isEndToken(I + 10, "i"))
 			{
-				__int64 whereSemiColon = breakByCommaSemiColon(d.primarySynonyms, I + 9, true);
+				int64_t whereSemiColon = breakByCommaSemiColon(d.primarySynonyms, I + 9, true);
 				currentLocation = I + 11;
 				if (whereSemiColon > 0)
 				{
@@ -1131,7 +1131,7 @@ int getThesaurus(MYSQL mysql)
 			{
 				//for (unsigned int J = I; J < I + 7; J++)
 				//	printf("%d:%s\n", J, tokens[J].c_str());
-				breakByCommaSemiColon(d.accumulatedAntonyms, I + 5, false); // __int64 whereSemiColon = 
+				breakByCommaSemiColon(d.accumulatedAntonyms, I + 5, false); // int64_t whereSemiColon = 
 				I += 6;
 			}
 			else if (I + 6 < tokens.size() && isEndToken(I + 1, "span") &&
@@ -1140,7 +1140,7 @@ int getThesaurus(MYSQL mysql)
 			{
 				//for (unsigned int J = I; J < I + 7; J++)
 				//	printf("%d:%s\n", J, tokens[J].c_str());
-				__int64 whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I + 4, false);
+				int64_t whereSemiColon = breakByCommaSemiColon(d.accumulatedAntonyms, I + 4, false);
 				I += 6;
 				if (whereSemiColon < 0 && isWord(I) && (isBeginToken(I + 1, "span class=\"s19") || isBeginToken(I + 1, "span class=\"s24")))
 				{
@@ -1209,9 +1209,9 @@ int getThesaurus(MYSQL mysql)
 		printf("%s\n", wti->c_str());
 	//	writeThesaurusEntry(thesaurus[I]);
 
-	//fd = open(MAINDIR+"\\Linguistics information\\k3_no_tables2.html", _O_RDWR | _O_CREAT, _S_IREAD | _S_IWRITE);
+	//fd = open(MAINDIR+"\\Linguistics information\\k3_no_tables2.html", O_RDWR | O_CREAT, _S_IREAD | _S_IWRITE);
 	//fl = buf.length();
-	//int error=_write(fd, buf.c_str(), buf.length());
+	//int error=::write(fd, buf.c_str(), buf.length());
 	//printf("%d\n", errno);
 	//close(fd);
 	return 0;
@@ -1226,23 +1226,23 @@ int getThesaurus(MYSQL mysql)
 int stripTags()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized.html";
-	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	int fd = ::open(tablesPath.c_str(), O_RDWR, _S_IREAD | _S_IWRITE), error = (fd < 0 ? errno : 0);
 	if (fd < 0)
 	{
-		// fl is a size_t: _filelength(-1) returning -1 would wrap to a huge unsigned value and
+		// fl is a size_t: lp_filelength(-1) returning -1 would wrap to a huge unsigned value and
 		// malloc()/the index loops below would run off a NULL or undersized buffer, so bail here
 		// instead of falling through with an invalid fd.
-		lplog(LOG_ERROR, L"ERROR:stripTags cannot open %S.", tablesPath.c_str());
+		lplog(LOG_ERROR, u"ERROR:stripTags cannot open %S.", tablesPath.c_str());
 		return -1;
 	}
-	size_t fl = _filelength(fd);
+	size_t fl = lp_filelength(fd);
 	char* buffer = (char*)malloc(fl + 100);
 	string buf;
 	//int numTable = 0;
 	{
-		if (_read(fd, buffer, (unsigned int)fl) < 0)
-			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus HTML file.");
-		_close(fd);
+		if (::read(fd, buffer, (unsigned int)fl) < 0)
+			lplog(LOG_FATAL_ERROR, u"Error reading thesaurus HTML file.");
+		::close(fd);
 	}
 	bool saveNextSpan = false;
 	for (int I = 0; I < fl; I++)
@@ -1395,11 +1395,11 @@ int stripTags()
 			}
 		}
 	}
-	error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	fd = ::open(tablesPath.c_str(), O_RDWR | O_CREAT, _S_IREAD | _S_IWRITE), error = (fd < 0 ? errno : 0);
 	fl = buf.length();
-	error = _write(fd, buf.c_str(), (unsigned int)buf.length());
+	error = ::write(fd, buf.c_str(), (unsigned int)buf.length());
 	printf("%d\n", errno);
-	_close(fd);
+	::close(fd);
 	free(buffer);
 	return 0;
 }
@@ -1471,23 +1471,23 @@ void processTable(string& tableToken)
 int resolveTables()
 {
 	string tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags.html";
-	int fd, error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	int fd = ::open(tablesPath.c_str(), O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE), error = (fd < 0 ? errno : 0);
 	if (fd < 0)
 	{
-		// fl is a size_t: _filelength(-1) returning -1 would wrap to a huge unsigned value and
+		// fl is a size_t: lp_filelength(-1) returning -1 would wrap to a huge unsigned value and
 		// malloc()/the index loops below would run off a NULL or undersized buffer, so bail here
 		// instead of falling through with an invalid fd.
-		lplog(LOG_ERROR, L"ERROR:resolveTables cannot open %S.", tablesPath.c_str());
+		lplog(LOG_ERROR, u"ERROR:resolveTables cannot open %S.", tablesPath.c_str());
 		return -1;
 	}
-	size_t fl = _filelength(fd);
+	size_t fl = lp_filelength(fd);
 	char* buffer = (char*)malloc(fl + 2);
 	string buf;
 	//int numTable = 0;
 	{
-		if (_read(fd, buffer, (unsigned int)fl) < 0)
-			lplog(LOG_FATAL_ERROR, L"Error reading thesaurus file.");
-		_close(fd);
+		if (::read(fd, buffer, (unsigned int)fl) < 0)
+			lplog(LOG_FATAL_ERROR, u"Error reading thesaurus file.");
+		::close(fd);
 	}
 	//bool saveNextSpan = false;
 	int tableNum = 0;
@@ -1518,11 +1518,11 @@ int resolveTables()
 			printf("HALT!");
 	}
 	tablesPath = string(MAINDIR) + "\\Linguistics information\\thesaurus\\Koptimized_tags_noTables2.html";
-	error = _sopen_s(&fd, tablesPath.c_str(), _O_RDWR | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+	fd = ::open(tablesPath.c_str(), O_RDWR | O_CREAT, _S_IREAD | _S_IWRITE), error = (fd < 0 ? errno : 0);
 	fl = buf.length();
-	error = _write(fd, buf.c_str(), (unsigned int)buf.length());
+	error = ::write(fd, buf.c_str(), (unsigned int)buf.length());
 	printf("%d\n", errno);
-	_close(fd);
+	::close(fd);
 	free(buffer);
 	return 0;
 }

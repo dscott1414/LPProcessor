@@ -40,26 +40,29 @@
 	Notes / gotchas:
 		- Snippet paths truncate at MAX_PATH-28 on a MAX_LEN (2048) buffer.
 */
-#include <windows.h>
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
 #include <fcntl.h>
 #include "sys/stat.h"
-#include "direct.h"
 #include "time.h"
 #include <errno.h>
-#include <Winhttp.h>
 #include <functional>
-#include <share.h>
 #include "profile.h"
 #include "internet.h"
 #include "QuestionAnswering.h"
 
 #define MAX_PATH_LEN 2048
 #define MAX_BUF 2000000
-bool myquery(MYSQL* mysql, wchar_t* q, bool allowFailure = false);
+bool myquery(MYSQL* mysql, lpchar_t* q, bool allowFailure = false);
 int generateParseRequestSources(MYSQL& mysql, vector <cQuestionAnswering::cSearchSource>::iterator pri);
 int deleteGeneratedParseRequests(MYSQL& mysql);
 
@@ -163,11 +166,11 @@ std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_
 // https://www.googleapis.com/customsearch/v1?key=<LP_GOOGLE_CSE_KEY>&cx=<LP_GOOGLE_CSE_CX>&q=%22Paul+Krugman+writes+for%22
 // Credentials are read from the environment (envConfig.h getGoogleCSEKey() /
 // getGoogleCSEContext() / getBingSubscriptionKey()), not stored here.
-wstring googleBaseWebSearchAddress = L"https://www.googleapis.com/customsearch/v1";
-wstring BINGBaseWebSearchAddress = L"https://api.cognitive.microsoft.com/bing/v7.0/search";
+lpwstring googleBaseWebSearchAddress = u"https://www.googleapis.com/customsearch/v1";
+lpwstring BINGBaseWebSearchAddress = u"https://api.cognitive.microsoft.com/bing/v7.0/search";
 
-void encodeURL(wstring winput, wstring& wencodedURL);
-int flushString(wstring& buffer, wchar_t* path);
+void encodeURL(lpwstring winput, lpwstring& wencodedURL);
+int flushString(lpwstring& buffer, lpchar_t* path);
 
 /*
 $top	Specifies the number of results to return.	&count=	50
@@ -180,39 +183,39 @@ $skip	Specifies the offset requested for the starting point of results returned.
 // the query is wrapped in single quotes). index>1 becomes &offset=. Results are
 // cached by cInternet::getWebPath under webSearchCache. Returns getWebPath's
 // errCode, or -1 if Bing replies with the "Query is not of type String" body.
-int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& filePathOut, int numWebSitesAskedFor, int index)
+int getBINGSearchJSON(int where, lpwstring object, lpwstring& buffer, lpwstring& filePathOut, int numWebSitesAskedFor, int index)
 {
 	LFS
-		wstring uobject, numWebSitesAskedForStr;
-	//replace(object.begin(),object.end(),L' ',L'+');
+		lpwstring uobject, numWebSitesAskedForStr;
+	//replace(object.begin(),object.end(),u' ',u'+');
 	encodeURL(object, uobject);
 	// %27Paul%20Krugman%27%20criticized%20in%20%27his%20op-ed%20columns%27
 	// %22Paul%2BKrugman%22%2Bcriticized%2Bin%2B%22his%2Bop%2Ded%2Bcolumns%22
 	// re-encode %2B as %20, %22 as %27
-	for (size_t pos = 0; (pos = uobject.find(L"%2B", pos)) != std::string::npos; pos += 3)
-		uobject.replace(pos, 3, L"%20");
-	for (size_t pos = 0; (pos = uobject.find(L"%22", pos)) != std::string::npos; pos += 3)
-		uobject.replace(pos, 3, L"%27");
-	if (uobject.find(L"%27") == wstring::npos)
-		uobject = L"%27" + uobject + L"%27";
+	for (size_t pos = 0; (pos = uobject.find(u"%2B", pos)) != std::string::npos; pos += 3)
+		uobject.replace(pos, 3, u"%20");
+	for (size_t pos = 0; (pos = uobject.find(u"%22", pos)) != std::string::npos; pos += 3)
+		uobject.replace(pos, 3, u"%27");
+	if (uobject.find(u"%27") == lpwstring::npos)
+		uobject = u"%27" + uobject + u"%27";
 	//https://api.datamarket.azure.com/Bing/SearchWeb/Web?$format=json&Query=%27Xbox%27
-	wstring webAddress = BINGBaseWebSearchAddress + L"?q=" + uobject + L"&responseFilter=webPages,Entities,News,RelatedSearches&mkt=en-US&setLang=en-US&promote=Webpages";
+	lpwstring webAddress = BINGBaseWebSearchAddress + u"?q=" + uobject + u"&responseFilter=webPages,Entities,News,RelatedSearches&mkt=en-US&setLang=en-US&promote=Webpages";
 	if (index > 1)
 	{
-		wstring start;
+		lpwstring start;
 		itos(index, start);
-		webAddress += L"&offset=" + start;
+		webAddress += u"&offset=" + start;
 	}
 	if (numWebSitesAskedFor >= 0)
 	{
-		webAddress += L"&answerCount=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
+		webAddress += u"&answerCount=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
 	}
-	wstring headers = L"Ocp-Apim-Subscription-Key:" + getBingSubscriptionKey();
-	int errCode = cInternet::getWebPath(where, webAddress, buffer, object + L"_BING", L"webSearchCache", filePathOut, headers, index, false, true);
-	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, L"searching BING: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
-	if (buffer == L"Parameter: Query is not of type String")
+	lpwstring headers = u"Ocp-Apim-Subscription-Key:" + getBingSubscriptionKey();
+	int errCode = cInternet::getWebPath(where, webAddress, buffer, object + u"_BING", u"webSearchCache", filePathOut, headers, index, false, true);
+	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, u"searching BING: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
+	if (buffer == u"Parameter: Query is not of type String")
 	{
-		lplog(LOG_ERROR, L"Invalid query");
+		lplog(LOG_ERROR, u"Invalid query");
 		return -1;
 	}
 	return errCode;
@@ -223,23 +226,23 @@ int getBINGSearchJSON(int where, wstring object, wstring& buffer, wstring& fileP
 // Cached under webSearchCache. Returns getWebPath's errCode.
 // cache google searches since this is faster and we are paying for them
 // input object is not encoded, but should include quotes when needed.
-int getGoogleSearchJSON(int where, wstring object, wstring& buffer, wstring& filePathOut, int numWebSitesAskedFor, int index)
+int getGoogleSearchJSON(int where, lpwstring object, lpwstring& buffer, lpwstring& filePathOut, int numWebSitesAskedFor, int index)
 {
 	LFS
-		wstring uobject, numWebSitesAskedForStr;
-	replace(object.begin(), object.end(), L' ', L'+');
+		lpwstring uobject, numWebSitesAskedForStr;
+	replace(object.begin(), object.end(), u' ', u'+');
 	encodeURL(object, uobject);
 	// https://www.googleapis.com/customsearch/v1?key=<LP_GOOGLE_CSE_KEY>&cx=<LP_GOOGLE_CSE_CX>&q=%22Paul+Krugman+writes+for%22
-	wstring start;
+	lpwstring start;
 	if (index > 1)
 	{
 		itos(index, start);
-		start = L"&start=" + start;
+		start = u"&start=" + start;
 	}
-	wstring webAddress = googleBaseWebSearchAddress + L"?key=" + getGoogleCSEKey() + start + L"&cx=" + getGoogleCSEContext() + L"&q=" + uobject + L"&num=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
-	wstring headers;
-	int errCode = cInternet::getWebPath(where, webAddress, buffer, object, L"webSearchCache", filePathOut, headers, index, false, true);
-	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, L"searching Google: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
+	lpwstring webAddress = googleBaseWebSearchAddress + u"?key=" + getGoogleCSEKey() + start + u"&cx=" + getGoogleCSEContext() + u"&q=" + uobject + u"&num=" + itos(numWebSitesAskedFor, numWebSitesAskedForStr);
+	lpwstring headers;
+	int errCode = cInternet::getWebPath(where, webAddress, buffer, object, u"webSearchCache", filePathOut, headers, index, false, true);
+	lplog(LOG_WEBSEARCH | LOG_WHERE | LOG_ERROR, u"searching Google: %s [%s] searchIndex=%d [%s]", object.c_str(), filePathOut.c_str(), index, webAddress.c_str());
 	lplog(LOG_WHERE, NULL);
 	return errCode;
 }
@@ -261,13 +264,13 @@ bool cSource::inObject(int where, int whereQuestionType)
 // true when something was appended. atNumPP<0 copies the last string first so
 // the caller can keep a no-PP variant; that path assumes the vector is non-empty.
 // this is deliberately noncombinatorial - each prepositional phrase only has one predecessor
-bool cSource::appendPrepositionalPhrase(int where, vector <wstring>& prepPhraseStrings, int relPrep, bool nonMixedCase, bool lowerCase, const wchar_t* separator, int atNumPP)
+bool cSource::appendPrepositionalPhrase(int where, vector <lpwstring>& prepPhraseStrings, int relPrep, bool nonMixedCase, bool lowerCase, const lpchar_t* separator, int atNumPP)
 {
 	LFS
 		int relObject = m[relPrep].getRelObject();
 	if (relObject >= relPrep && m[relObject].endObjectPosition >= 0 && (m[relPrep].nextQuote == where || m[relPrep].relNextObject == where))
 	{
-		wstring oStr;
+		lpwstring oStr;
 		oStr = separator;
 		int lctlen = 1;
 		getOriginalWord(relPrep, oStr, true);
@@ -296,7 +299,7 @@ bool cSource::appendPrepositionalPhrase(int where, vector <wstring>& prepPhraseS
 // here, walk the relPrep chain and accumulate matching-case PP strings starting
 // from wsoStr. Returns the size of prepPhraseStrings. numWords is the token
 // span of the longest PP that was kept.
-int cSource::appendPrepositionalPhrases(int where, wstring& wsoStr, vector <wstring>& prepPhraseStrings, int& numWords, bool noMixedCase, const wchar_t* separator, int atNumPP)
+int cSource::appendPrepositionalPhrases(int where, lpwstring& wsoStr, vector <lpwstring>& prepPhraseStrings, int& numWords, bool noMixedCase, const lpchar_t* separator, int atNumPP)
 {
 	LFS
 		int relPrep;
@@ -307,7 +310,7 @@ int cSource::appendPrepositionalPhrases(int where, wstring& wsoStr, vector <wstr
 		bool lowerCase = iswlower(wsoStr[0]) != 0;
 		size_t lw = wsoStr.find_last_of(separator);
 		int largestRelPrep = -1;
-		if (lw != wstring::npos) lowerCase = iswlower(wsoStr[lw + 1]) != 0;
+		if (lw != lpwstring::npos) lowerCase = iswlower(wsoStr[lw + 1]) != 0;
 		for (int I = 0; (I < atNumPP || atNumPP < 0) && relPrep < (signed)m.size() && relPrep >= 0 && (m[relPrep].nextQuote == where || m[relPrep].relNextObject == where) && appendPrepositionalPhrase(where, prepPhraseStrings, relPrep, noMixedCase, lowerCase, separator, atNumPP); I++)
 		{
 			largestRelPrep = relPrep;
@@ -323,13 +326,13 @@ int cSource::appendPrepositionalPhrases(int where, wstring& wsoStr, vector <wstr
 // Names use cName::original with '+' separators. Other classes copy the token
 // span unless alreadyDidPlainCopy is set (then non-name classes return -1 so
 // a later alias does not duplicate the plain copy). 0 on success.
-int cSource::getObjectStrings(int where, int object, vector <wstring>& wsoStrs, bool& alreadyDidPlainCopy)
+int cSource::getObjectStrings(int where, int object, vector <lpwstring>& wsoStrs, bool& alreadyDidPlainCopy)
 {
 	LFS
-		wstring wsoStr;
+		lpwstring wsoStr;
 	if (objects[object].objectClass == NAME_OBJECT_CLASS && (m[where].endObjectPosition - m[where].beginObjectPosition > 1 || objects[object].name.first != wNULL))
 	{
-		objects[object].name.original(wsoStr, L'+', true);
+		objects[object].name.original(wsoStr, u'+', true);
 		wsoStrs.push_back(wsoStr);
 	}
 	else
@@ -356,7 +359,7 @@ int cSource::getObjectStrings(int where, int object, vector <wstring>& wsoStrs, 
 // in which case the WH-word is concatenated. Pronouns are dropped. Multi-word
 // names also generate a quoted variant; attached PPs generate still more copies.
 // Returns 0, or -1 when the position is the question object (noQuotes signal).
-int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <wstring>& objectStrings, int where)
+int cSource::appendObject(int64_t questionType, int whereQuestionType, vector <lpwstring>& objectStrings, int where)
 {
 	LFS
 		if (where < 0) return 0;
@@ -364,14 +367,14 @@ int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <w
 	{
 		if (questionType & cQuestionAnswering::QTAFlag)
 		{
-			vector <wstring> saveStrings;
+			vector <lpwstring> saveStrings;
 			saveStrings = objectStrings;
 			int os = objectStrings.size();
 			objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
 			for (; os < objectStrings.size(); os++)
 			{
 				if (objectStrings[os].length() > 0)
-					objectStrings[os] += L"+" + m[where].word->first;
+					objectStrings[os] += u"+" + m[where].word->first;
 				else
 					objectStrings[os] = m[where].word->first;
 			}
@@ -389,14 +392,14 @@ int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <w
 		if (oc != REFLEXIVE_PRONOUN_OBJECT_CLASS && oc != RECIPROCAL_PRONOUN_OBJECT_CLASS && oc != PRONOUN_OBJECT_CLASS)
 			appendObjects.push_back(m[where].objectMatches[oi].object);
 	}
-	wstring logres;
-	lplog(LOG_WHERE, L"appendObjects: %d:objectMatches.size=%d:%d:%s", where, m[where].objectMatches.size(), appendObjects.size(), objectString(appendObjects, logres).c_str());
+	lpwstring logres;
+	lplog(LOG_WHERE, u"appendObjects: %d:objectMatches.size=%d:%d:%s", where, m[where].objectMatches.size(), appendObjects.size(), objectString(appendObjects, logres).c_str());
 	bool alreadyDidPlainCopy = false, copyNeeded = false;
-	vector <wstring> saveStrings;
+	vector <lpwstring> saveStrings;
 	saveStrings = objectStrings;
 	for (vector <int>::iterator oi = appendObjects.begin(), oiEnd = appendObjects.end(); oi != oiEnd; oi++)
 	{
-		vector <wstring> wsoStrs;
+		vector <lpwstring> wsoStrs;
 		if (getObjectStrings((o == *oi) ? where : objects[*oi].originalLocation, *oi, wsoStrs, alreadyDidPlainCopy) < 0)
 			continue;
 		unsigned int os = 0;
@@ -406,61 +409,61 @@ int cSource::appendObject(__int64 questionType, int whereQuestionType, vector <w
 			objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
 		}
 		copyNeeded = true;
-		for (vector <wstring>::iterator wsoStr = wsoStrs.begin(), wsoStrEnd = wsoStrs.end(); wsoStr != wsoStrEnd; wsoStr++)
+		for (vector <lpwstring>::iterator wsoStr = wsoStrs.begin(), wsoStrEnd = wsoStrs.end(); wsoStr != wsoStrEnd; wsoStr++)
 		{
-			//lplog(LOG_WHERE,L"%d:appendObjects: %d:%s",oi-appendObjects.begin(),wsoStr-wsoStrs.begin(),*wsoStr);
+			//lplog(LOG_WHERE,u"%d:appendObjects: %d:%s",oi-appendObjects.begin(),wsoStr-wsoStrs.begin(),*wsoStr);
 			for (; os < objectStrings.size(); os++)
 			{
 				if (objectStrings[os].length() > 0)
-					objectStrings[os] += L"+" + *wsoStr;
+					objectStrings[os] += u"+" + *wsoStr;
 				else
 					objectStrings[os] = *wsoStr;
 			}
 			bool insertQuotes;
-			if (insertQuotes = wsoStr->find(L'+') != wstring::npos)
+			if (insertQuotes = wsoStr->find(u'+') != lpwstring::npos)
 			{
 				os = objectStrings.size();
 				objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
 				for (; os < objectStrings.size(); os++)
 				{
 					if (objectStrings[os].length() > 0)
-						objectStrings[os] += L"+\"" + *wsoStr + L"\"";
+						objectStrings[os] += u"+\"" + *wsoStr + u"\"";
 					else
-						objectStrings[os] = L"\"" + *wsoStr + L"\"";
+						objectStrings[os] = u"\"" + *wsoStr + u"\"";
 				}
 			}
-			vector <wstring> prepPhraseStrings;
+			vector <lpwstring> prepPhraseStrings;
 			int numWords;
-			if (m[where].relPrep >= 0 && m[where].relPrep < (signed)m.size() && m[m[where].relPrep].nextQuote == where && appendPrepositionalPhrases(where, *wsoStr, prepPhraseStrings, numWords, true, L"+", -1)>1)
+			if (m[where].relPrep >= 0 && m[where].relPrep < (signed)m.size() && m[m[where].relPrep].nextQuote == where && appendPrepositionalPhrases(where, *wsoStr, prepPhraseStrings, numWords, true, u"+", -1)>1)
 			{
 				for (unsigned int pp = 1; pp < prepPhraseStrings.size(); pp++)
 				{
 					os = objectStrings.size();
 					objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
-					//lplog(LOG_WHERE,L"%d: relPrep=%d m.size()=%d nextQuote=%d inserting pp=%s objectStrings.size()=%d",where,m[where].relPrep,m.size(),(m[where].relPrep>=0 && m[where].relPrep<(signed)m.size()) ? m[m[where].relPrep].nextQuote : -1,prepPhraseStrings[pp].c_str(),os);
+					//lplog(LOG_WHERE,u"%d: relPrep=%d m.size()=%d nextQuote=%d inserting pp=%s objectStrings.size()=%d",where,m[where].relPrep,m.size(),(m[where].relPrep>=0 && m[where].relPrep<(signed)m.size()) ? m[m[where].relPrep].nextQuote : -1,prepPhraseStrings[pp].c_str(),os);
 					for (; os < objectStrings.size(); os++)
 					{
 						if (objectStrings[os].length() > 0)
-							objectStrings[os] += L"+" + prepPhraseStrings[pp];
+							objectStrings[os] += u"+" + prepPhraseStrings[pp];
 						else
 							objectStrings[os] = prepPhraseStrings[pp];
 					}
 					os = objectStrings.size();
 					objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
-					//lplog(LOG_WHERE,L"%d: relPrep=%d m.size()=%d nextQuote=%d inserting pp=%s objectStrings.size()=%d",where,m[where].relPrep,m.size(),(m[where].relPrep>=0 && m[where].relPrep<(signed)m.size()) ? m[m[where].relPrep].nextQuote : -1,prepPhraseStrings[pp].c_str(),os);
+					//lplog(LOG_WHERE,u"%d: relPrep=%d m.size()=%d nextQuote=%d inserting pp=%s objectStrings.size()=%d",where,m[where].relPrep,m.size(),(m[where].relPrep>=0 && m[where].relPrep<(signed)m.size()) ? m[m[where].relPrep].nextQuote : -1,prepPhraseStrings[pp].c_str(),os);
 					for (; os < objectStrings.size(); os++)
 					{
 						if (objectStrings[os].length() > 0)
-							objectStrings[os] += L"+\"" + prepPhraseStrings[pp] + L"\"";
+							objectStrings[os] += u"+\"" + prepPhraseStrings[pp] + u"\"";
 						else
-							objectStrings[os] = L"\"" + prepPhraseStrings[pp] + L"\"";
+							objectStrings[os] = u"\"" + prepPhraseStrings[pp] + u"\"";
 					}
 				}
 			}
 		}
 	}
 	for (unsigned int I = 0; I < objectStrings.size(); I++)
-		lplog(LOG_WHERE, L"%d: objectString %d:%s", where, I, objectStrings[I].c_str());
+		lplog(LOG_WHERE, u"%d: objectString %d:%s", where, I, objectStrings[I].c_str());
 	return 0;
 }
 
@@ -484,7 +487,7 @@ tIWMM cSource::getTense(tIWMM verb, tIWMM subject, int tenseDesired)
 	else
 		desiredInflectionFlags = VERB_PAST;
 	tIWMM verbMainEntry = (verb->second.mainEntry == wNULL) ? verb : verb->second.mainEntry;
-	unordered_map <wstring, vector <tIWMM>>::iterator mEMI;
+	unordered_map <lpwstring, vector <tIWMM>>::iterator mEMI;
 	// prefer third person verbs
 	if (verbMainEntry != wNULL && (mEMI = Words.mainEntryMap.find(verbMainEntry->first)) != Words.mainEntryMap.end())
 	{
@@ -502,23 +505,23 @@ tIWMM cSource::getTense(tIWMM verb, tIWMM subject, int tenseDesired)
 // Same lookup as the tIWMM overload, but starting from m[where]'s main entry and
 // returning a search-query token. preferredVerb==VERB_PRESENT_FIRST_SINGULAR is
 // treated as future and prefixed with "will+". Falls back to 'candidate'.
-wstring cSource::getTense(int where, wstring candidate, int preferredVerb)
+lpwstring cSource::getTense(int where, lpwstring candidate, int preferredVerb)
 {
 	LFS
 		tIWMM mainEntry = m[where].getMainEntry();
-	unordered_map <wstring, vector <tIWMM>>::iterator mEMI;
+	unordered_map <lpwstring, vector <tIWMM>>::iterator mEMI;
 	// prefer third person verbs
 	if (mainEntry != wNULL && (mEMI = Words.mainEntryMap.find(mainEntry->first)) != Words.mainEntryMap.end())
 	{
 		for (unsigned int me = 0; me < mEMI->second.size(); me++)
 		{
 			//int inflectionFlags=mEMI->second[me]->second.inflectionFlags;
-			wstring verb = mEMI->second[me]->first;
-			//lplog(L"%s:%d",verb.c_str(),inflectionFlags);
+			lpwstring verb = mEMI->second[me]->first;
+			//lplog(u"%s:%d",verb.c_str(),inflectionFlags);
 			if (mEMI->second[me]->second.inflectionFlags & preferredVerb)
 			{
 				if (preferredVerb == VERB_PRESENT_FIRST_SINGULAR)
-					candidate = L"will+" + mEMI->second[me]->first;
+					candidate = u"will+" + mEMI->second[me]->first;
 				else
 					candidate = mEMI->second[me]->first;
 				break;
@@ -533,14 +536,14 @@ wstring cSource::getTense(int where, wstring candidate, int preferredVerb)
 // complements duplicate the current strings with a "to+V" / past-tense variant.
 // Always returns 0.
 // possibly adjust tense
-int cSource::appendVerb(vector <wstring>& objectStrings, int where)
+int cSource::appendVerb(vector <lpwstring>& objectStrings, int where)
 {
 	LFS
-		wstring candidate = m[where].word->first;
+		lpwstring candidate = m[where].word->first;
 	int fullTense = m[where].verbSense;
 	int tense = fullTense & VT_TENSE_MASK;
 	//int relPrep = m[where].relPrep;// , msize = m.size();
-	bool isPassive = (fullTense & VT_PASSIVE) == VT_PASSIVE && (m[where].relPrep < 0 || (m[where].relPrep >= 0 && m[m[where].relPrep].word->first != L"by"));
+	bool isPassive = (fullTense & VT_PASSIVE) == VT_PASSIVE && (m[where].relPrep < 0 || (m[where].relPrep >= 0 && m[m[where].relPrep].word->first != u"by"));
 	int preferredVerb = 0;
 	// was born
 	if (isPassive)
@@ -548,17 +551,17 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 		preferredVerb = tense;
 		if ((tense == VT_PAST) || (tense == VT_PAST_PERFECT) || (tense == VT_PRESENT_PERFECT))
 		{
-			candidate = L"was";
+			candidate = u"was";
 		}
 		else if ((tense == VT_FUTURE) || (tense == VT_FUTURE_PERFECT))
 		{
-			candidate = L"will+be";
+			candidate = u"will+be";
 		}
 		else if ((tense == VT_PRESENT))
 		{
-			candidate = L"is+being";
+			candidate = u"is+being";
 		}
-		candidate += L"+" + m[where].word->first;
+		candidate += u"+" + m[where].word->first;
 	}
 	else
 	{
@@ -582,18 +585,18 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 	if (where + 1 < (int)m.size() && m[where + 1].queryForm(prepositionForm) >= 0 &&
 		(m[where + 1].queryWinnerForm(prepositionForm) >= 0 || m[where + 1].queryWinnerForm(adverbForm) >= 0) &&
 		m[where + 1].getRelObject() < 0)
-		candidate += L"+" + m[where + 1].word->first;
+		candidate += u"+" + m[where + 1].word->first;
 	unsigned int osSize = objectStrings.size();
 	if (m[where].getRelVerb() >= 0 && (m[m[where].getRelVerb()].flags & cWordMatch::flagInInfinitivePhrase) && preferredVerb == VERB_PRESENT_THIRD_SINGULAR)
 	{
-		candidate += L"+to+" + m[m[where].getRelVerb()].word->first;
-		vector <wstring> saveStrings = objectStrings;
+		candidate += u"+to+" + m[m[where].getRelVerb()].word->first;
+		vector <lpwstring> saveStrings = objectStrings;
 		objectStrings.insert(objectStrings.end(), saveStrings.begin(), saveStrings.end());
 	}
 	for (unsigned int os = 0; os < osSize; os++)
 	{
 		if (objectStrings[os].length() > 0)
-			objectStrings[os] += L"+" + candidate;
+			objectStrings[os] += u"+" + candidate;
 		else
 			objectStrings[os] = candidate;
 	}
@@ -604,7 +607,7 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 		for (unsigned int os = osSize; os < objectStrings.size(); os++)
 		{
 			if (objectStrings[os].length() > 0)
-				objectStrings[os] += L"+" + candidate;
+				objectStrings[os] += u"+" + candidate;
 			else
 				objectStrings[os] = candidate;
 		}
@@ -613,12 +616,12 @@ int cSource::appendVerb(vector <wstring>& objectStrings, int where)
 }
 
 // Append m[where]'s surface form to every query string (used for the preposition).
-int cSource::appendWord(vector <wstring>& objectStrings, int where)
+int cSource::appendWord(vector <lpwstring>& objectStrings, int where)
 {
 	LFS
 		for (unsigned int os = 0; os < objectStrings.size(); os++)
 			if (objectStrings[os].length() > 0)
-				objectStrings[os] += L"+" + m[where].word->first;
+				objectStrings[os] += u"+" + m[where].word->first;
 			else
 				objectStrings[os] = m[where].word->first;
 	return 0;
@@ -627,29 +630,29 @@ int cSource::appendWord(vector <wstring>& objectStrings, int where)
 // Fold a URL into a cache-file stem: strip http(s):// and www., map '/' to '_',
 // and hex-escape any other non-alnum except '.'. Output is appended onto epath
 // (caller must start empty).
-void hashWebSiteURL(wstring webSiteURL, wstring& epath)
+void hashWebSiteURL(lpwstring webSiteURL, lpwstring& epath)
 {
 	LFS
 		if (webSiteURL.empty())
 			return;
-	wchar_t tmp[8];
-	wstring::iterator wsi = webSiteURL.begin();
-	const wchar_t* ba = L"http://";
-	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
-		wsi += wcslen(ba);
-	ba = L"https://";
-	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
-		wsi += wcslen(ba);
-	ba = L"www.";
-	if (!wcsncmp(ba, &(*wsi), wcslen(ba)))
-		wsi += wcslen(ba);
-	for (wstring::iterator wsiEnd = webSiteURL.end(); wsi != wsiEnd; wsi++)
+	lpchar_t tmp[8];
+	lpwstring::iterator wsi = webSiteURL.begin();
+	const lpchar_t* ba = u"http://";
+	if (!lp_strncmp(ba, &(*wsi), lp_strlen(ba)))
+		wsi += lp_strlen(ba);
+	ba = u"https://";
+	if (!lp_strncmp(ba, &(*wsi), lp_strlen(ba)))
+		wsi += lp_strlen(ba);
+	ba = u"www.";
+	if (!lp_strncmp(ba, &(*wsi), lp_strlen(ba)))
+		wsi += lp_strlen(ba);
+	for (lpwstring::iterator wsiEnd = webSiteURL.end(); wsi != wsiEnd; wsi++)
 	{
-		if (*wsi == L'/')
-			epath += L"_";
-		else if (!iswalnum(*wsi) && *wsi != L'.')
+		if (*wsi == u'/')
+			epath += u"_";
+		else if (!iswalnum(*wsi) && *wsi != u'.')
 		{
-			wsprintf(tmp, L"_%x_", *wsi);
+			lp_wsprintf(tmp, u"_%x_", *wsi);
 			epath += tmp;
 		}
 		else
@@ -786,7 +789,7 @@ extern "C"
 */
 // Walk a Google Custom Search JSON document (yajl) and push items[].link /
 // items[].snippet pairs. Returns -1 on empty / parse failure, 0 otherwise.
-int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
+int extractGoogleWebSites(lpwstring jsonBuffer, vector <lpwstring>& webSites, vector <lpwstring>& snippets)
 {
 	LFS
 		/* null plug buffers */
@@ -802,7 +805,7 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 	yajl_val node = yajl_tree_parse((const char*)fileData.c_str(), errbuf, sizeof(errbuf));
 	/* parse error handling */
 	if (node == NULL) {
-		lplog(LOG_ERROR, L"Google Custom Search parse error (1):%s\n %S", jsonBuffer.c_str(), errbuf);
+		lplog(LOG_ERROR, u"Google Custom Search parse error (1):%s\n %S", jsonBuffer.c_str(), errbuf);
 		return -1;
 	}
 	/* ... and extract a nested value from the config file */
@@ -818,10 +821,10 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 			{
 				const char* idpath[] = { "snippet", (const char*)0 };
 				yajl_val vid = yajl_tree_get(v5, idpath, yajl_t_string);
-				wstring snippet;
+				lpwstring snippet;
 				if (YAJL_IS_STRING(vid))
 					mTW(YAJL_GET_STRING(vid), snippet);
-				wstring link;
+				lpwstring link;
 				const char* lpath[] = { "link", (const char*)0 };
 				vid = yajl_tree_get(v5, lpath, yajl_t_string);
 				if (YAJL_IS_STRING(vid))
@@ -859,18 +862,18 @@ int extractGoogleWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector
 }
 // easy testing code in main():
 	chdir(".."); // so that log files end up in the right place
-	int getBINGSearchJSON(int where, wstring object, wstring &buffer, wstring &filePathOut, int numWebSitesAskedFor, int index);
-	int extractBINGWebSites(wstring jsonBuffer, vector <wstring> &webSites, vector <wstring> &snippets);
+	int getBINGSearchJSON(int where, lpwstring object, lpwstring &buffer, lpwstring &filePathOut, int numWebSitesAskedFor, int index);
+	int extractBINGWebSites(lpwstring jsonBuffer, vector <lpwstring> &webSites, vector <lpwstring> &snippets);
 	int w=0, numWebSitesAskedFor=10, index=0;
-	wstring object = L"Paul Krugman", jsonBuffer, filePathOut;
-	vector <wstring> webSites, snippets;
+	lpwstring object = u"Paul Krugman", jsonBuffer, filePathOut;
+	vector <lpwstring> webSites, snippets;
 	if (!getBINGSearchJSON(w, object, jsonBuffer, filePathOut, numWebSitesAskedFor, index))
 		extractBINGWebSites(jsonBuffer, webSites, snippets);
 	if (argc >= 0)
 		return 0;
 */
 // Walk a Bing v7 JSON document and push webPages.value[].url / .snippet pairs.
-int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <wstring>& snippets)
+int extractBINGWebSites(lpwstring jsonBuffer, vector <lpwstring>& webSites, vector <lpwstring>& snippets)
 {
 	LFS
 		/* null plug buffers */
@@ -886,7 +889,7 @@ int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <
 	yajl_val node = yajl_tree_parse((const char*)fileData.c_str(), errbuf, sizeof(errbuf));
 	/* parse error handling */
 	if (node == NULL) {
-		lplog(LOG_ERROR, L"BING parse error:%s\n %S", jsonBuffer.c_str(), errbuf);
+		lplog(LOG_ERROR, u"BING parse error:%s\n %S", jsonBuffer.c_str(), errbuf);
 		return -1;
 	}
 	/* ... and extract a nested value from the config file */
@@ -902,10 +905,10 @@ int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <
 			{
 				const char* idpath[] = { "snippet", (const char*)0 };
 				yajl_val vid = yajl_tree_get(v5, idpath, yajl_t_string);
-				wstring snippet;
+				lpwstring snippet;
 				if (YAJL_IS_STRING(vid))
 					mTW(YAJL_GET_STRING(vid), snippet);
-				wstring link;
+				lpwstring link;
 				const char* upath[] = { "url", (const char*)0 };
 				vid = yajl_tree_get(v5, upath, yajl_t_string);
 				if (YAJL_IS_STRING(vid))
@@ -927,27 +930,27 @@ int extractBINGWebSites(wstring jsonBuffer, vector <wstring>& webSites, vector <
 // Count space-separated tokens that sit inside double quotes in a query string
 // (quotes toggle; '+' inside quotes counts as a word break). Used as a tie-break
 // so more-specified (quoted) queries sort first.
-int numWordsInQuotes(wstring& str)
+int numWordsInQuotes(lpwstring& str)
 {
 	LFS
 		bool inQuote = false;
 	int numWords = 0;
-	for (const wchar_t* ch = str.c_str(); *ch; ch++)
-		if (*ch == L'\"')
+	for (const lpchar_t* ch = str.c_str(); *ch; ch++)
+		if (*ch == u'\"')
 		{
 			if (inQuote)
 				numWords++;
 			inQuote = !inQuote;
 		}
 		else
-			if (*ch == L'+' && inQuote)
+			if (*ch == u'+' && inQuote)
 				numWords++;
 	return numWords;
 }
 
 // sort longest objects first - this gives more information to Google
 // if equal in length, the # of words in quotes wins.  This gives more specification.  
-bool sortWebQueryStrings(wstring i, wstring j) {
+bool sortWebQueryStrings(lpwstring i, lpwstring j) {
 	if (i.length() != j.length())
 		return i.length() > j.length();
 	return numWordsInQuotes(i) > numWordsInQuotes(j);
@@ -956,11 +959,11 @@ bool sortWebQueryStrings(wstring i, wstring j) {
 
 // Suffix every query with "+<semanticSuggestion>" (a proximity-map neighbour
 // such as a show name) so the next Google/Bing pass is more specific.
-void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring>& webSearchQueryStrings, wstring semanticSuggestion)
+void cQuestionAnswering::enhanceWebSearchQueries(vector <lpwstring>& webSearchQueryStrings, lpwstring semanticSuggestion)
 {
 	LFS
-		wstring ss = L"+" + semanticSuggestion;
-	for (vector <wstring>::iterator wqsi = webSearchQueryStrings.begin(), wqsiEnd = webSearchQueryStrings.end(); wqsi != wqsiEnd; wqsi++)
+		lpwstring ss = u"+" + semanticSuggestion;
+	for (vector <lpwstring>::iterator wqsi = webSearchQueryStrings.begin(), wqsiEnd = webSearchQueryStrings.end(); wqsi != wqsiEnd; wqsi++)
 	{
 		wqsi->append(ss);
 	}
@@ -970,10 +973,10 @@ void cQuestionAnswering::enhanceWebSearchQueries(vector <wstring>& webSearchQuer
 // append subject, tensed verb, object, and (if the prep is certain) prep+object.
 // Each appendObject call fans the vector out. Unquoted copies get a quoted
 // twin unless the object was the WH-span (noQuotes). Sorted longest-first.
-void cQuestionAnswering::getWebSearchQueries(cSource* questionSource, cSyntacticRelationGroup* parentSRG, vector <wstring>& webSearchQueryStrings)
+void cQuestionAnswering::getWebSearchQueries(cSource* questionSource, cSyntacticRelationGroup* parentSRG, vector <lpwstring>& webSearchQueryStrings)
 {
 	LFS
-		webSearchQueryStrings.push_back(L"");
+		webSearchQueryStrings.push_back(u"");
 	questionSource->appendObject(parentSRG->questionType, parentSRG->whereQuestionType, webSearchQueryStrings, parentSRG->whereSubject);
 	if (parentSRG->whereVerb >= 0)
 		questionSource->appendVerb(webSearchQueryStrings, parentSRG->whereVerb);
@@ -989,27 +992,27 @@ void cQuestionAnswering::getWebSearchQueries(cSource* questionSource, cSyntactic
 	{
 		int webSearchQueryStringsSize = webSearchQueryStrings.size();
 		for (int I = 0; I < webSearchQueryStringsSize; I++)
-			if (webSearchQueryStrings[I].find(L"\"") == wstring::npos)
-				webSearchQueryStrings.push_back(L"\"" + webSearchQueryStrings[I] + L"\"");
+			if (webSearchQueryStrings[I].find(u"\"") == lpwstring::npos)
+				webSearchQueryStrings.push_back(u"\"" + webSearchQueryStrings[I] + u"\"");
 	}
 	sort(webSearchQueryStrings.begin(), webSearchQueryStrings.end(), sortWebQueryStrings);
 	for (unsigned int I = 0; I < webSearchQueryStrings.size(); I++)
-		lplog(LOG_WHERE, L"%d:webSearchQueryStrings %s", I, webSearchQueryStrings[I].c_str());
+		lplog(LOG_WHERE, u"%d:webSearchQueryStrings %s", I, webSearchQueryStrings[I].c_str());
 
 }
 
 // Copy qo into qlo with every '"' removed. Used to collapse quoted/unquoted
 // twins of the same query so we do not issue both once enough hits exist.
-wstring quoteLess(wstring& qo, wstring& qlo)
+lpwstring quoteLess(lpwstring& qo, lpwstring& qlo)
 {
 	LFS
 		qlo = qo;
-	qlo.erase(std::remove(qlo.begin(), qlo.end(), L'\"'), qlo.end());
+	qlo.erase(std::remove(qlo.begin(), qlo.end(), u'\"'), qlo.end());
 	return qlo;
 }
 
 int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
-	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension);
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, lpwstring specialExtension);
 
 // For each queued path, skip it if a current-version SourceCache already exists;
 // otherwise INSERT a REQUEST_TYPE row (generateParseRequestSources). If more than
@@ -1022,42 +1025,42 @@ int cQuestionAnswering::spinParses(MYSQL& mysql, vector <cSearchSource>& accumul
 	int generatedRequests = 0;
 	for (vector <cSearchSource>::iterator pri = accumulatedParseRequests.begin(), priEnd = accumulatedParseRequests.end(); pri != priEnd; pri++)
 	{
-		wstring path = pri->pathInCache + L".SourceCache";
+		lpwstring path = pri->pathInCache + u".SourceCache";
 		bool processOldFile = false;
-		if (!_waccess(path.c_str(), 0))
+		if (!lp_waccess(path.c_str(), 0))
 		{
 			processOldFile = true;
-			int fd, errorCode = _wsopen_s(&fd, path.c_str(), O_RDONLY | O_BINARY, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+			int fd = lp_wopen(path.c_str(), O_RDONLY | O_BINARY, _S_IREAD | _S_IWRITE), errorCode = (fd < 0 ? errno : 0);
 			if (errorCode == 0)
 			{
 				int sourceVersion = 0, numBytes = -2;
 				if ((numBytes = ::read(fd, &sourceVersion, sizeof(sourceVersion))) == 0)
 					sourceVersion = SOURCE_VERSION;
-				_close(fd);
+				::close(fd);
 				if (sourceVersion == SOURCE_VERSION)
 					processOldFile = false;
 				else
-					lplog(LOG_WHERE, L"reparse of %s (%d) [3]?", path.c_str(), sourceVersion);
+					lplog(LOG_WHERE, u"reparse of %s (%d) [3]?", path.c_str(), sourceVersion);
 				if (sourceVersion == 0)
 				{
-					lplog(LOG_WHERE, L"reparse of %s (%d)?", path.c_str(), numBytes);
+					lplog(LOG_WHERE, u"reparse of %s (%d)?", path.c_str(), numBytes);
 				}
 			}
 			else
 			{
-				lplog(LOG_WHERE, L"reparse of %s (%d) [2]?", path.c_str(), errno);
+				lplog(LOG_WHERE, u"reparse of %s (%d) [2]?", path.c_str(), errno);
 				if (errno == EACCES)
-					_wremove(path.c_str());
+					lp_wremove(path.c_str());
 			}
 		}
-		if (processOldFile || (_waccess(path.c_str(), 0) && !rejectPath(pri->pathInCache.c_str())))
+		if (processOldFile || (lp_waccess(path.c_str(), 0) && !rejectPath(pri->pathInCache.c_str())))
 		{
 			generateParseRequestSources(mysql, pri);
 			generatedRequests++;
 		}
 	}
 	if (generatedRequests > 1)
-		return startProcesses(mysql, cSource::REQUEST_TYPE, 0, 0, -1, -1, cSource::REQUEST_TYPE, 6, 5, false, true, true, true, false, false, L"");
+		return startProcesses(mysql, cSource::REQUEST_TYPE, 0, 0, -1, -1, cSource::REQUEST_TYPE, 6, 5, false, true, true, true, false, false, u"");
 	else
 		return -1;
 }
@@ -1068,15 +1071,15 @@ extern int limitProcessingForProfiling;
 // the full page. Dedupes by path. After a query that returned >2 hits, skip
 // remaining twins that differ only by quotes. Advances the offset. Returns the
 // largest hit-list size seen (used as "last page?" when < 10).
-int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset, vector <cSearchSource>& accumulatedParseRequests)
+int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <lpwstring>& webSearchQueryStrings, int& webSearchQueryStringOffset, vector <cSearchSource>& accumulatedParseRequests)
 {
 	LFS
 		int maxWebSitesFound = -1;
-	set <wstring> pathsAccumulated;
-	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
+	set <lpwstring> pathsAccumulated;
+	for (vector <lpwstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
 	{
-		wstring object = *oi, jsonBuffer, filePathOut;
-		vector <wstring> webSites, snippets;
+		lpwstring object = *oi, jsonBuffer, filePathOut;
+		vector <lpwstring> webSites, snippets;
 		if (googleSearch)
 		{
 			getGoogleSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
@@ -1088,41 +1091,41 @@ int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentS
 				extractBINGWebSites(jsonBuffer, webSites, snippets);
 		}
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
-		for (vector <wstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++)
+		for (vector <lpwstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++)
 		{
 			// prevent searching wikipedia as that has already been done.  This will also include canadian and other wikipedias
-			if (wsi->find(L"wikipedia.org/") != wstring::npos)
+			if (wsi->find(u"wikipedia.org/") != lpwstring::npos)
 				continue;
-			wstring webSiteBuffer, epath, headers;
+			lpwstring webSiteBuffer, epath, headers;
 			hashWebSiteURL(*wsi, epath);
 			cSearchSource pr;
 			int snippetLocation = -1;
 			if (!ssi->empty())
 			{
-				wchar_t path[1024];
-				int pathlen = _snwprintf(path, _countof(path), L"%s\\webSearchCache", getWebSearchCacheDir().c_str()) + 1;
-				if (_wmkdir(path) < 0 && errno == ENOENT)
-					lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-				_snwprintf(path, _countof(path), L"%s\\webSearchCache\\_%s", getWebSearchCacheDir().c_str(), epath.c_str());
+				lpchar_t path[1024];
+				int pathlen = lp_snprintf(path, (sizeof(path)/sizeof((path)[0])), u"%s\\webSearchCache", getWebSearchCacheDir().c_str()) + 1;
+				if (lp_wmkdir(path) < 0 && errno == ENOENT)
+					lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
+				lp_snprintf(path, (sizeof(path)/sizeof((path)[0])), u"%s\\webSearchCache\\_%s", getWebSearchCacheDir().c_str(), epath.c_str());
 				convertIllegalChars(path + pathlen);
 				distributeToSubDirectories(path, pathlen, true);
 				path[MAX_PATH - 28] = 0; // extensions
-				wcscat(path, L".snippet.txt");
-				if ((!_waccess(path, 0) || flushString(*ssi, path) >= 0) && pathsAccumulated.find(path) == pathsAccumulated.end())
+				lp_strcpy((path) + lp_strlen(path), u".snippet.txt");
+				if ((!lp_waccess(path, 0) || flushString(*ssi, path) >= 0) && pathsAccumulated.find(path) == pathsAccumulated.end())
 				{
 					pr.isSnippet = true;
 					pr.pathInCache = path;
 					pr.fullWebPath = *wsi;
 					pr.skipFullPath = false;
 					pr.hasCorrespondingSnippet = false;
-					pr.fullWebPath += L" abstract";
+					pr.fullWebPath += u" abstract";
 					snippetLocation = accumulatedParseRequests.size();
 					pr.fullPathIndex = -1;
 					accumulatedParseRequests.push_back(pr);
 					pathsAccumulated.insert(path);
 				}
 			}
-			if (cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0 && pathsAccumulated.find(filePathOut) == pathsAccumulated.end())
+			if (cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, u"webSearchCache", filePathOut, headers, index, true, false) == 0 && pathsAccumulated.find(filePathOut) == pathsAccumulated.end())
 			{
 				pr.isSnippet = false;
 				pr.pathInCache = filePathOut;
@@ -1136,7 +1139,7 @@ int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentS
 		}
 		if (webSites.size() > 2)
 		{
-			wstring quoteLessObject, qlo;
+			lpwstring quoteLessObject, qlo;
 			quoteLess(*oi, quoteLessObject);
 			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, webSearchQueryStringOffset++);
 			oi--;
@@ -1148,7 +1151,7 @@ int cQuestionAnswering::accumulateParseRequests(cSyntacticRelationGroup* parentS
 // processPath + analyzeQuestionFromSource each queued snippet/page. A snippet
 // whose best matchSum is >= 24 marks its corresponding full page skipFullPath
 // so we do not re-parse the article. Always returns 0.
-int cQuestionAnswering::analyzeAccumulatedRequests(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, vector <cSearchSource>& accumulatedParseRequests)
+int cQuestionAnswering::analyzeAccumulatedRequests(cSource* questionSource, lpchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, vector <cSearchSource>& accumulatedParseRequests)
 {
 	LFS
 		int check = answerSRGs.size();
@@ -1171,8 +1174,8 @@ int cQuestionAnswering::analyzeAccumulatedRequests(cSource* questionSource, wcha
 
 // Parallel web-search pass: accumulateParseRequests, spin child parsers, then
 // score the resulting caches. Returns the max hit-list size (see Serial).
-int cQuestionAnswering::webSearchForQueryParallel(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
-	vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
+int cQuestionAnswering::webSearchForQueryParallel(cSource* questionSource, lpchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+	vector <lpwstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
 {
 	vector <cSearchSource> accumulatedParseRequests;
 	int maxWebSitesFound = accumulateParseRequests(parentSRG, webSitesAskedFor, index, googleSearch, webSearchQueryStrings, webSearchQueryStringOffset, accumulatedParseRequests);
@@ -1185,15 +1188,15 @@ int cQuestionAnswering::webSearchForQueryParallel(cSource* questionSource, wchar
 // snippet immediately, and only download/parse the full page if the snippet
 // scored below 24. Same quote-twin skip as the parallel path. limitProcessingForProfiling
 // aborts after the first full page. Returns the max hit-list size.
-int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
-	vector <wstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
+int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, lpchar_t* derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+	vector <lpwstring>& webSearchQueryStrings, int& webSearchQueryStringOffset)
 {
 	LFS
 		int maxWebSitesFound = -1;
-	for (vector <wstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
+	for (vector <lpwstring>::iterator oi = webSearchQueryStrings.begin() + webSearchQueryStringOffset, oiEnd = webSearchQueryStrings.end(); oi != oiEnd; oi++, webSearchQueryStringOffset++)
 	{
-		wstring object = *oi, jsonBuffer, filePathOut;
-		vector <wstring> webSites, snippets;
+		lpwstring object = *oi, jsonBuffer, filePathOut;
+		vector <lpwstring> webSites, snippets;
 		if (googleSearch)
 		{
 			getGoogleSearchJSON(parentSRG->where, object, jsonBuffer, filePathOut, webSitesAskedFor, index);
@@ -1206,10 +1209,10 @@ int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, wchar_t
 		}
 		maxWebSitesFound = max(maxWebSitesFound, (signed)webSites.size());
 		int I = 0;
-		for (vector <wstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++, I++)
+		for (vector <lpwstring>::iterator ssi = snippets.begin(), wsi = webSites.begin(), ssiEnd = snippets.end(), wsiEnd = webSites.end(); ssi != ssiEnd; ssi++, wsi++, I++)
 		{
 			int sMaxAnswer = -1;
-			wstring webSiteBuffer, epath, headers;
+			lpwstring webSiteBuffer, epath, headers;
 			hashWebSiteURL(*wsi, epath);
 			//int check = answerSRGs.size();
 			if (!ssi->empty())
@@ -1217,14 +1220,14 @@ int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, wchar_t
 				cSource* source = NULL;
 				if (processSnippet(questionSource, *ssi, epath, source, parseOnly) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource, derivation, *wsi + L" abstract", source, parentSRG, answerSRGs, sMaxAnswer, true);
+					analyzeQuestionFromSource(questionSource, derivation, *wsi + u" abstract", source, parentSRG, answerSRGs, sMaxAnswer, true);
 				}
 			}
 			maxAnswer = max(maxAnswer, sMaxAnswer);
-			if (sMaxAnswer < 24 && cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, L"webSearchCache", filePathOut, headers, index, true, false) == 0)
+			if (sMaxAnswer < 24 && cInternet::getWebPath(parentSRG->where, *wsi, webSiteBuffer, epath, u"webSearchCache", filePathOut, headers, index, true, false) == 0)
 			{
 				cSource* source = NULL;
-				if (processPath(questionSource, (wchar_t*)filePathOut.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
+				if (processPath(questionSource, (lpchar_t*)filePathOut.c_str(), source, cSource::WEB_SEARCH_SOURCE_TYPE, 100, parseOnly) >= 0)
 				{
 					analyzeQuestionFromSource(questionSource, derivation, *wsi, source, parentSRG, answerSRGs, maxAnswer, true);
 					if (limitProcessingForProfiling)
@@ -1234,7 +1237,7 @@ int cQuestionAnswering::webSearchForQuerySerial(cSource* questionSource, wchar_t
 		}
 		if (webSites.size() > 2)
 		{
-			wstring quoteLessObject, qlo;
+			lpwstring quoteLessObject, qlo;
 			quoteLess(*oi, quoteLessObject);
 			for (oi++; oi != oiEnd && quoteLessObject == quoteLess(*oi, qlo); oi++, webSearchQueryStringOffset++);
 			oi--;

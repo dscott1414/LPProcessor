@@ -30,10 +30,14 @@
 			are skipped.
 		- currentSpeakerGroup is a cSource member; this mutates it as a cursor.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -100,5 +104,5 @@ void cSource::identifyConversations()
 		// implemented, so the never-populated cCohereInfo-keyed locals that used to
 		// sit here were removed as dead code; this comment records the design intent.
 	}
-	//lplog(L"numQuotes=%d. numQuotesInConversations=%d. numConversations=%d.",numQuotes,numQuotesInConversations,numConversations);
+	//lplog(u"numQuotes=%d. numQuotesInConversations=%d. numConversations=%d.",numQuotes,numQuotesInConversations,numConversations);
 }

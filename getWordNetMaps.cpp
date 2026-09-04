@@ -18,7 +18,7 @@
 		- clearWNMaps - empties the six in-memory maps
 
 	Dependencies:
-		Words lexicon (query by string); tmalloc/tfree; POSIX-style _wopen/write.
+		Words lexicon (query by string); tmalloc/tfree; POSIX-style lp_wopen/write.
 
 	Notes / gotchas:
 		writeWNMaps heap-allocates its 10MB scratch buffer (tmalloc/tfree) rather than
@@ -27,10 +27,14 @@
 		already in the lexicon are dropped on read, so the cache is only useful after the
 		word table is loaded.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -81,7 +85,7 @@ int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordM
 	if (!copy(count, buffer, where, bufferlen)) return -1;
 	for (unsigned int I = 0; I < count && where < bufferlen; I++)
 	{
-		wstring word;
+		lpwstring word;
 		if (!copy(word, buffer, where, bufferlen)) return -1;
 		unsigned int wcount;
 		if (!copy(wcount, buffer, where, bufferlen)) return -1;
@@ -89,7 +93,7 @@ int cSource::readWNMap(map <tIWMM, vector <tIWMM>, cSourceWordInfo::cRMap::wordM
 		tIWMM wi;
 		for (unsigned int w = 0; w < wcount && where < bufferlen; w++)
 		{
-			wstring wword;
+			lpwstring wword;
 			if (!copy(wword, buffer, where, bufferlen)) return -1;
 			if ((wi = Words.query(wword)) != Words.end())
 				wnv.push_back(wi);
@@ -129,7 +133,7 @@ int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare 
 	if (!copy(count, buffer, where, bufferlen)) return -1;
 	for (unsigned int I = 0; I < count && where < bufferlen; I++)
 	{
-		wstring word;
+		lpwstring word;
 		if (!copy(word, buffer, where, bufferlen)) return -1;
 		tIWMM w = Words.query(word);
 		unsigned int flags;
@@ -143,11 +147,11 @@ int cSource::readGWNMap(map <tIWMM, int, cSourceWordInfo::cRMap::wordMapCompare 
 // Writes all six WN maps plus physicalObjectByWN flags to path+".WNCache".
 // Returns false if the file cannot be created or any write fails; fd is closed and the
 // scratch buffer freed on every path.
-bool cSource::writeWNMaps(wstring path)
+bool cSource::writeWNMaps(lpwstring path)
 {
 	LFS
-		path += L".WNCache";
-	int fd = _wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
+		path += u".WNCache";
+	int fd = lp_wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (fd < 0) return false;
 
 	char* buffer = (char*)tmalloc(MAX_BUF);
@@ -168,7 +172,7 @@ bool cSource::writeWNMaps(wstring path)
 			if (!flush(fd, buffer, where)) { tfree(MAX_BUF, buffer); close(fd); return false; }
 		}
 	}
-	wstring empty;
+	lpwstring empty;
 	if (!copy(buffer, empty, where, MAX_BUF))
 	{
 		tfree(MAX_BUF, buffer);
@@ -200,14 +204,14 @@ void cSource::clearWNMaps()
 // Loads path+".WNCache" into the six maps and ORs physical-object flags onto Words.
 // Returns false if the file is missing or any section is corrupt; the tmalloc'd file
 // buffer is tfree'd on every path.
-bool cSource::readWNMaps(wstring path)
+bool cSource::readWNMaps(lpwstring path)
 {
 	LFS
-		path += L".WNCache";
-	IOHANDLE fd = _wopen(path.c_str(), O_RDWR | O_BINARY);
+		path += u".WNCache";
+	IOHANDLE fd = lp_wopen(path.c_str(), O_RDWR | O_BINARY);
 	if (fd < 0) return false;
 	void* buffer;
-	int bufferlen = filelength(fd);
+	int bufferlen = lp_filelength(fd);
 	buffer = (void*)tmalloc(bufferlen + 10);
 	::read(fd, buffer, bufferlen);
 	close(fd);
@@ -218,7 +222,7 @@ bool cSource::readWNMaps(wstring path)
 	if (readWNMap(wnAntonymsAdjectiveMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
 	if (readGWNMap(wnGenderAdjectiveMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
 	if (readGWNMap(wnGenderNounMap, buffer, where, bufferlen) < 0) { tfree(bufferlen + 10, buffer); return false; }
-	wstring word;
+	lpwstring word;
 	int flags;
 	while (where < bufferlen)
 	{

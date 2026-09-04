@@ -49,10 +49,14 @@
 		- In-quote vs narration is mutually exclusive here: entering a
 		  secondary quote clears inPrimaryQuote.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -60,17 +64,17 @@
 
 // Append speaker s (objects index) to m[where].objectMatches with salience sf,
 // set the one-token object span, and record a location on objects[s].
-void cSource::pushSpeaker(int where, int s, int sf, const wchar_t* fromWhere)
+void cSource::pushSpeaker(int where, int s, int sf, const lpchar_t* fromWhere)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	m[where].objectMatches.push_back(cOM(s, sf));
 	m[where].beginObjectPosition = where;
 	m[where].endObjectPosition = where + 1;
 	objects[s].locations.push_back(cObject::cLocation(where));
 	objects[s].updateFirstLocation(where);
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:FPP %s of %s", where, fromWhere, objectString(s, tmpstr, true).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:FPP %s of %s", where, fromWhere, objectString(s, tmpstr, true).c_str());
 }
 
 // Bind the pronoun at mI to currentSpeaker (I/me) and/or previousSpeaker
@@ -78,18 +82,18 @@ void cSource::pushSpeaker(int where, int s, int sf, const wchar_t* fromWhere)
 // plus leftover embedded-story speakers when the quote is a shared-experience
 // flashback. Sets flagObjectResolved immediately (even if nothing is pushed).
 // Returns false if already resolved (secondary speaker); otherwise true.
-bool cSource::matchObjectToSpeakers(int mI, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker, int inflectionFlags, unsigned __int64 quoteFlags, int lastEmbeddedStoryBegin)
+bool cSource::matchObjectToSpeakers(int mI, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker, int inflectionFlags, uint64_t quoteFlags, int lastEmbeddedStoryBegin)
 {
 	LFS
 		if (m[mI].flags & cWordMatch::flagObjectResolved) return false; // if secondary speaker
 	m[mI].flags |= cWordMatch::flagObjectResolved;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	// PLURAL: we, us, our, ourselves, ours
 	if ((inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) == (FIRST_PERSON | SECOND_PERSON))
 	{
 		m[mI].objectMatches.insert(m[mI].objectMatches.begin(), currentSpeaker.begin(), currentSpeaker.end());
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:FPP (1) of %s", mI, objectString(currentSpeaker, tmpstr, true).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:FPP (1) of %s", mI, objectString(currentSpeaker, tmpstr, true).c_str());
 		// if embedded and past, search for grouping with the speaker
 		if ((m[mI].objectRole & (IN_EMBEDDED_STORY_OBJECT_ROLE | IN_PRIMARY_QUOTE_ROLE | NONPRESENT_OBJECT_ROLE)) == (IN_EMBEDDED_STORY_OBJECT_ROLE | IN_PRIMARY_QUOTE_ROLE | NONPRESENT_OBJECT_ROLE) &&
 			!(quoteFlags & cWordMatch::flagSecondEmbeddedStory) && currentEmbeddedSpeakerGroup >= 0 &&
@@ -98,27 +102,27 @@ bool cSource::matchObjectToSpeakers(int mI, vector <cOM>& currentSpeaker, vector
 			for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].speakers.end(); si != siEnd; si++)
 				if (in(*si, currentSpeaker) == currentSpeaker.end() && in(*si, previousSpeaker) == previousSpeaker.end() &&
 					objects[*si].originalLocation<mI && locationBefore(*si, mI)>lastEmbeddedStoryBegin)
-					pushSpeaker(mI, *si, SALIENCE_THRESHOLD, L"(1)");
+					pushSpeaker(mI, *si, SALIENCE_THRESHOLD, u"(1)");
 			eliminateBodyObjectRedundancy(mI, m[mI].objectMatches);
 		}
 		else
 			for (vector <cOM>::iterator psi = previousSpeaker.begin(); psi != previousSpeaker.end(); psi++)
 				if (in(psi->object, currentSpeaker) == currentSpeaker.end())
-					pushSpeaker(mI, psi->object, psi->salienceFactor, L"(2)");
+					pushSpeaker(mI, psi->object, psi->salienceFactor, u"(2)");
 		return true;
 	}
 	// currentSpeaker - SINGULAR: I, me, my, myself, mine
 	if (inflectionFlags & FIRST_PERSON)
 		for (vector <cOM>::iterator s = currentSpeaker.begin(), sEnd = currentSpeaker.end(); s != sEnd; s++)
 			if (objects[s->object].plural == ((inflectionFlags & PLURAL) == PLURAL || (inflectionFlags & PLURAL_OWNER) == PLURAL_OWNER))
-				pushSpeaker(mI, s->object, s->salienceFactor, L"(3)");
+				pushSpeaker(mI, s->object, s->salienceFactor, u"(3)");
 	// lastSpeaker - SINGULAR: yourself PLURAL:our, your, thy, you, they, thou, you, thee, yourselves, yours, thine
 	// some of the pronouns are both singular and plural
 	if (inflectionFlags & SECOND_PERSON)
 		for (vector <cOM>::iterator s = previousSpeaker.begin(), sEnd = previousSpeaker.end(); s != sEnd; s++)
 			if ((objects[s->object].plural && ((inflectionFlags & PLURAL) == PLURAL || (inflectionFlags & PLURAL_OWNER) == PLURAL_OWNER)) ||
 				(!objects[s->object].plural && ((inflectionFlags & SINGULAR) == SINGULAR || (inflectionFlags & SINGULAR_OWNER) == SINGULAR_OWNER)))
-				pushSpeaker(mI, s->object, s->salienceFactor, L"(4)");
+				pushSpeaker(mI, s->object, s->salienceFactor, u"(4)");
 	return true;
 }
 
@@ -138,8 +142,8 @@ void cSource::removeSpeakers(int mI, vector <cOM>& speakers)
 		{
 			if (debugTrace.traceSpeakerResolution)
 			{
-				wstring tmpstr;
-				lplog(LOG_RESOLUTION, L"%06d:erased match of %s", mI, objectString(*I, tmpstr, true).c_str());
+				lpwstring tmpstr;
+				lplog(LOG_RESOLUTION, u"%06d:erased match of %s", mI, objectString(*I, tmpstr, true).c_str());
 			}
 			I = m[mI].objectMatches.erase(I);
 		}
@@ -161,8 +165,8 @@ void cSource::removeSpeakers(int mI, set <int>& speakers)
 			{
 				if (debugTrace.traceSpeakerResolution)
 				{
-					wstring tmpstr;
-					lplog(LOG_RESOLUTION, L"%06d:erased match of %s", mI, objectString(*I, tmpstr, true).c_str());
+					lpwstring tmpstr;
+					lplog(LOG_RESOLUTION, u"%06d:erased match of %s", mI, objectString(*I, tmpstr, true).c_str());
 				}
 				I = m[mI].objectMatches.erase(I);
 			}
@@ -177,7 +181,7 @@ void cSource::removeSpeakers(int mI, set <int>& speakers)
 // quote's objectMatches / audienceObjectMatches. For "you are a young
 // couple" copies the subject's speaker onto the IS_OBJECT. May call
 // preferSubgroupMatch when the speaker group can be split.
-void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags, int lastEmbeddedStoryBegin, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker)
+void cSource::resolveFirstSecondPersonPronoun(int where, uint64_t flags, int lastEmbeddedStoryBegin, vector <cOM>& currentSpeaker, vector <cOM>& previousSpeaker)
 {
 	LFS
 		if (currentSpeaker.size() == 1 && currentSpeaker[0].object == -1) return; // Quoted String
@@ -228,7 +232,7 @@ void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags,
 		{
 			// THIRD_PERSON:  "her","his","its","their","he","she","it","they","him","her","them" - restrict to all non-speakers
 			//                "his","hers","theirs"
-			if ((inflectionFlags & THIRD_PERSON) && m[where].word->first != L"one") // one is totally generic and should not be restricted
+			if ((inflectionFlags & THIRD_PERSON) && m[where].word->first != u"one") // one is totally generic and should not be restricted
 			{
 				int saveObject = -1;
 				if (m[where].getObject() >= 0 &&
@@ -271,13 +275,13 @@ void cSource::resolveFirstSecondPersonPronoun(int where, unsigned __int64 flags,
 		{
 			m[where].objectMatches.insert(m[where].objectMatches.begin(), currentSpeaker.begin(), currentSpeaker.end());
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Resolved IS_OBJECT to speaker [relSubject@%d].", where, m[where].relSubject);
+				lplog(LOG_RESOLUTION, u"%06d:Resolved IS_OBJECT to speaker [relSubject@%d].", where, m[where].relSubject);
 		}
 		if ((m[m[where].relSubject].word->second.inflectionFlags & SECOND_PERSON) != 0 && !intersect(where, previousSpeaker, allIn, oneIn))
 		{
 			m[where].objectMatches.insert(m[where].objectMatches.begin(), previousSpeaker.begin(), previousSpeaker.end());
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Resolved IS_OBJECT to audience [relSubject@%d].", where, m[where].relSubject);
+				lplog(LOG_RESOLUTION, u"%06d:Resolved IS_OBJECT to audience [relSubject@%d].", where, m[where].relSubject);
 		}
 	}
 	bool singular = (inflectionFlags & (SINGULAR | SINGULAR_OWNER)) != 0, plural = (inflectionFlags & (PLURAL | PLURAL_OWNER)) != 0;
@@ -401,7 +405,7 @@ void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bo
 	vector <cWordMatch>::iterator &lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator &lastOpeningSecondaryQuoteIM,
 	int & lastEmbeddedStoryBegin)
 {
-	if (im->word->first == L"�" && !(im->flags & cWordMatch::flagQuotedString))
+	if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		if (im->flags & cWordMatch::flagEmbeddedStoryBeginResolveSpeakers)
 			lastEmbeddedStoryBegin = where;
@@ -432,21 +436,21 @@ void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bo
 			}
 		}
 	}
-	else if (im->word->first == L"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		lastOpeningSecondaryQuoteIM = lastOpeningPrimaryQuoteIM = wmNULL;
 		lastOpeningPrimaryQuote = -1;
 		lastQuote = -1;
 		inSecondaryQuote = inPrimaryQuote = false;
 	}
-	else if (im->word->first == L"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		lastOpeningSecondaryQuoteIM = im;
 		lastOpeningSecondaryQuote = where;
 		inSecondaryQuote = true;
 		inPrimaryQuote = false;
 	}
-	else if (im->word->first == L"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		inSecondaryQuote = false;
 		inPrimaryQuote = (lastOpeningPrimaryQuote >= 0);
@@ -504,9 +508,9 @@ void cSource::resolveFirstSecondMetaGroupObject(vector <cWordMatch>::iterator im
 			if (!(m[where].flags & cWordMatch::flagResolveMetaGroupByGender))
 				m[where].objectMatches.clear(); // also set in speakerResolution
 			vector <cOM> objectMatches;
-			wstring tmpstr, tmpstr2;
+			lpwstring tmpstr, tmpstr2;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:RESOLVING metagroup %s%s", where, objectString(im->getObject(), tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:RESOLVING metagroup %s%s", where, objectString(im->getObject(), tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str());
 			resolveMetaGroupByAssociation(where, (im->objectRole & IN_PRIMARY_QUOTE_ROLE) != 0, objectMatches, objects[im->getObject()].getOwnerWhere());
 			if (objectMatches.size()) im->objectMatches = objectMatches;
 		}
@@ -610,9 +614,9 @@ void cSource::processSecondaryQuotes(const int where, int &sqr, vector <int>& se
 			objects[m[where].audienceObjectMatches[J].object].locations.push_back(where);
 			objects[m[where].audienceObjectMatches[J].object].updateFirstLocation(where);
 		}
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%d-%d:Secondary speaker resolution %d:%s audience %d:%s.",
+			lplog(LOG_RESOLUTION, u"%d-%d:Secondary speaker resolution %d:%s audience %d:%s.",
 				secondaryQuotesResolutions[sqr], secondaryQuotesResolutions[sqr + 1], secondaryQuotesResolutions[sqr + 2],
 				objectString(m[where].objectMatches, tmpstr, true).c_str(), secondaryQuotesResolutions[sqr + 3], objectString(m[where].audienceObjectMatches, tmpstr2, true).c_str());
 		sqr += 4;
@@ -672,7 +676,7 @@ void cSource::resolveFirstSecondPersonPronouns(vector <int>& secondaryQuotesReso
 			unMatchObjects(I, lastOpeningSecondaryQuoteIM->audienceObjectMatches, false);
 			if (m[I].getObject() != lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object &&
 				(m[I].objectMatches.empty() || lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object != m[I].objectMatches[0].object))
-				pushSpeaker(I, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].salienceFactor, L"(5)");
+				pushSpeaker(I, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].object, lastOpeningSecondaryQuoteIM->audienceObjectMatches[0].salienceFactor, u"(5)");
 		}
 		resolveUnquotedFirstSecondPronoun(im, inPrimaryQuote, inSecondaryQuote);
 		if ((im->getObject() >= 0 || im->getObject() < cObject::eOBJECTS::UNKNOWN_OBJECT) && (inPrimaryQuote || inSecondaryQuote))

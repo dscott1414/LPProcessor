@@ -1,4 +1,9 @@
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 /*
 	getMusicBrainz.h - MusicBrainz WS/2 result structs and lookup entry points
 
@@ -26,52 +31,52 @@
 // One MusicBrainz release (album) hit plus its artist/label/group metadata.
 typedef struct 
 {
-	wstring releaseId;
-	wstring title;
-	wstring status;
-	wstring artistId;
-	wstring artistName;
-	wstring releaseGroupId;
-	wstring releaseGroupType;
-	wstring date;
-	wstring country;
-	wstring labelName;
-	wstring labelId;
+	lpwstring releaseId;
+	lpwstring title;
+	lpwstring status;
+	lpwstring artistId;
+	lpwstring artistName;
+	lpwstring releaseGroupId;
+	lpwstring releaseGroupType;
+	lpwstring date;
+	lpwstring country;
+	lpwstring labelName;
+	lpwstring labelId;
 } mbInfoReleaseType;
 
 // One recording (track) plus the releases it appears on.
 typedef struct 
 {
-	wstring recordingId;
-	wstring title;
-	wstring artistId;
-	wstring artistName;
+	lpwstring recordingId;
+	lpwstring title;
+	lpwstring artistId;
+	lpwstring artistName;
 	vector <mbInfoReleaseType> releases;
 } mbInfoRecordingType;
 
 // One artist hit plus alias strings from the alias-list.
 typedef struct 
 {
-	wstring artistType;
-	wstring artistId;
-	wstring artistName;
-	vector <wstring> aliases;
+	lpwstring artistType;
+	lpwstring artistId;
+	lpwstring artistName;
+	vector <lpwstring> aliases;
 } mbInfoArtistType;
 
 // One label hit plus alias strings from the alias-list.
 typedef struct 
 {
-	wstring labelType;
-	wstring labelId;
-	wstring labelName;
-	vector <wstring> aliases;
+	lpwstring labelType;
+	lpwstring labelId;
+	lpwstring labelName;
+	vector <lpwstring> aliases;
 } mbInfoLabelType;
 
 // Query WS/2 for releases matching byWhatType:what; appends into mbTypes. Returns 0.
-int getReleases(wstring byWhatType,wstring what,vector <mbInfoReleaseType> &mbTypes, bool filterNameDuplicates = false);
+int getReleases(lpwstring byWhatType,lpwstring what,vector <mbInfoReleaseType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for recordings matching byWhatType:what; appends into mbTypes. Returns 0.
-int getRecordings(wstring byWhatType,wstring what,vector <mbInfoRecordingType> &mbTypes, bool filterNameDuplicates = false);
+int getRecordings(lpwstring byWhatType,lpwstring what,vector <mbInfoRecordingType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for artists matching byWhatType:what; appends into mbTypes. Returns 0.
-int getArtists(wstring byWhatType,wstring what,vector <mbInfoArtistType> &mbTypes, bool filterNameDuplicates = false);
+int getArtists(lpwstring byWhatType,lpwstring what,vector <mbInfoArtistType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for labels matching byWhatType:what; appends into mbTypes. Returns 0.
-int getLabels(wstring byWhatType,wstring what,vector <mbInfoLabelType> &mbTypes, bool filterNameDuplicates = false);
+int getLabels(lpwstring byWhatType,lpwstring what,vector <mbInfoLabelType> &mbTypes, bool filterNameDuplicates = false);

@@ -31,7 +31,7 @@
 			precedence trap that stored a 0/1 bool into an otherwise-unread `state`
 			local.  The `if` always evaluated correctly either way (removing the dead
 			assignment does not change behaviour) - only the dead store is gone.
-		- BOM stripping uses wmemmove(s, s+1, wcslen(s+1)+1) in both readStemRules
+		- BOM stripping uses wmemmove(s, s+1, lp_strlen(s+1)+1) in both readStemRules
 			and readPrefixRules (readPrefixRules used to use an overlapping
 			byte-count memcpy that corrupted the rest of the line; fixed to match
 			readStemRules).
@@ -55,16 +55,21 @@
 /* 8/10/2003 - AZ - modified stem() to return the rule trace */
 /* 10/10/2004 - DS - modified program to use more C++ */
 
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
 #include <fcntl.h>
 #include "word.h"
+#include "source.h" // batch B5: escaped(), previously reached via another header
 #include "profile.h"
 #include "paice.h"
 #include "mysqldb.h"
@@ -84,7 +89,7 @@ unordered_set<int> cStemmer::unacceptableCombinationForms;
 // On apply, pushes a copy of 'rule' (with text/trail filled) onto rulesUsed.
 // 'rule' and 'trail' are taken by value.
 /* * * APPLYRULE()  * * * * * * * */
-int cStemmer::applyStemRule(wstring word, cSuffixRule rule, vector <cSuffixRule>& rulesUsed, cIntArray trail)
+int cStemmer::applyStemRule(lpwstring word, cSuffixRule rule, vector <cSuffixRule>& rulesUsed, cIntArray trail)
 {
 	LFS
 		/* Apply the rule r to word,leaving results in word.Return stop,continue */
@@ -128,7 +133,7 @@ int cStemmer::applyStemRule(wstring word, cSuffixRule rule, vector <cSuffixRule>
 	rule.trail = trail;
 	rulesUsed.push_back(rule);
 #ifdef LOG_DICTIONARY
-	lplog(L"rule #%d applied to %s resulting in %s trail=%s.", rule.rulenum, word.c_str(), rule.text.c_str(), trail.concatToString().c_str());
+	lplog(u"rule #%d applied to %s resulting in %s trail=%s.", rule.rulenum, word.c_str(), rule.text.c_str(), trail.concatToString().c_str());
 #endif
 	return (rule.cont) ? s_continue : s_stop;/* If continue flag is set,return cont */
 }
@@ -136,18 +141,18 @@ int cStemmer::applyStemRule(wstring word, cSuffixRule rule, vector <cSuffixRule>
 // OR together every InflectionTypes bit whose name occurs as a whole word
 // in 'inflection' (space- or NUL-terminated), searching the four
 // noun/verb/adjective/adverb maps.  Returns 0 if inflection is empty.
-int cStemmer::getInflectionNum(wchar_t const* inflection)
+int cStemmer::getInflectionNum(lpchar_t const* inflection)
 {
 	LFS
 		if (!inflection[0]) return 0;
 	int temp = 0;
-	const wchar_t* ch;
+	const lpchar_t* ch;
 	tInflectionMap* inflectionMaps[] = { nounInflectionMap,verbInflectionMap,adjectiveInflectionMap,adverbInflectionMap };
 	for (int map = 0; map < 4; map++)
 		for (int I = 0; inflectionMaps[map][I].num >= 0; I++)
 		{
-			const wchar_t* name = inflectionMaps[map][I].name;
-			if ((ch = wcsstr(inflection, name)) && (*(ch + wcslen(name)) == L' ' || !*(ch + wcslen(name))))
+			const lpchar_t* name = inflectionMaps[map][I].name;
+			if ((ch = lp_strstr(inflection, name)) && (*(ch + lp_strlen(name)) == u' ' || !*(ch + lp_strlen(name))))
 				temp |= inflectionMaps[map][I].num;
 		}
 	return temp;
@@ -163,66 +168,69 @@ int cStemmer::readStemRules(void)
 		/* Format is: keystr,repstr,flags where keystr and repstr are strings,and */
 		/* flags are:"protect","intact","continue" (without the inverted commas in the actual file).  */
 
-		FILE* fp = _wfopen(L"source\\lists\\suffixRules.txt", L"rb");
+		FILE* fp = lp_wfopen(u"source\\lists\\suffixRules.txt", "rb");
 	if (!fp)
 	{
-		lplog(LOG_FATAL_ERROR, L"Suffix file not found.");
+		lplog(LOG_FATAL_ERROR, u"Suffix file not found.");
 		return NO_SUFFIX_RULES_FILE;
 	}
-	wchar_t s[maxlinelength];
+	lpchar_t s[maxlinelength];
 	cSuffixRule temp;
 	int line;
 	/* Read a line at a time until eof */
-	for (line = 1; fgetws(s, maxlinelength, fp); line++)
+	for (line = 1; lp_fgetws(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
-			wmemmove(s, s + 1, wcslen(s + 1) + 1);
-		if ((s[0] == L';') || (s[0] == L'\r') || (s[0] == L'\n') || (s[0] == L' '))
+			// Batch B2: wmemmove has no char16_t equivalent; std::memmove works directly
+			// once scaled by sizeof(lpchar_t) (it's already alignment/overlap-safe raw
+			// memory move, exactly what wmemmove itself is specified in terms of).
+			std::memmove(s, s + 1, (lp_strlen(s + 1) + 1) * sizeof(lpchar_t));
+		if ((s[0] == u';') || (s[0] == u'\r') || (s[0] == u'\n') || (s[0] == u' '))
 			continue;
-		wchar_t savecopy[maxlinelength];
-		wcscpy(savecopy, s);
-		wchar_t* ch = wcschr(s, L','), * savech;
+		lpchar_t savecopy[maxlinelength];
+		lp_strcpy(savecopy, s);
+		lpchar_t* ch = lp_strchr(s, u','), * savech;
 		if (!ch)
 		{
 			fclose(fp);
-			lplog(LOG_FATAL_ERROR, L"Error parsing (0) suffix rule on line %d: %s", line, savecopy);
+			lplog(LOG_FATAL_ERROR, u"Error parsing (0) suffix rule on line %d: %s", line, savecopy);
 			return SUFFIX_RULES_PARSE_ERROR;
 		}
 		*ch = 0;
 		temp.keystr = s; /* Copy key string into the rule struct */
-		if (!(ch = wcschr(savech = ch + 1, L',')))
+		if (!(ch = lp_strchr(savech = ch + 1, u',')))
 		{
 			fclose(fp);
-			lplog(LOG_FATAL_ERROR, L"Error parsing (1) suffix rule on line %d: %s", line, savecopy);
+			lplog(LOG_FATAL_ERROR, u"Error parsing (1) suffix rule on line %d: %s", line, savecopy);
 			return SUFFIX_RULES_PARSE_ERROR;
 		}
 		*ch = 0;
 		temp.repstr = savech;
-		if (!(ch = wcschr(savech = ch + 1, L',')))
+		if (!(ch = lp_strchr(savech = ch + 1, u',')))
 		{
 			fclose(fp);
-			lplog(LOG_FATAL_ERROR, L"Error parsing (2) suffix rule on line %d: %s", line, savecopy);
+			lplog(LOG_FATAL_ERROR, u"Error parsing (2) suffix rule on line %d: %s", line, savecopy);
 			return SUFFIX_RULES_PARSE_ERROR;
 		}
 		*ch = 0;
 		temp.form = savech;
-		if (!(ch = wcschr(savech = ch + 1, L',')))
+		if (!(ch = lp_strchr(savech = ch + 1, u',')))
 		{
 			fclose(fp);
-			lplog(LOG_FATAL_ERROR, L"Error parsing (3) suffix rule on line %d: %s", line, savecopy);
+			lplog(LOG_FATAL_ERROR, u"Error parsing (3) suffix rule on line %d: %s", line, savecopy);
 			return SUFFIX_RULES_PARSE_ERROR;
 		}
 		*ch = 0;
 		temp.inflection = getInflectionNum(savech);
-		if ((ch = wcschr(savech = ch + 1, L';'))) *ch = 0;
-		temp.protect = wcsstr(savech, L"protect") != NULL;
-		temp.intact = wcsstr(savech, L"intact") != NULL;
-		temp.cont = wcsstr(savech, L"continue") != NULL;
+		if ((ch = lp_strchr(savech = ch + 1, u';'))) *ch = 0;
+		temp.protect = lp_strstr(savech, u"protect") != NULL;
+		temp.intact = lp_strstr(savech, u"intact") != NULL;
+		temp.cont = lp_strstr(savech, u"continue") != NULL;
 		temp.rulenum = line; /* Line number of rule in file */
 		/* Check replacement string for special 2-digit markers  */
 		int rl = temp.repstr.length();
 		if (rl > 1 && iswdigit(temp.repstr[rl - 1]) && iswdigit(temp.repstr[rl - 2]) && temp.cont == false)
-			lplog(L"** WARNING ** ReadRules: State marker may require continue:line %d\n", line);
+			lplog(u"** WARNING ** ReadRules: State marker may require continue:line %d\n", line);
 		stemRules.push_back(temp);
 	}
 	fclose(fp);
@@ -236,19 +244,22 @@ int cStemmer::readPrefixRules(void)
 	LFS
 		/* Format is: keystr,repstr where keystr and repstr are strings */
 
-		FILE* fp = _wfopen(L"source\\lists\\prefixRules.txt", L"rb");
+		FILE* fp = lp_wfopen(u"source\\lists\\prefixRules.txt", "rb");
 	if (!fp) return NO_PREFIX_RULES_FILE;
-	wchar_t s[maxlinelength];
+	lpchar_t s[maxlinelength];
 	tPrefixRule temp;
 	int line;
 	/* Read a line at a time until eof */
-	for (line = 1; fgetws(s, maxlinelength, fp); line++)
+	for (line = 1; lp_fgetws(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
-			wmemmove(s, s + 1, wcslen(s + 1) + 1);
+			// Batch B2: wmemmove has no char16_t equivalent; std::memmove works directly
+			// once scaled by sizeof(lpchar_t) (it's already alignment/overlap-safe raw
+			// memory move, exactly what wmemmove itself is specified in terms of).
+			std::memmove(s, s + 1, (lp_strlen(s + 1) + 1) * sizeof(lpchar_t));
 		if ((s[0] == ';') || (s[0] == '\r') || (s[0] == '\n') || (s[0] == ' '))
 			continue;
-		wchar_t* ch = wcschr(s, L',');
+		lpchar_t* ch = lp_strchr(s, u',');
 		if (!ch)
 		{
 			fclose(fp);
@@ -279,7 +290,7 @@ bool sortRuleGreater(cStemmer::cSuffixRule a, cStemmer::cSuffixRule b)
 // return rulesUsed.size() without prefix-stripping or sorting.
 // addRule<0 (the public call): then stripPrefix, sort, return size.
 // Returns a negative NET_ERR if the rules file is missing/corrupt.
-size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule)
+size_t cStemmer::stem(MYSQL mysql, lpwstring word, vector<cSuffixRule>& rulesUsed, cIntArray& trail, int addRule)
 {
 	LFS
 		int ret;
@@ -300,26 +311,26 @@ size_t cStemmer::stem(MYSQL mysql, wstring word, vector<cSuffixRule>& rulesUsed,
 // 1-based).  Also returns true on LOCK/query failure (conservative: treat
 // as unknown so the prefix is rejected).  word is escaped before being
 // interpolated into the double-quoted literal.
-bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
+bool cStemmer::isWordDBUnknown(MYSQL mysql, lpwstring word)
 {
 	tIWMM iWord = Words.query(word);
 	if (iWord != Words.end() && iWord->second.query(UNDEFINED_FORM_NUM) >= 0)
 		return true;
-	if (!myquery(&mysql, L"LOCK TABLES words w READ,wordForms wf READ")) return true;
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", escaped(word).c_str(), UNDEFINED_FORM_NUM + 1); // always add one when referring to DB formId
+	if (!myquery(&mysql, u"LOCK TABLES words w READ,wordForms wf READ")) return true;
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select COUNT(*) from words w,wordForms wf where w.id=wf.wordId and word=\"%s\" and wf.formId=%d", escaped(word).c_str(), UNDEFINED_FORM_NUM + 1); // always add one when referring to DB formId
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
 	if (!myquery(&mysql, qt, result))
 	{
-		myquery(&mysql, L"UNLOCK TABLES");
+		myquery(&mysql, u"UNLOCK TABLES");
 		return true;
 	}
 	int count = 1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		count = atoi(sqlrow[0]);
 	mysql_free_result(result);
-	if (!myquery(&mysql, L"UNLOCK TABLES"))
+	if (!myquery(&mysql, u"UNLOCK TABLES"))
 		return true;
 	return count > 0;
 }
@@ -328,7 +339,7 @@ bool cStemmer::isWordDBUnknown(MYSQL mysql, wstring word)
 // word, push a prefix-stripped cSuffixRule (rulenum = -r.rulenum, form
 // PREVIOUS) and also strip the same prefix from rulesUsed[0..originalSize).
 // Prefixes are not nested.  Always returns 0.
-int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& rulesUsed, int originalSize, wstring word)
+int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& rulesUsed, int originalSize, lpwstring word)
 {
 	LFS
 		// word must have sufficient length over the prefix as well as matching it over the prefix length.
@@ -341,7 +352,7 @@ int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& 
 	tmp.keystr = r.keystr;
 	tmp.repstr = r.repstr;
 	tmp.rulenum = -r.rulenum;
-	tmp.form = L"PREVIOUS";
+	tmp.form = u"PREVIOUS";
 	rulesUsed.push_back(tmp);
 	for (int ru = 0; ru < originalSize; ru++)
 	{
@@ -352,7 +363,7 @@ int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& 
 		tmp.rulenum = -r.rulenum;
 		tmp.trail = rulesUsed[ru].trail;
 		tmp.trail.add(rulesUsed[ru].rulenum);
-		tmp.form = L"PREVIOUS";
+		tmp.form = u"PREVIOUS";
 		rulesUsed.push_back(tmp);
 	}
 	return 0;
@@ -363,7 +374,7 @@ int cStemmer::applyPrefixRule(MYSQL mysql, tPrefixRule r, vector <cSuffixRule>& 
 // is missing; 0 otherwise.
 // prefixes are not nestable
 // apply all prefixes to all rulesUsed
-int cStemmer::stripPrefix(MYSQL mysql, wstring word, vector <cSuffixRule>& rulesUsed)
+int cStemmer::stripPrefix(MYSQL mysql, lpwstring word, vector <cSuffixRule>& rulesUsed)
 {
 	LFS
 		if (!prefixRules.size() && readPrefixRules() < 0) return -1;
@@ -377,11 +388,11 @@ int cStemmer::stripPrefix(MYSQL mysql, wstring word, vector <cSuffixRule>& rules
 // last non-PREVIOUS stemRules[].form/inflection into the out-params.  If r
 // itself is not PREVIOUS, start from r.  rulesUsed is unused (passed by
 // value).  Always returns 0.
-int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator& r, wstring& form, int& inflection)
+int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSuffixRule>::iterator& r, lpwstring& form, int& inflection)
 {
 	LFS
-		form = L"ORIGINAL";
-	if (r->form != L"PREVIOUS")
+		form = u"ORIGINAL";
+	if (r->form != u"PREVIOUS")
 	{
 		form = r->form;
 		inflection = r->inflection;
@@ -393,7 +404,7 @@ int cStemmer::findLastFormInflection(vector <cSuffixRule> rulesUsed, vector <cSu
 		for (sr = 0; sr < stemRules.size(); sr++)
 			if (stemRules[sr].rulenum == r->trail[t])
 				break;
-		if (stemRules[sr].form != L"PREVIOUS")
+		if (stemRules[sr].form != u"PREVIOUS")
 		{
 			form = stemRules[sr].form;
 			inflection = stemRules[sr].inflection;
@@ -483,7 +494,7 @@ bool cStemmer::wordIsNotUnknownAndOpen(tIWMM iWord, bool log)
 		if ((ucf = unacceptableCombinationForms.find(iWord->second.forms()[f])) != unacceptableCombinationForms.end())
 		{
 			if (log)
-				lplog(LOG_DICTIONARY, L"WordPosMAP %s is a %s.", iWord->first.c_str(), Forms[*ucf]->name.c_str());
+				lplog(LOG_DICTIONARY, u"WordPosMAP %s is a %s.", iWord->first.c_str(), Forms[*ucf]->name.c_str());
 			return false;
 		}
 	return (iWord->second.query(verbForm) >= 0) || (iWord->second.query(nounForm) >= 0) || (iWord->second.query(adverbForm) >= 0) || (iWord->second.query(adjectiveForm) >= 0);

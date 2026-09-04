@@ -6,7 +6,7 @@
 		(a) installs the crash / Ctrl-C / out-of-memory handlers, (b) parses the command
 		line into the handful of booleans and the source type that drive a run,
 		(c) constructs the single cSource object (which connects to MySQL and loads the
-		lexicon), (d) either spawns and supervises N child lp.exe processes (controller
+		lexicon), (d) either spawns and supervises N child lp processes (controller
 		mode, -mp) or itself loops over the sources claimed from the `sources` table, and
 		(e) for each source calls the pipeline in order: readSource/tokenize -> print
 		(match) sentences -> WordNet extensions -> identifyObjects -> analyzeWordSenses ->
@@ -14,10 +14,10 @@
 		resolveFirstSecondPersonPronouns -> identifyConversations -> (optionally)
 		question answering.  It also holds the definitions of a number of program-wide
 		globals (the "unreachable but stable" iterator sentinels, the cProfile statics,
-		and the SRWLOCKs) that must exist in exactly one translation unit.
+		and the shared_mutex locks) that must exist in exactly one translation unit.
 
 	Pipeline position:
-		Stage 0 - runs before and around every other stage.  wmain() is the only caller of
+		Stage 0 - runs before and around every other stage.  lpMain() is the only caller of
 		processSource(), which is the linear script of the whole pipeline described in
 		README.md "Parsing Processing Stages".
 
@@ -68,14 +68,16 @@
 		corresponding code is either commented out below or lives in "unused source\".
 
 	Key entry points:
-		- wmain() - top level: initialize, parse arguments, validateCacheDir(), build cSource, then either startProcesses() or loop over sources
+		- main() - widens argv, then lpMain(): initialize, parse arguments, validateCacheDir(), build cSource, then either startProcesses() or loop over sources
 		- processCommandArguments() - fills the run configuration and the source type from argv
-		- initialize() - crash handler, console, locks, memory counter, working directory, default cache directory
+		- initialize() - signal handlers, locks, memory counter, working directory, default cache directory
 		- validateCacheDir() - fatal existence check on whichever cacheDir ended up in effect (default, LP_CACHE_DIR, or -cacheDir); runs after processCommandArguments() so a CLI override is actually what gets checked
 		- processSource() - the whole per-document pipeline for one already-claimed source
 		- startProcesses() / createLPProcess() / waitToSpawnMoreProcesses() / waitForSpawnedProcesses() - controller mode
 		- WRMemoryCheck() - copies the wordRelations table into its MEMORY-engine mirror
-		- createMinidump() / printStackTrace() / unhandled_handler() - crash diagnostics
+		- printStackTrace() / crashHandler() / interruptHandler() - crash and interrupt diagnostics
+		- lpReportProgress() - the single progress-status helper (terminal title via OSC 0)
+		- lpSiblingExecutablePath() - locates the lp / CorpusAnalysis binary next to this one
 
 	Key data structures / globals:
 		- static_wordMap / wNULL, static_tIcMap / tNULL, static_cLocalFocus / cNULL,
@@ -84,7 +86,7 @@
 		  because _STLP_DEBUG rejects default-constructed iterators; the containers must
 		  stay empty and must never be mutated.
 		- cProfile:: statics - the profiling accumulators used by the LFS macro.
-		- exitNow / exitEventually - set by ConsoleHandler (a different thread) and polled
+		- exitNow / exitEventually - set by interruptHandler (a signal handler) and polled
 		  by the source loop and by processSource(); one Ctrl-C finishes the current
 		  source, a second one abandons it.
 		- rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock,
@@ -97,14 +99,16 @@
 	Dependencies:
 		MySQL (the `sources` table drives the work queue; wordRelations /
 		wordRelationsMemory for the in-memory word relation mirror), the on-disk caches
-		under CACHEDIR, the source texts under TEXTDIR, dbghelp.dll (minidumps),
-		WinHTTP / cInternet (acquisition), yajl and MusicBrainz headers, and the sibling
-		build outputs QuestionAnsweringx64\lp.exe, ParseAllSourcesx64\lp.exe and
-		x64\StanfordAllSources\CorpusAnalysis.exe which controller mode spawns.
+		under CACHEDIR, the source texts under TEXTDIR, cInternet (acquisition), yajl
+		and MusicBrainz headers, and the sibling build outputs `lp` and `CorpusAnalysis`
+		(in this executable's own directory) which controller mode spawns.
 
 	Notes / gotchas:
-		- Windows only: CreateProcess, WaitForMultipleObjectsEx, SRWLOCK, console API,
-		  minidumps, wsprintf (which is the Win32 unbounded wsprintfW, not swprintf).
+		- Batch B4a replaced the Win32 process/console/crash layer: CreateProcess ->
+		  posix_spawn, WaitForMultipleObjectsEx -> waitForAnyChildProcess (waitpid),
+		  GenerateConsoleCtrlEvent -> kill(SIGINT), SetConsoleTitle -> reportProgress,
+		  SetUnhandledExceptionFilter/SetConsoleCtrlHandler -> sigaction, minidumps ->
+		  the OS crash reporter plus a logged backtrace().
 		- LMAINDIR / CACHEDIR / TEXTDIR (general.h) are only the fallback values used
 		  by envConfig.h's getMainDir()/getCacheDir()/getTextDir() when LP_MAIN_DIR /
 		  LP_CACHE_DIR / LP_TEXT_DIR are unset. cacheDir defaults to getCacheDir() in
@@ -114,7 +118,8 @@
 		  was parsed, so a valid -cacheDir was never the value being checked.
 		- Working directory dance: initialize() does chdir(".."), startProcesses() does
 		  chdir("source") and restores it on return; every relative path below (tests\,
-		  the child .exe paths, the .lplog files) depends on this.
+		  the .lplog files) depends on this.  The child executable paths no longer do -
+		  they are absolute since batch B4a.
 		- Initialization order is load bearing: cSource's constructor connects to MySQL
 		  and reads the lexicon, initializePatterns() fills desiredTagSets, and
 		  initializePemaMap() must run after it.  initializePatterns() is skipped in
@@ -122,21 +127,33 @@
 		- lplog(LOG_FATAL_ERROR,...) does not return: logging.cpp exits EXIT_FAILURE,
 		  waiting for a keypress only when interactive.  Child exit codes are reported
 		  by reportChildExitCode() as each worker is reaped.
-		- wmain() and startProcesses() end with _exit(0), so no destructor runs: the
+		- lpMain() and startProcesses() end with _exit(0), so no destructor runs: the
 		  cSource destructor (which would tear down the in-memory lexicon, taking
 		  minutes) is skipped deliberately ("fast exit").  Both call sites explicitly
 		  lplog() (flush) and mysql_close() immediately before the _exit(0), though,
 		  since those are cheap and _exit() - unlike exit() - does not flush stdio
 		  buffers or close the DB socket on its own.
-		- multiProcess and logFileExtension are __declspec(thread) (logging.h); they are
+		- multiProcess and logFileExtension are thread_local (logging.h); they are
 		  set on the main thread only, so worker threads see multiProcess==0.
 		- This file is largely duplicated by specials_main.cpp (the specials.vcxproj
 		  entry point), including getNumSourcesProcessed() and the lock definitions.
 */
-#include <windows.h>
-#define _WINSOCKAPI_ /* Prevent inclusion of winsock.h in windows.h */
-#include "io.h"
-#include "winhttp.h"
+// Batch B4a: windows.h, io.h, winhttp.h, direct.h, crtdbg.h and Dbghelp.h are gone,
+// along with stacktrace.h -- that last one is a vendored Win32-only dbghelp stack
+// walker, and main.cpp was its only consumer, so it is now unused by this build
+// (the file is left on disk for the Windows project, which this port does not
+// maintain). What replaces them: unistd.h/sys/wait.h/spawn.h/signal.h for the
+// process and interrupt work, execinfo.h for the crash-time backtrace,
+// mach-o/dyld.h for locating our own executable.
+#include <unistd.h>
+#include <signal.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <execinfo.h>
+#include <mach-o/dyld.h>
+#include <errno.h>
+#include <limits.h>
+#include <sstream> // batch B4a: printStackTrace's std::stringstream, previously reaching us via windows.h
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -144,24 +161,22 @@
 #include <fcntl.h>
 #include "bncc.h"
 #include "mysql.h"
-#include <direct.h>
 #include <sys/stat.h>
-#include <crtdbg.h>
 extern "C" {
 #include <yajl_tree.h>
 }
 #include "getMusicBrainz.h"
 #include "profile.h"
-#include <Dbghelp.h>
 #include "mysqldb.h"
 #include "internet.h"
-#include "stacktrace.h"
 #include "QuestionAnswering.h"
+#include "utfConvert.h"
+#include "lpProcess.h"
 
 // needed for _STLP_DEBUG - these must be set to a legal, unreachable yet never changing value
-unordered_map <wstring, cSourceWordInfo> static_wordMap;
+unordered_map <lpwstring, cSourceWordInfo> static_wordMap;
 tIWMM wNULL = static_wordMap.begin();
-unordered_map<wstring, cSourceWordInfo::cRMap::cRelation> static_tIcMap;
+unordered_map<lpwstring, cSourceWordInfo::cRMap::cRelation> static_tIcMap;
 cSourceWordInfo::cRMap::tIcRMap tNULL = (cSourceWordInfo::cRMap::tIcRMap)static_tIcMap.begin();
 vector <cLocalFocus> static_cLocalFocus;
 vector <cLocalFocus>::iterator cNULL = static_cLocalFocus.begin();
@@ -173,107 +188,108 @@ set<int> static_setInt;
 set<int>::iterator sNULL = static_setInt.begin();
 
 // profiling
-__int64 cProfile::cb;
-__int64 cProfile::accumulatedOverheadTime = 0;
-unordered_map <string, __int64 > cProfile::counterMap;
+int64_t cProfile::cb;
+int64_t cProfile::accumulatedOverheadTime = 0;
+unordered_map <string, int64_t > cProfile::counterMap;
 unordered_map <string, int > cProfile::counterNumMap;
 unordered_map <string, cProfile::CP> cProfile::timeMapTotal;
-__int64 cProfile::totalCount = 0;
+int64_t cProfile::totalCount = 0;
 string cProfile::functionPath;
 set <unordered_map <string, cProfile::CP>::iterator, cProfile::timeSetCompare> cProfile::timeSort; // sort map by time taken by function
 set <unordered_map <string, cProfile::CP>::iterator, cProfile::memorySetCompare> cProfile::memorySort; // sort map by memory allocated by function
 set <unordered_map <string, cProfile::CP>::iterator, cProfile::countSetCompare> cProfile::countSort; // sort map by number of times function is called
-__int64 cProfile::mySQLTotalTime = 0;
-struct _RTL_SRWLOCK cProfile::networkTimeSRWLock;
+int64_t cProfile::mySQLTotalTime = 0;
+std::shared_mutex cProfile::networkTimeSRWLock;
 int cProfile::totalInternetTimeWaitBandwidthControl;
-__int64 cProfile::accumulationNetworkProfileTimer;
-__int64 cProfile::accumulateOnlyNetTimer;
-__int64 cProfile::lastNetworkTimePrinted;
-__int64 cProfile::accumulateNetworkTimeCount;
+int64_t cProfile::accumulationNetworkProfileTimer;
+int64_t cProfile::accumulateOnlyNetTimer;
+int64_t cProfile::lastNetworkTimePrinted;
+int64_t cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
 int cInternet::internetWebSearchRetryAttempts = 1;
 bool cQuestionAnswering::fileCaching = true;  // fileCaching determines whether they are cached on disk.  cOntology::cacheRdfTypes determines whether rdfTypes are cached in memory.  
-unordered_map < wstring, __int64 > cProfile::netAndSleepTimes, cProfile::onlyNetTimes, cProfile::numTimesPerURL;
+unordered_map < lpwstring, int64_t > cProfile::netAndSleepTimes, cProfile::onlyNetTimes, cProfile::numTimesPerURL;
 
 
-typedef long long (FAR WINAPI* MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType, CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam);
 bool unlockTables(MYSQL& mysql);
 bool preTaggedSource = false; // BNC
 
-// Write a minidump of this process to getMainDir()\core.dmp (LP_MAIN_DIR env var,
-// default "F:\lp\core.dmp") describing the exception in apExceptionInfo.  Called
-// from the unhandled exception filter, so it runs on the faulting thread with the
-// stack still intact.
-// Side effects: loads dbghelp.dll, creates/truncates core.dmp (FILE_SHARE_WRITE so a
-// concurrent lp.exe can also be writing it - the dumps of sibling processes overwrite
-// each other because the name is fixed).
-// Note: none of LoadLibrary / GetProcAddress / CreateFile is checked, so a missing
-// dbghelp.dll turns the original crash into a null call through pDump; mhLib is never
-// freed (harmless, the process is dying).
-void createMinidump(struct _EXCEPTION_POINTERS* apExceptionInfo)
-{
-	HMODULE mhLib = ::LoadLibrary(L"dbghelp.dll");
-	MINIDUMPWRITEDUMP pDump = (MINIDUMPWRITEDUMP)::GetProcAddress(mhLib, "MiniDumpWriteDump");
-	wchar_t corePath[1024];
-	wsprintf(corePath, L"%s\\core.dmp", getMainDir().c_str());
-	HANDLE  hFile = ::CreateFile(corePath, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+// Batch B4a: createMinidump() is deleted rather than ported. It wrote a Windows
+// .dmp through dbghelp; macOS already writes a full crash report for every
+// abnormal termination to ~/Library/Logs/DiagnosticReports/, which is strictly
+// more information than the fixed-name core.dmp this produced -- and because that
+// name was fixed, concurrent -mp children overwrote each other's dumps anyway. If
+// a core file is wanted as well, `ulimit -c unlimited` is the macOS answer, not
+// application code.
 
-	_MINIDUMP_EXCEPTION_INFORMATION ExInfo;
-	ExInfo.ThreadId = ::GetCurrentThreadId();
-	ExInfo.ExceptionPointers = apExceptionInfo;
-	ExInfo.ClientPointers = FALSE;
-
-	pDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &ExInfo, NULL, NULL);
-	::CloseHandle(hFile);
-}
-
-// Format the current call stack (via dbg::stack_trace() from stacktrace.h) as
-// "0xADDRESS: name(line) in module" per frame and write it to the log at LOG_FATAL_ERROR.
-// Because LOG_FATAL_ERROR is fatal in logging.cpp, this call does not return: it flushes,
-// waits for a keypress on stdin and exits.  Used only from the unhandled exception filter.
+// Format the current call stack and write it to the log at LOG_FATAL_ERROR.
+// Because LOG_FATAL_ERROR is fatal in logging.cpp, this call does not return: it
+// flushes, waits for a keypress on stdin (only when interactive) and exits.
+//
+// Batch B4a: backtrace()/backtrace_symbols() replace stacktrace.h's dbg::stack_trace().
+// The frame format is what the platform gives us -- "module address symbol + offset"
+// -- rather than the old "0xADDRESS: name(line) in module"; file and line numbers
+// are not available without a symbolizer, so `atos -p <pid> <address>` (or running
+// the binary under lldb) is how a frame becomes a source line now.
 void printStackTrace()
 {
 	std::stringstream buff;
 	buff << ":  General Software Fault! \n";
 	buff << "\n";
 
-	std::vector<dbg::StackFrame> stack = dbg::stack_trace();
+	void* frames[128];
+	int numFrames = backtrace(frames, (int)(sizeof(frames) / sizeof(frames[0])));
 	buff << "Callstack: \n";
-	for (unsigned int i = 0; i < stack.size(); i++)
+	char** symbols = backtrace_symbols(frames, numFrames);
+	if (symbols)
 	{
-		buff << "0x" << std::hex << stack[i].address << ": " << stack[i].name << "(" << std::dec << stack[i].line << ") in " << stack[i].module << "\n";
+		for (int i = 0; i < numFrames; i++)
+			buff << symbols[i] << "\n";
+		free(symbols);
 	}
-	::lplog(LOG_FATAL_ERROR, L"%S", buff.str().c_str());
+	else
+		// backtrace_symbols mallocs, which can itself fail in a crashed process;
+		// raw addresses are still enough for `atos` to resolve after the fact.
+		for (int i = 0; i < numFrames; i++)
+			buff << "0x" << std::hex << (uintptr_t)frames[i] << std::dec << "\n";
+	::lplog(LOG_FATAL_ERROR, u"%S", buff.str().c_str());
 }
 
-// Process-wide last chance exception filter, installed by initialize() through
-// SetUnhandledExceptionFilter.  Dumps core and logs the stack, then returns
-// EXCEPTION_CONTINUE_SEARCH so the default handler still runs (WER / debugger attach).
-// In practice printStackTrace() exits first, so the return value rarely matters.
-LONG WINAPI unhandled_handler(struct _EXCEPTION_POINTERS* apExceptionInfo)
+// Batch B4a: replaces the SetUnhandledExceptionFilter/unhandled_handler pair. The
+// four signals below are the POSIX equivalents of the structured exceptions that
+// filter existed to catch (access violation, bus error, integer division by zero,
+// illegal instruction).
+//
+// Honest caveat, unchanged in spirit from the Windows original: printStackTrace()
+// reaches lplog(), which allocates and uses stdio, and none of that is
+// async-signal-safe. Doing it anyway is the deliberate trade every crash reporter
+// makes -- the process is already dying, and a logged stack trace is worth far
+// more than the guarantee we give up. The handler resets itself to SIG_DFL first,
+// so a fault *inside* the handler terminates immediately instead of looping.
+extern "C" void crashHandler(int signalNumber)
 {
-	createMinidump(apExceptionInfo);
-	printStackTrace();
-	return EXCEPTION_CONTINUE_SEARCH;
+	signal(signalNumber, SIG_DFL);
+	printStackTrace(); // does not return: LOG_FATAL_ERROR exits
+	raise(signalNumber);
 }
 
 /*
 int reportInfo(WMISupport &provider)
 { LFS
-static __int64 lastVirtualBytes=0,lastWorkingSet=0;
+static int64_t lastVirtualBytes=0,lastWorkingSet=0;
 
 IWbemClassObject *resourceNameInstance;
-bool status=provider.getResourceObject(L"Win32_PerfFormattedData_PerfProc_Process.Name='lp'",resourceNameInstance);
-__int64 percentProcessorTime,percentUserTime,percentPrivilegedTime,elapsedTime,virtualBytes,workingSet;
-status = provider.getWMIKey(resourceNameInstance,L"ElapsedTime",elapsedTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentProcessorTime",percentProcessorTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentUserTime",percentUserTime);
-status = provider.getWMIKey(resourceNameInstance,L"PercentPrivilegedTime",percentPrivilegedTime);
-status = provider.getWMIKey(resourceNameInstance,L"VirtualBytes",virtualBytes);
-status = provider.getWMIKey(resourceNameInstance,L"WorkingSet",workingSet);
-lplog(L"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d",
+bool status=provider.getResourceObject(u"Win32_PerfFormattedData_PerfProc_Process.Name='lp'",resourceNameInstance);
+int64_t percentProcessorTime,percentUserTime,percentPrivilegedTime,elapsedTime,virtualBytes,workingSet;
+status = provider.getWMIKey(resourceNameInstance,u"ElapsedTime",elapsedTime);
+status = provider.getWMIKey(resourceNameInstance,u"PercentProcessorTime",percentProcessorTime);
+status = provider.getWMIKey(resourceNameInstance,u"PercentUserTime",percentUserTime);
+status = provider.getWMIKey(resourceNameInstance,u"PercentPrivilegedTime",percentPrivilegedTime);
+status = provider.getWMIKey(resourceNameInstance,u"VirtualBytes",virtualBytes);
+status = provider.getWMIKey(resourceNameInstance,u"WorkingSet",workingSet);
+lplog(u"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d",
 elapsedTime,percentProcessorTime,percentUserTime,percentPrivilegedTime,virtualBytes-lastVirtualBytes,workingSet-lastWorkingSet);
-wprintf(L"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d\n",
+lp_wprintf(u"elapsed time=%I64d (%I64d,%I64d,%I64d) virtualBytes=%I64d workingSet=%I64d\n",
 elapsedTime,percentProcessorTime,percentUserTime,percentPrivilegedTime,virtualBytes-lastVirtualBytes,workingSet-lastWorkingSet);
 lastVirtualBytes=virtualBytes;
 lastWorkingSet=workingSet;
@@ -281,42 +297,39 @@ return 0;
 }
 */
 
-bool exitNow = false, exitEventually = false;
+// Batch B4a: these were plain bools written by a Windows handler thread. They are
+// now written by a real signal handler, where only volatile sig_atomic_t is
+// guaranteed safe to touch, so that is what they are. sig_atomic_t is an int, and
+// every use of these is a boolean test, so no call site changes. (They are read
+// once per iteration in some hot parse loops in agreement.cpp; a volatile int load
+// is cheap, and correctness in the handler is worth more than eliding it.)
+volatile sig_atomic_t exitNow = 0, exitEventually = 0;
 
-// Console control handler (installed by initialize()) implementing the two stage
-// interrupt: the first Ctrl-C/Break/Close sets exitEventually, which makes the source loop
-// stop after the current document; a second one also sets exitNow, which abandons the
-// current document and skips signalFinishedProcessingSource().  A system shutdown goes
-// straight to exitNow.
-// Returns TRUE ("handled") in every case, including CTRL_CLOSE_EVENT, where Windows still
-// kills the process a few seconds later - so a console close usually loses the document.
-// Runs on a handler thread injected by the OS: exitNow/exitEventually are plain bools
-// shared with the main thread without any synchronization.
-BOOL WINAPI ConsoleHandler(DWORD CEvent)
+// Two-stage interrupt handler (installed by initialize()), replacing the Windows
+// ConsoleHandler: the first Ctrl-C sets exitEventually, which makes the source loop
+// stop after the current document; a second one also sets exitNow, which abandons
+// the current document and skips signalFinishedProcessingSource().
+//
+// SIGINT is Ctrl-C. SIGTERM and SIGHUP are handled the same way, standing in for the
+// old CTRL_CLOSE/CTRL_LOGOFF/CTRL_SHUTDOWN events: SIGTERM is what `kill` and a
+// system shutdown send, SIGHUP is what a closed terminal sends. Unlike Windows,
+// which killed the process a few seconds after CTRL_CLOSE_EVENT regardless (so a
+// console close usually lost the document), nothing here forces termination -- the
+// document gets to finish.
+//
+// Everything in here must be async-signal-safe, which is why the message goes out
+// through write(2) rather than lp_wprintf: the old handler's printf-family call was
+// safe on Windows only because it ran on an ordinary injected thread, not in a
+// signal context.
+extern "C" void interruptHandler(int)
 {
-	LFS
-		if (exitEventually) exitNow = true;
-	exitEventually = true;
-	switch (CEvent)
-	{
-	case CTRL_C_EVENT:
-		wprintf(L"\nCTRL+C received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_BREAK_EVENT:
-		wprintf(L"\nCTRL+Break received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_CLOSE_EVENT:
-		wprintf(L"\nClose received! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_LOGOFF_EVENT:
-		wprintf(L"\nUser is logging off! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	case CTRL_SHUTDOWN_EVENT:
-		exitNow = true;
-		wprintf(L"\nSystem is shutting down! Interrupting %s...\n", (exitNow) ? L"immediately" : L"at end of this source");
-		break;
-	}
-	return TRUE;
+	if (exitEventually) exitNow = 1;
+	exitEventually = 1;
+	static const char immediately[] = "\nInterrupt received! Interrupting immediately...\n";
+	static const char atEndOfSource[] = "\nInterrupt received! Interrupting at end of this source...\n";
+	const char* message = exitNow ? immediately : atEndOfSource;
+	ssize_t ignored = write(STDOUT_FILENO, message, strlen(message));
+	(void)ignored; // nothing useful to do if the console write fails
 }
 
 /*
@@ -835,104 +848,14 @@ bool TSROverride = false, flipTOROverride = false, flipTNROverride = false, logM
 // The exit(1) below is unreachable because lplog(LOG_FATAL_ERROR,...) already exits
 // the process first (via logging.cpp's fatalExit(), status EXIT_FAILURE).
 void no_memory() {
-	lplog(LOG_FATAL_ERROR, L"Out of memory (new/STL allocation).");
+	lplog(LOG_FATAL_ERROR, u"Out of memory (new/STL allocation).");
 	exit(1);
 }
 
-// Give this console a large scrollback (at least 200 columns x 6000 rows, so that the
-// per-sentence parse dumps can be scrolled back through) and resize the visible window to
-// width x height characters.  Failures are printed but otherwise ignored - they are
-// expected when stdout is redirected or the process has no console.
-// Note the buffer is always at least 200x6000 regardless of the arguments; only the window
-// rectangle actually honours width/height.
-void setConsoleWindowSize(int width, int height)
-{
-	HANDLE Handle = GetStdHandle(STD_OUTPUT_HANDLE);      // Get Handle 
-	_COORD coord;
-	coord.X = max(200, width);
-	coord.Y = max(6000, height);
-	if (!SetConsoleScreenBufferSize(Handle, coord))            // Set Buffer Size 
-		printf("Cannot set console buffer info to (%d,%d) (%d) %s\n", coord.X, coord.Y, (int)GetLastError(), LastErrorStr());
-
-	//CONSOLE_SCREEN_BUFFER_INFOEX  csbiInfo;
-	//csbiInfo.cbSize = sizeof(csbiInfo);
-	// Get the current screen buffer size and window position. 
-	//if (!GetConsoleScreenBufferInfoEx(Handle, &csbiInfo))
-	//	printf("Cannot get console buffer info (%d) %s\n", (int)GetLastError(), LastErrorStr());
-	//_COORD maxSize = GetLargestConsoleWindowSize(Handle);
-
-	//printf("buffer sizex=%d buffer sizey=%d buffer cursor=(%d,%d) \nattributeflags=%d buffer window=(top=%d,left=%d,bottom=%d,right=%d) \nmax given buf=(%d,%d) max absolute=(%d,%d) popupAttributes=%d fullScreen=%d\n", 
-	//	csbiInfo.dwSize.X, csbiInfo.dwSize.Y, csbiInfo.dwCursorPosition.X, csbiInfo.dwCursorPosition.Y,
-	//	(int)csbiInfo.wAttributes, csbiInfo.srWindow.Top, csbiInfo.srWindow.Left, csbiInfo.srWindow.Bottom, csbiInfo.srWindow.Right,
-	//	csbiInfo.dwMaximumWindowSize.X, csbiInfo.dwMaximumWindowSize.Y,
-	//	maxSize.X,maxSize.Y,
-	//	(int)csbiInfo.wPopupAttributes,(int)csbiInfo.bFullscreenSupported);
-
-	//height = min(height, csbiInfo.dwMaximumWindowSize.Y);
-	//width = min(width, csbiInfo.dwMaximumWindowSize.X);
-
-
-	_SMALL_RECT Rect;
-	Rect.Top = 0;
-	Rect.Left = 0;
-	Rect.Bottom = height - 1;
-	Rect.Right = width - 1;
-
-	if (!SetConsoleWindowInfo(Handle, TRUE, &Rect))            // Set Window Size 	SMALL_RECT srctWindow;
-		printf("Cannot set console window info to (top=%d,left=%d,bottom=%d,right=%d) (%d) %s\n",
-			Rect.Top, Rect.Left, Rect.Bottom, Rect.Right,
-			(int)GetLastError(), LastErrorStr());
-}
-
-// Spawn one child worker in its own console window, tiled vertically by numProcess
-// (x=60, y=180*numProcess) and shown without stealing focus, so a controller run with -mp
-// leaves a readable stack of child windows.
-// commandPath is the executable, processParameters the full command line (CreateProcess
-// may modify it in place, hence the non-const pointer).
-// Out: processHandle / threadHandle / processId of the new child.
-// Returns 0 on success, -1 if CreateProcess failed (in which case the out parameters are
-// left as the caller initialized them and the failure is printed with the current
-// directory, since a wrong working directory is the usual cause).
-// Ownership: the caller inherits both handles; threadHandle is never closed by any caller,
-// which leaks one thread handle per child.
-int createLPProcess(int numProcess, HANDLE& processHandle, HANDLE& threadHandle, DWORD& processId, const wchar_t* commandPath, wchar_t* processParameters)
-{
-	STARTUPINFO si;
-	ZeroMemory(&si, sizeof(si));
-	si.wShowWindow = true;
-	si.cb = sizeof(si);
-	si.dwFlags |= STARTF_USEPOSITION | STARTF_USESIZE | STARTF_USECOUNTCHARS | STARTF_USESHOWWINDOW;
-	si.dwX = 60;
-	si.dwY = 180 * numProcess;
-	si.dwXSize = 300;
-	si.dwYSize = 500;
-	si.dwXCountChars = 180;
-	si.dwYCountChars = 3000;
-	si.wShowWindow = SW_SHOWNOACTIVATE; // don't continuously hijack focus
-	PROCESS_INFORMATION pi;
-	ZeroMemory(&pi, sizeof(pi));
-	if (!CreateProcess(commandPath,
-		processParameters, // Command line
-		NULL, // Process handle not inheritable
-		NULL, // Thread handle not inheritable
-		FALSE, // Set handle inheritance to FALSE
-		CREATE_NEW_CONSOLE,
-		NULL, // Use parent's environment block
-		NULL, // Use parent's starting directory 
-		&si, // Pointer to STARTUPINFO structure
-		&pi) // Pointer to PROCESS_INFORMATION structure
-		)
-	{
-		wchar_t cwd[1024];
-		printf("CreateProcess of %S failed (%d) %s in %S.\n", processParameters, (int)GetLastError(), LastErrorStr(), _wgetcwd(cwd, 1024));
-		return -1;
-	}
-	processHandle = pi.hProcess;
-	processId = pi.dwProcessId;
-	threadHandle = pi.hThread;
-	return 0;
-}
-
+// Batch B4a: setConsoleWindowSize() is deleted. It set the Windows console's
+// screen-buffer and window rectangle -- both are properties the user owns on
+// macOS (terminal size, scrollback depth are Terminal/iTerm preferences), and
+// there is no API to impose them from inside the process. Nothing replaces it.
 
 // Read the completed-work totals for one sourceType from the `sources` table: rows that
 // are processed, not currently being processed, and not marked '**SKIP**' or
@@ -945,13 +868,16 @@ int createLPProcess(int numProcess, HANDLE& processHandle, HANDLE& threadHandle,
 // result set.
 // NOTE: SUM() yields SQL NULL when no row matches, so on an empty/fresh corpus
 // sqlrow[1]/sqlrow[2] are NULL and atol/atoi are called on a null pointer.  atol/atoi also
-// truncate to 32 bits even though the out parameters are __int64.
-int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcessed, __int64& wordsProcessed, __int64& sentencesProcessed)
+// truncate to 32 bits even though the out parameters are int64_t.
+int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcessed, int64_t& wordsProcessed, int64_t& sentencesProcessed)
 {
 	MYSQL_RES* result;
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	if (!myquery(&mysql, L"LOCK TABLES sources WRITE")) return -1;
-	wsprintf(qt, L"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = %d and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", sourceType);
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	if (!myquery(&mysql, u"LOCK TABLES sources WRITE")) return -1;
+	// Batch B4a: lp_snprintf, bounded by QUERY_BUFFER_LEN per mysqldb.h's buffer
+	// convention (qt is QUERY_BUFFER_LEN_OVERFLOW long, giving 1024 lpchar_t of
+	// slack past the limit), replacing the Win32 unbounded lp_wsprintf.
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select COUNT(id), SUM(numWords), SUM(numSentences) from sources where sourceType = %d and processed IS not NULL and processing IS NULL and start != '**SKIP**' and start != '**START NOT FOUND**'", sourceType);
 	if (myquery(&mysql, qt, result))
 	{
 		MYSQL_ROW sqlrow = NULL;
@@ -963,64 +889,25 @@ int getNumSourcesProcessed(MYSQL& mysql, int sourceType, int& numSourcesProcesse
 		}
 		mysql_free_result(result);
 	}
-	if (!myquery(&mysql, L"UNLOCK TABLES")) return -1;
+	if (!myquery(&mysql, u"UNLOCK TABLES")) return -1;
 	return 0;
-}
-
-// https://stackoverflow.com/questions/813086/can-i-send-a-ctrl-c-sigint-to-an-application-on-windows/1179124
-// Inspired from http://stackoverflow.com/a/15281070/1529139
-// and http://stackoverflow.com/q/40059902/1529139
-// Deliver a console control event (used with CTRL_C_EVENT) to another process, so that a
-// Ctrl-C in the controller makes each child stop at the end of its current document
-// instead of being killed.  Windows offers no direct API for this: the controller must
-// leave its own console, attach to the child's, disable its own Ctrl-C handling (which is
-// deliberately never restored - restoring it would kill the controller too), raise the
-// event for the whole attached console group, then reattach or allocate a fresh console.
-// Returns true only if GenerateConsoleCtrlEvent succeeded.
-bool signalCtrl(DWORD dwProcessId, DWORD dwCtrlEvent)
-{
-	bool success = false;
-	DWORD thisConsoleId = GetCurrentProcessId();
-	// Leave current console if it exists
-	// (otherwise AttachConsole will return ERROR_ACCESS_DENIED)
-	bool consoleDetached = (FreeConsole() != FALSE);
-
-	if (AttachConsole(dwProcessId) != FALSE)
-	{
-		// Add a fake Ctrl-C handler for avoid instant kill is this console
-		// WARNING: do not revert it or current program will be also killed
-		SetConsoleCtrlHandler(nullptr, true);
-		success = (GenerateConsoleCtrlEvent(dwCtrlEvent, 0) != FALSE);
-		FreeConsole();
-	}
-
-	if (consoleDetached)
-	{
-		// Create a new console if previous was deleted by OS
-		if (AttachConsole(thisConsoleId) == FALSE)
-		{
-			int errorCode = GetLastError();
-			if (errorCode == 31) // 31=ERROR_GEN_FAILURE
-			{
-				AllocConsole();
-			}
-		}
-	}
-	return success;
 }
 
 // Log a child's exit status.  A worker that hit LOG_FATAL_ERROR exits non-zero; without
 // this the controller could not distinguish a crashed child from a completed one.
-static void reportChildExitCode(HANDLE hProcess, unsigned int slot)
+// Batch B4a: takes waitpid's raw status instead of calling GetExitCodeProcess on a
+// handle, which also means a child killed by a signal is now reported as such
+// rather than being folded into a numeric exit code.
+static void reportChildExitCode(int exitStatus, unsigned int slot)
 {
-	DWORD exitCode = 0;
-	if (!GetExitCodeProcess(hProcess, &exitCode))
+	if (WIFEXITED(exitStatus))
 	{
-		wstring tmpstr;
-		lplog(LOG_INFO | LOG_ERROR, L"ERROR:process %u: GetExitCodeProcess failed - %s", slot, getLastErrorMessage(tmpstr));
+		int exitCode = WEXITSTATUS(exitStatus);
+		if (exitCode != 0)
+			lplog(LOG_INFO | LOG_ERROR, u"ERROR:process %u exited with code %d - its sources may be incomplete.", slot, exitCode);
 	}
-	else if (exitCode != 0)
-		lplog(LOG_INFO | LOG_ERROR, L"ERROR:process %u exited with code %u - its sources may be incomplete.", slot, exitCode);
+	else if (WIFSIGNALED(exitStatus))
+		lplog(LOG_INFO | LOG_ERROR, u"ERROR:process %u was killed by signal %d - its sources may be incomplete.", slot, WTERMSIG(exitStatus));
 }
 
 // Drain phase of controller mode: no more sources are left to hand out, so wait for the
@@ -1031,130 +918,126 @@ static void reportChildExitCode(HANDLE hProcess, unsigned int slot)
 // holding the last slot that was retired).  startTime is a clock() value; the
 // *Originally counters are the totals sampled before this run started, so that the title
 // shows only this run's progress.
-// NOTE: processingSeconds is integer seconds and is used as a divisor, so a child that
-// exits in the first second of the run divides by zero; and if WaitForMultipleObjectsEx
-// returns WAIT_FAILED the memmove below would run with nextProcessIndex == 0xFFFFFFFF
-// (only survivable because the LOG_FATAL_ERROR above terminates the process).
-void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
+// Batch B4a: two documented hazards in the Windows version are gone rather than
+// carried over. WAIT_FAILED used to leave nextProcessIndex at 0xFFFFFFFF and run
+// the memmove below with it (survivable only because the LOG_FATAL_ERROR
+// terminated first); waitForAnyChildProcess returns a distinct sentinel that is
+// checked before any indexing. And processingSeconds is integer seconds used as a
+// divisor, so a child exiting inside the first second divided by zero -- which on
+// macOS is a SIGFPE crash, not a Windows exception -- hence the max(1, ...) below.
+void waitForSpawnedProcesses(MYSQL& mysql, const int sourceType, int &numProcesses, pid_t* childPids, unsigned int &nextProcessIndex, const int startTime,
 	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses)
 {
 	if (numProcesses)
 	{
-		wstring tmpstr;
 		printf("\nNo more processes to be created. %d processes left to wait for.", numProcesses);
 		while (numProcesses)
 		{
-			nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 3, false);
-			if (nextProcessIndex == WAIT_FAILED)
-				lplog(LOG_FATAL_ERROR, L"\nWaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
+			int exitStatus = 0;
+			int exitedIndex = lpWaitForAnyChildProcess(childPids, numProcesses, 1000 * 60 * 3, exitStatus);
+			if (exitedIndex == LP_WAIT_FAILED)
+				lplog(LOG_FATAL_ERROR, u"\nwaiting for child processes failed - %S", strerror(errno));
 			int numSourcesProcessedNow = 0;
-			__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+			int64_t wordsProcessedNow = 0, sentencesProcessedNow = 0;
 			getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
-			int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-			wchar_t consoleTitle[1500];
+			int processingSeconds = max(1, (int)((clock() - startTime) / CLOCKS_PER_SEC));
+			lpchar_t consoleTitle[1500];
 			numSourcesProcessedNow -= numSourcesProcessedOriginally;
 			wordsProcessedNow -= wordsProcessedOriginally;
 			sentencesProcessedNow -= sentencesProcessedOriginally;
-			wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+			lp_snprintf(consoleTitle, 1500, u"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
 				numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
-			lplog(LOG_INFO | LOG_ERROR, L"%s", consoleTitle);
-			SetConsoleTitle(consoleTitle);
-			if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
+			lplog(LOG_INFO | LOG_ERROR, u"%s", consoleTitle);
+			lpReportProgress(consoleTitle);
+			if (exitedIndex == LP_WAIT_TIMEOUT)
 				continue;
-			if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
-			{
-				nextProcessIndex -= WAIT_OBJECT_0;
-				reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
-				CloseHandle(handles[nextProcessIndex]);
-				printf("\nClosing process %u", nextProcessIndex);
-			}
-			if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
-			{
-				nextProcessIndex -= WAIT_ABANDONED_0;
-				printf("\nClosing process %u [abandoned]", nextProcessIndex);
-				reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
-				CloseHandle(handles[nextProcessIndex]);
-			}
-			memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
+			nextProcessIndex = (unsigned int)exitedIndex;
+			reportChildExitCode(exitStatus, nextProcessIndex);
+			printf("\nClosing process %u", nextProcessIndex);
+			memmove(childPids + nextProcessIndex, childPids + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(childPids[0]));
 			numProcesses--;
 		}
 	}
 }
 
-// Build the command line for one child worker from this run's flags and start it.
+// Build the argument list for one child worker from this run's flags and start it.
 // processKind selects both the executable and the mode:
-//   0 - QuestionAnsweringx64\lp.exe -ParseRequest 0 +   (answer the queued requests)
-//   1 - ParseAllSourcesx64\lp.exe   -book 0 + -BC 0     (parse Gutenberg books)
-//   2 - x64\StanfordAllSources\CorpusAnalysis.exe -step <step>  (external corpus analysis)
+//   0 - lp -ParseRequest 0 +          (answer the queued requests)
+//   1 - lp -book 0 + -BC 0            (parse Gutenberg books)
+//   2 - CorpusAnalysis -step <step>   (external corpus analysis)
 // The boolean flags are passed straight through as the -forceSourceReread/-SW/-SWNR/-SWNW/
-// -parseOnly/-MCSW/-logMatchedSentences/-logUnmatchedSentences switches; nextProcessIndex
-// is used both to tile the child's window and to suffix its log files.
-// Returns the child process handle, or 0 if the process could not be created or
-// processKind is unknown - callers store that 0 in handles[] regardless, which later makes
-// WaitForMultipleObjectsEx fail with the misleading "WaitForMultipleObjectsEx failed".
-// NOTE: the paths are relative to the "source" directory startProcesses() chdir'd into, so
-// controller mode only works from a full build tree.  Every command line is formatted with
-// the unbounded Win32 wsprintf into a 1024 wchar_t buffer, and case 1 then wcscat's
-// specialExtension onto it.  specialExtension - not logFileExtension - is what is passed
-// to the child's -log, so the parent's -log suffix is not propagated.
-HANDLE createLPProcess(const int processKind, const bool forceSourceReread, const bool sourceWrite, const bool sourceWordNetRead, const bool sourceWordNetWrite, const bool parseOnly, const bool makeCopyBeforeSourceWrite,
-	const int numSourcesPerProcess, wstring specialExtension, const int nextProcessIndex, const int step)
+// -parseOnly/-MCSW/-logMatchedSentences/-logUnmatchedSentences switches;
+// nextProcessIndex suffixes the child's log files.
+// Returns the child pid, or 0 if the process could not be created or processKind is
+// unknown.
+// NOTE: specialExtension - not logFileExtension - is what is passed to the child's
+// -log, so the parent's -log suffix is not propagated.
+//
+// Batch B4a: the three hardcoded relative .exe paths became sibling lookups (see
+// lpSiblingExecutablePath), so controller mode no longer depends on having been
+// launched from the root of a full build tree; and the command line is built as a
+// real argument vector instead of one lp_wsprintf'd string, so nothing here can
+// truncate or word-split.
+pid_t createLPProcess(const int processKind, const bool forceSourceReread, const bool sourceWrite, const bool sourceWordNetRead, const bool sourceWordNetWrite, const bool parseOnly, const bool makeCopyBeforeSourceWrite,
+	const int numSourcesPerProcess, lpwstring specialExtension, const int nextProcessIndex, const int step)
 {
-	HANDLE processHandle = 0, threadHandle = 0;
-	DWORD processId = 0;
-	wchar_t processParameters[1024];
-	int errorCode;
-	switch (processKind)
+	pid_t childPid = 0;
+	// Every argument is narrow: this is what execve ultimately wants, and the child's
+	// own main() widens argv back on the way in (see main() at the bottom of this file).
+	auto narrow = [](const lpwstring& wide) { return std::string(lp_utf16_to_utf8(wide)); };
+	auto number = [](long long value) { return std::to_string(value); };
+	const std::string logSuffix = narrow(specialExtension) + "." + number(nextProcessIndex);
+
+	std::vector<std::string> arguments;
+	if (processKind == 0 || processKind == 1)
 	{
-		case 0:
-			wsprintf(processParameters, L"QuestionAnsweringx64\\lp.exe -ParseRequest 0 + -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", cacheDir,
-				(forceSourceReread) ? L"-forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				(parseOnly) ? L"-parseOnly " : L"",
-				(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
-				(logMatchedSentences) ? L"-logMatchedSentences " : L"",
-				(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
-				numSourcesPerProcess,
-				specialExtension.c_str(),
-				nextProcessIndex);
-			// note the precedence here (and in the two cases below): '<' binds tighter than
-			// '=', so errorCode receives the comparison result, not the return code, and
-			// the break only leaves the switch - failure is not propagated to the caller
-			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"QuestionAnsweringx64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 1:
-			wsprintf(processParameters, L"ParseAllSourcesx64\\lp.exe -book 0 + -BC 0 -cacheDir %s %s%s%s%s%s%s%s%s-numSourceLimit %d -log %s.%u", cacheDir,
-				(forceSourceReread) ? L"-forceSourceReread " : L"",
-				(sourceWrite) ? L"-SW " : L"",
-				(sourceWordNetRead) ? L"-SWNR " : L"",
-				(sourceWordNetWrite) ? L"-SWNW " : L"",
-				(parseOnly) ? L"-parseOnly " : L"",
-				(makeCopyBeforeSourceWrite) ? L"-MCSW " : L"",
-				(logMatchedSentences) ? L"-logMatchedSentences " : L"",
-				(logUnmatchedSentences) ? L"-logUnmatchedSentences " : L"",
-				numSourcesPerProcess,
-				specialExtension.c_str(),
-				nextProcessIndex);
-			if (specialExtension.length() > 0)
-			{
-				wcscat(processParameters, L" -specialExtension ");
-				wcscat(processParameters, specialExtension.c_str());
-			}
-			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"ParseAllSourcesx64\\lp.exe", processParameters) < 0)
-				break;
-			break;
-		case 2:
-			wsprintf(processParameters, L"x64\\StanfordAllSources\\CorpusAnalysis.exe -step %d -numSourceLimit %d -log %s.%u", step, numSourcesPerProcess, specialExtension.c_str(), nextProcessIndex);
-			if (errorCode = createLPProcess(nextProcessIndex, processHandle, threadHandle, processId, L"x64\\StanfordAllSources\\CorpusAnalysis.exe", processParameters) < 0)
-				break;
-			break;
-		default: break;
+		arguments.push_back(lpSiblingExecutablePath("lp"));
+		if (processKind == 0)
+		{
+			arguments.push_back("-ParseRequest"); arguments.push_back("0"); arguments.push_back("+");
+		}
+		else
+		{
+			arguments.push_back("-book"); arguments.push_back("0"); arguments.push_back("+");
+			arguments.push_back("-BC"); arguments.push_back("0");
+		}
+		arguments.push_back("-cacheDir"); arguments.push_back(narrow(cacheDir));
+		if (forceSourceReread)          arguments.push_back("-forceSourceReread");
+		if (sourceWrite)                arguments.push_back("-SW");
+		if (sourceWordNetRead)          arguments.push_back("-SWNR");
+		if (sourceWordNetWrite)         arguments.push_back("-SWNW");
+		if (parseOnly)                  arguments.push_back("-parseOnly");
+		if (makeCopyBeforeSourceWrite)  arguments.push_back("-MCSW");
+		if (logMatchedSentences)        arguments.push_back("-logMatchedSentences");
+		if (logUnmatchedSentences)      arguments.push_back("-logUnmatchedSentences");
+		arguments.push_back("-numSourceLimit"); arguments.push_back(number(numSourcesPerProcess));
+		arguments.push_back("-log"); arguments.push_back(logSuffix);
+		if (processKind == 1 && specialExtension.length() > 0)
+		{
+			arguments.push_back("-specialExtension");
+			arguments.push_back(narrow(specialExtension));
+		}
 	}
-	printf("\nCreated process %u:%d", nextProcessIndex, (int)processId);
-	return processHandle;
+	else if (processKind == 2)
+	{
+		arguments.push_back(lpSiblingExecutablePath("CorpusAnalysis"));
+		arguments.push_back("-step"); arguments.push_back(number(step));
+		arguments.push_back("-numSourceLimit"); arguments.push_back(number(numSourcesPerProcess));
+		arguments.push_back("-log"); arguments.push_back(logSuffix);
+	}
+	else
+		return 0;
+
+	// Batch B4a: the failure return is now actually propagated. The three original
+	// call sites read `if (errorCode = createLPProcess(...) < 0) break;`, where '<'
+	// binds tighter than '=', so errorCode received the comparison result rather
+	// than the return code and the break only left the switch -- a spawn failure
+	// reached the caller as a zero handle and surfaced much later as a misleading
+	// wait error.
+	if (lpSpawnProcess(childPid, arguments) < 0)
+		return 0;
+	printf("\nCreated process %u:%d", nextProcessIndex, (int)childPid);
+	return childPid;
 }
 
 // Throttle for controller mode: if the pool is already full (numProcesses == maxProcesses)
@@ -1168,48 +1051,39 @@ HANDLE createLPProcess(const int processKind, const bool forceSourceReread, cons
 // NOTE: numProcesses is by value, so the pool size is deliberately not decremented - the
 // freed slot is immediately overwritten by the caller.  Same integer-division-by-zero
 // hazard on processingSeconds as waitForSpawnedProcesses().
-int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numProcesses, HANDLE* handles, unsigned int &nextProcessIndex, const int startTime,
+int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numProcesses, pid_t* childPids, unsigned int &nextProcessIndex, const int startTime,
 	const int numSourcesProcessedOriginally, const int wordsProcessedOriginally, const int sentencesProcessedOriginally, const int maxProcesses, int &numSourcesLeft)
 {
 	if (numProcesses == maxProcesses)
 	{
-		wstring tmpstr;
-		nextProcessIndex = WaitForMultipleObjectsEx(numProcesses, handles, false, 1000 * 60 * 5, false);
-		if (nextProcessIndex == WAIT_FAILED)
+		int exitStatus = 0;
+		int exitedIndex = lpWaitForAnyChildProcess(childPids, numProcesses, 1000 * 60 * 5, exitStatus);
+		if (exitedIndex == LP_WAIT_FAILED)
 		{
 			if (!numProcesses)
 				return -1;
-			lplog(LOG_FATAL_ERROR, L"WaitForMultipleObjectsEx failed with error %s", getLastErrorMessage(tmpstr));
+			lplog(LOG_FATAL_ERROR, u"waiting for child processes failed - %S", strerror(errno));
 		}
 		numSourcesLeft = 0;
 		int numSourcesProcessedNow = 0;
-		__int64 wordsProcessedNow = 0, sentencesProcessedNow = 0;
+		int64_t wordsProcessedNow = 0, sentencesProcessedNow = 0;
 		getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedNow, wordsProcessedNow, sentencesProcessedNow);
-		int processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-		wchar_t consoleTitle[1500];
+		// max(1,...): see the note on waitForSpawnedProcesses -- a divisor of zero
+		// here is a SIGFPE crash on macOS.
+		int processingSeconds = max(1, (int)((clock() - startTime) / CLOCKS_PER_SEC));
+		lpchar_t consoleTitle[1500];
 		numSourcesProcessedNow -= numSourcesProcessedOriginally;
 		wordsProcessedNow -= wordsProcessedOriginally;
 		sentencesProcessedNow -= sentencesProcessedOriginally;
-		wsprintf(consoleTitle, L"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
+		lp_snprintf(consoleTitle, 1500, u"sources=%06d:sentences=%06I64d:words=%08I64d in %02d:%02d:%02d [%d sources/hour] [%I64d words/hour].",
 			numSourcesProcessedNow, sentencesProcessedNow, wordsProcessedNow, processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, wordsProcessedNow * 3600 / processingSeconds);
-		SetConsoleTitle(consoleTitle);
+		lpReportProgress(consoleTitle);
 
-		if (nextProcessIndex == WAIT_IO_COMPLETION || nextProcessIndex == WAIT_TIMEOUT)
+		if (exitedIndex == LP_WAIT_TIMEOUT)
 			return 1;
-		if (nextProcessIndex < WAIT_OBJECT_0 + numProcesses) // nextProcessIndex >= WAIT_OBJECT_0 && 
-		{
-			nextProcessIndex -= WAIT_OBJECT_0;
-			reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
-			CloseHandle(handles[nextProcessIndex]);
-			printf("\nClosing process %u", nextProcessIndex);
-		}
-		if (nextProcessIndex >= WAIT_ABANDONED_0 && nextProcessIndex < WAIT_ABANDONED_0 + numProcesses)
-		{
-			nextProcessIndex -= WAIT_ABANDONED_0;
-			printf("\nClosing process %u [abandoned]", nextProcessIndex);
-			reportChildExitCode(handles[nextProcessIndex], nextProcessIndex);
-			CloseHandle(handles[nextProcessIndex]);
-		}
+		nextProcessIndex = (unsigned int)exitedIndex;
+		reportChildExitCode(exitStatus, nextProcessIndex);
+		printf("\nClosing process %u", nextProcessIndex);
 	}
 	return 0;
 }
@@ -1220,21 +1094,19 @@ int waitToSpawnMoreProcesses(MYSQL& mysql, const int sourceType, const int numPr
 // loop calls this on every iteration once exitEventually is set.
 // Note the "Sending break signals" message is printed even on the repeat calls that do
 // nothing.
-void sendBreakSignals(bool & sentBreakSignals, const int numProcesses, HANDLE* handles)
+void sendBreakSignals(bool & sentBreakSignals, const int numProcesses, pid_t* childPids)
 {
 	printf("\nSending break signals to children...\n");
 	if (!sentBreakSignals)
 	{
 		for (int p = 0; p < numProcesses; p++)
-		{
-			int pid = GetProcessId(handles[p]);
-			signalCtrl(pid, CTRL_C_EVENT);
-		}
+			if (childPids[p] > 0)
+				lpSignalInterrupt(childPids[p]);
 		sentBreakSignals = true;
 	}
 }
 
-bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, wstring& path, wstring& encoding, wstring& start, int& repeatStart, wstring& etext, wstring& author, wstring& title);
+bool getNextUnprocessedSource(MYSQL& mysql, int begin, int end, int sourceType, bool setUsed, int& id, lpwstring& path, lpwstring& encoding, lpwstring& start, int& repeatStart, lpwstring& etext, lpwstring& author, lpwstring& title);
 int getNumSources(MYSQL& mysql, int sourceType, bool left);
 bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step);
 // Controller mode (-mp): keep up to maxProcesses child workers busy until the `sources`
@@ -1252,36 +1124,41 @@ bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step);
 // Side effects: changes the working directory to "source" for its whole duration, spawns
 // and reaps processes, sets the console title, allocates handles[].
 // NOTE: errorCode is never assigned inside the loop, so the loop only ends through one of
-// the break paths; the calloc is unchecked; and because of the _exit(0) the free(handles)
-// and the chdir("..") are unreachable in every mode except REQUEST_TYPE.
-// NOTE: maxProcesses is not clamped to MAXIMUM_WAIT_OBJECTS (64); a larger -mp makes
-// WaitForMultipleObjectsEx fail immediately and the run dies with an unrelated message.
+// the break paths; and because of the _exit(0) the free(childPids) and the chdir("..")
+// are unreachable in every mode except REQUEST_TYPE.
+// Batch B4a: the calloc is now checked, and the old "maxProcesses is not clamped to
+// MAXIMUM_WAIT_OBJECTS (64), so a larger -mp makes WaitForMultipleObjectsEx fail
+// immediately and the run dies with an unrelated message" hazard is simply gone --
+// waitForAnyChildProcess has no such limit, so -mp is bounded only by what the
+// machine can actually run.
 int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int beginSource, int endSource, cSource::sourceTypeEnum processSourceType, int maxProcesses, int numSourcesPerProcess,
-	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, wstring specialExtension)
+	bool forceSourceReread, bool sourceWrite, bool sourceWordNetRead, bool sourceWordNetWrite, bool makeCopyBeforeSourceWrite, bool parseOnly, lpwstring specialExtension)
 {
 	LFS
 		if (chdir("source") < 0)
 			return -1;
 	bool sentBreakSignals = false;
 	int startTime = clock();
-	HANDLE* handles = (HANDLE*)calloc(maxProcesses, sizeof(HANDLE));
+	pid_t* childPids = (pid_t*)calloc(maxProcesses, sizeof(pid_t));
+	if (!childPids)
+		lplog(LOG_FATAL_ERROR, u"could not allocate the child process table for -mp %d", maxProcesses);
 	int numProcesses = 0, errorCode = 0, numSourcesProcessedOriginally = 0, numSourcesLeft;
-	__int64 wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
+	int64_t wordsProcessedOriginally = 0, sentencesProcessedOriginally = 0;
 	if (processKind == 0)
 		sourceType = cSource::REQUEST_TYPE;
 	getNumSourcesProcessed(mysql, sourceType, numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally);
 	numSourcesLeft = getNumSources(mysql, sourceType, true);
 	maxProcesses = min(maxProcesses, numSourcesLeft);
-	wstring tmpstr;
+	lpwstring tmpstr;
 	while (!errorCode)
 	{
 		unsigned int nextProcessIndex = numProcesses;
-		int breakContinueResult = waitToSpawnMoreProcesses(mysql, sourceType, numProcesses, handles, nextProcessIndex, startTime,
+		int breakContinueResult = waitToSpawnMoreProcesses(mysql, sourceType, numProcesses, childPids, nextProcessIndex, startTime,
 			numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally, maxProcesses, numSourcesLeft);
 		if (breakContinueResult < 0) break;
 		if (breakContinueResult > 0)  continue;
 		int id, repeatStart;
-		wstring start, path, encoding, etext, author, title, pathInCache;
+		lpwstring start, path, encoding, etext, author, title, pathInCache;
 		bool result = true;
 		if (processKind == 1 && numSourcesLeft > 0)
 			numSourcesLeft--;
@@ -1299,20 +1176,20 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 		{
 			if (numProcesses == maxProcesses)
 			{
-				memmove(handles + nextProcessIndex, handles + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(handles[0]));
+				memmove(childPids + nextProcessIndex, childPids + nextProcessIndex + 1, (maxProcesses - nextProcessIndex - 1) * sizeof(childPids[0]));
 				numProcesses--;
 			}
-			waitForSpawnedProcesses(mysql, sourceType, numProcesses, handles, nextProcessIndex, startTime,
+			waitForSpawnedProcesses(mysql, sourceType, numProcesses, childPids, nextProcessIndex, startTime,
 				numSourcesProcessedOriginally, wordsProcessedOriginally, sentencesProcessedOriginally, maxProcesses);
 			break;
 		}
 		if (exitNow || exitEventually)
-			sendBreakSignals(sentBreakSignals, numProcesses, handles);
+			sendBreakSignals(sentBreakSignals, numProcesses, childPids);
 		else
 		{
-			HANDLE processHandle= createLPProcess(processKind, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, parseOnly, makeCopyBeforeSourceWrite,
+			pid_t childPid = createLPProcess(processKind, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, parseOnly, makeCopyBeforeSourceWrite,
 				numSourcesPerProcess, specialExtension, nextProcessIndex, step);
-			handles[nextProcessIndex] = processHandle;
+			childPids[nextProcessIndex] = childPid;
 			if (numProcesses < maxProcesses)
 				numProcesses++;
 		}
@@ -1331,23 +1208,26 @@ int startProcesses(MYSQL& mysql, int sourceType, int processKind, int step, int 
 		mysql_close(&mysql);
 		_exit(0); // fast exit
 	}
-	free(handles);
+	free(childPids);
 	return chdir("..");
 }
 
-SRWLOCK rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
-// Initialize the process-wide reader/writer locks declared extern in general.h, before any
-// worker thread can run.  Called once from initialize().
-// NOTE: orderedHyperNymsMapSRWLock is declared above but not initialized here even though
-// getWordNet.cpp acquires it; it only works because a zero-initialized global happens to
-// match what InitializeSRWLock produces.
+std::shared_mutex rdfTypeMapSRWLock, mySQLTotalTimeSRWLock, totalInternetTimeWaitBandwidthControlSRWLock, mySQLQueryBufferSRWLock, orderedHyperNymsMapSRWLock;
+// Batch B3: createLocks() is now empty. It called InitializeSRWLock on four of the
+// five locks above; a default-constructed std::shared_mutex is already usable, so
+// there is nothing left to initialize. The function is kept (rather than deleted
+// along with its call in initialize()) purely so the call site stays a one-line
+// no-op instead of this batch reaching into main.cpp's startup sequence, which is
+// batch B4a's to restructure -- B4a can drop both together.
+//
+// This also closes the note that used to live here: orderedHyperNymsMapSRWLock was
+// the one lock never passed to InitializeSRWLock even though getWordNet.cpp
+// acquires it, and worked only because a zero-initialized global happened to equal
+// SRWLOCK_INIT. That asymmetry no longer exists -- all five are constructed
+// identically by the runtime.
 void createLocks(void)
 {
 	LFS
-	InitializeSRWLock(&rdfTypeMapSRWLock);
-	InitializeSRWLock(&mySQLTotalTimeSRWLock);
-	InitializeSRWLock(&totalInternetTimeWaitBandwidthControlSRWLock);
-	InitializeSRWLock(&mySQLQueryBufferSRWLock);
 }
 
 // Make sure the MEMORY-engine mirror `wordRelationsMemory` is populated from the on-disk
@@ -1366,9 +1246,9 @@ int WRMemoryCheck(MYSQL mysql)
 	int numRowsOnDisk = 0, numRowsInMemory = 0;
 	MYSQL_ROW sqlrow;
 	MYSQL_RES* result = NULL;
-	if (!myquery(&mysql, L"LOCK TABLES wordRelationsMemory WRITE,wordRelations READ"))
+	if (!myquery(&mysql, u"LOCK TABLES wordRelationsMemory WRITE,wordRelations READ"))
 		return -1;
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
+	if (!myquery(&mysql, u"SELECT COUNT(sourceId) from wordRelationsMemory", result))
 		return -1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		numRowsInMemory = atoi(sqlrow[0]);
@@ -1376,85 +1256,85 @@ int WRMemoryCheck(MYSQL mysql)
 		return -1;
 	if (numRowsInMemory > 0)
 	{
-		myquery(&mysql, L"UNLOCK TABLES");
+		myquery(&mysql, u"UNLOCK TABLES");
 		return 0;
 	}
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelations", result))
+	if (!myquery(&mysql, u"SELECT COUNT(sourceId) from wordRelations", result))
 		return -1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		numRowsOnDisk = atoi(sqlrow[0]);
 	printf("Loading wordrelations into memory...\n");
-	if (!myquery(&mysql, L"insert into wordrelationsmemory select id, sourceId, lastWhere, fromWordId, toWordId, typeId, totalCount from wordrelations"))
+	if (!myquery(&mysql, u"insert into wordrelationsmemory select id, sourceId, lastWhere, fromWordId, toWordId, typeId, totalCount from wordrelations"))
 		return -1;
 	printf("Finished wordrelations into memory...\n");
-	if (!myquery(&mysql, L"SELECT COUNT(sourceId) from wordRelationsMemory", result))
+	if (!myquery(&mysql, u"SELECT COUNT(sourceId) from wordRelationsMemory", result))
 		return -1;
 	if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		numRowsInMemory = atoi(sqlrow[0]);
 	else
 		return -1;
-	myquery(&mysql, L"UNLOCK TABLES");
+	myquery(&mysql, u"UNLOCK TABLES");
 	return (numRowsInMemory == numRowsOnDisk) ? 0 : -1;
 }
 
 int numSourceLimit = 0;
-void processCommandArguments(int argc, wchar_t* argv[],
+void processCommandArguments(int argc, lpchar_t* argv[],
 	bool &forceSourceReread, bool& sourceWrite, bool& sourceWordNetRead, bool& sourceWordNetWrite, 
 	bool &resetAllSource, bool &resetProcessingFlags, bool &generateFormStatistics, bool &retry,
 	bool &parseOnly, bool &makeCopyBeforeSourceWrite,
 	int &sourceArgs, int &numSourcesPerProcess, enum cSource::sourceTypeEnum &sourceType,
-	wstring &specialExtension, wchar_t sourceHost[])
+	lpwstring &specialExtension, lpchar_t sourceHost[])
 {
 	int numCommandLineParameters = argc;
 	for (int I = 0; I < argc; I++)
 	{
-		if (!_wcsicmp(argv[I], L"-server") && I < argc - 1)
-			wcscpy(sourceHost, argv[++I]);
-		else if (!_wcsicmp(argv[I], L"-log") && I < argc - 1)
+		if (!lp_wcscasecmp(argv[I], u"-server") && I < argc - 1)
+			lp_strcpy(sourceHost, argv[++I]);
+		else if (!lp_wcscasecmp(argv[I], u"-log") && I < argc - 1)
 			logFileExtension = argv[++I];
-		else if (!_wcsicmp(argv[I], L"-mp") && I < argc - 1)
-			multiProcess = _wtoi(argv[++I]);
-		else if (!_wcsicmp(argv[I], L"-numSourcesPerProcess") && I < argc - 1)
-			numSourcesPerProcess = _wtoi(argv[++I]);
-		else if (!_wcsicmp(argv[I], L"-numSourceLimit") && I < argc - 1)
-			numSourceLimit = _wtoi(argv[++I]);
-		else if (!_wcsicmp(argv[I], L"-cacheDir") && I < argc - 1)
+		else if (!lp_wcscasecmp(argv[I], u"-mp") && I < argc - 1)
+			multiProcess = lp_wtoi(argv[++I]);
+		else if (!lp_wcscasecmp(argv[I], u"-numSourcesPerProcess") && I < argc - 1)
+			numSourcesPerProcess = lp_wtoi(argv[++I]);
+		else if (!lp_wcscasecmp(argv[I], u"-numSourceLimit") && I < argc - 1)
+			numSourceLimit = lp_wtoi(argv[++I]);
+		else if (!lp_wcscasecmp(argv[I], u"-cacheDir") && I < argc - 1)
 			cacheDir = argv[++I];
-		else if (!_wcsicmp(argv[I], L"-resetAllSource"))
+		else if (!lp_wcscasecmp(argv[I], u"-resetAllSource"))
 			resetAllSource = true;
-		else if (!_wcsicmp(argv[I], L"-resetProcessingFlags"))
+		else if (!lp_wcscasecmp(argv[I], u"-resetProcessingFlags"))
 			resetProcessingFlags = true;
-		else if (!_wcsicmp(argv[I], L"-generateFormStatistics"))
+		else if (!lp_wcscasecmp(argv[I], u"-generateFormStatistics"))
 			generateFormStatistics = true;
-		else if (!_wcsicmp(argv[I], L"-retry"))
+		else if (!lp_wcscasecmp(argv[I], u"-retry"))
 			retry = true;
-		else if (!_wcsicmp(argv[I], L"-parseOnly"))
+		else if (!lp_wcscasecmp(argv[I], u"-parseOnly"))
 			parseOnly = true;
-		else if ((!_wcsicmp(argv[I], L"-LC") || !_wcsicmp(argv[I], L"-logCache")) && I < argc - 1)
-			logCache = _wtoi(argv[I + 1]);
-		else if ((!_wcsicmp(argv[I], L"-BC")) && I < argc - 1) // bandwidth control
-			cInternet::bandwidthControl = _wtoi(argv[I + 1]);
-		else if (!_wcsicmp(argv[I], L"-logMatchedSentences"))
+		else if ((!lp_wcscasecmp(argv[I], u"-LC") || !lp_wcscasecmp(argv[I], u"-logCache")) && I < argc - 1)
+			logCache = lp_wtoi(argv[I + 1]);
+		else if ((!lp_wcscasecmp(argv[I], u"-BC")) && I < argc - 1) // bandwidth control
+			cInternet::bandwidthControl = lp_wtoi(argv[I + 1]);
+		else if (!lp_wcscasecmp(argv[I], u"-logMatchedSentences"))
 			logMatchedSentences = true;
-		else if (!_wcsicmp(argv[I], L"-logUnmatchedSentences"))
+		else if (!lp_wcscasecmp(argv[I], u"-logUnmatchedSentences"))
 			logUnmatchedSentences = true;
-		else if (!_wcsicmp(argv[I], L"-TSRO"))
+		else if (!lp_wcscasecmp(argv[I], u"-TSRO"))
 			TSROverride = true;
-		else if (!_wcsicmp(argv[I], L"-fTOR"))
+		else if (!lp_wcscasecmp(argv[I], u"-fTOR"))
 			flipTOROverride = true;
-		else if (!_wcsicmp(argv[I], L"-fTNR"))
+		else if (!lp_wcscasecmp(argv[I], u"-fTNR"))
 			flipTNROverride = true;
-		else if (!_wcsicmp(argv[I], L"-forceSourceReread"))
+		else if (!lp_wcscasecmp(argv[I], u"-forceSourceReread"))
 			forceSourceReread = true;
-		else if (!_wcsicmp(argv[I], L"-SW"))
+		else if (!lp_wcscasecmp(argv[I], u"-SW"))
 			sourceWrite = true;
-		else if (!_wcsicmp(argv[I], L"-MCSW"))
+		else if (!lp_wcscasecmp(argv[I], u"-MCSW"))
 			makeCopyBeforeSourceWrite = true;
-		else if (!_wcsicmp(argv[I], L"-SWNR"))
+		else if (!lp_wcscasecmp(argv[I], u"-SWNR"))
 			sourceWordNetRead = true;
-		else if (!_wcsicmp(argv[I], L"-SWNW"))
+		else if (!lp_wcscasecmp(argv[I], u"-SWNW"))
 			sourceWordNetWrite = true;
-		else if (!_wcsicmp(argv[I], L"-specialExtension"))
+		else if (!lp_wcscasecmp(argv[I], u"-specialExtension"))
 			specialExtension = argv[++I];
 		else
 			continue;
@@ -1462,12 +1342,12 @@ void processCommandArguments(int argc, wchar_t* argv[],
 	}
 	sourceArgs = -1;
 	sourceType = cSource::NO_SOURCE_TYPE;
-	const wchar_t* where;
+	const lpchar_t* where;
 	for (int I = 1; I < numCommandLineParameters - 1; I++)
 	{
-		wstring arg = argv[I];
+		lpwstring arg = argv[I];
 		std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
-		if ((where = wcsstr(L"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
+		if ((where = lp_strstr(u"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
 		{
 			sourceType = (enum cSource::sourceTypeEnum)(where[-1] - '0');
 			sourceArgs = I;
@@ -1475,21 +1355,21 @@ void processCommandArguments(int argc, wchar_t* argv[],
 		}
 	}
 	if (sourceArgs == -1)
-		lplog(LOG_FATAL_ERROR, L"Source type not found.");
+		lplog(LOG_FATAL_ERROR, u"Source type not found.");
 }
 
-int processPatternTransformTypeSource(cSource &source, wchar_t *path)
+int processPatternTransformTypeSource(cSource &source, lpchar_t *path)
 {
-	wchar_t consoleTitle[1500];
+	lpchar_t consoleTitle[1500];
 #ifdef _DEBUG
-	wchar_t displayDebugFlag = L'D';
+	lpchar_t displayDebugFlag = u'D';
 #else
-	wchar_t displayDebugFlag = L'R';
+	lpchar_t displayDebugFlag = u'R';
 #endif
-	wsprintf(consoleTitle, L"[%c] %s...", displayDebugFlag, path);
-	_putws(consoleTitle);
-	lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
-	SetConsoleTitle(consoleTitle);
+	lp_snprintf(consoleTitle, 1500, u"[%c] %s...", displayDebugFlag, path);
+	lp_wprintf(u"%s\n", consoleTitle); // batch B4a: _putws is MSVC-only, and takes a real wchar_t*
+	lplog(LOG_INFO | LOG_ERROR, u"%s\n", consoleTitle);
+	lpReportProgress(consoleTitle);
 	unlockTables(source.mysql);
 	Words.addMultiWordObjects(source.multiWordStrings, source.multiWordObjects);
 	cSource* requestedSource;
@@ -1498,7 +1378,7 @@ int processPatternTransformTypeSource(cSource &source, wchar_t *path)
 }
 
 void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRead, bool sourceWordNetWrite, bool sourceWrite, bool viterbiTest, bool parseOnly, bool makeCopyBeforeSourceWrite,
-	const wstring specialExtension, wstring title, wstring& encoding, wstring& start, int& repeatStart, wstring& etext,
+	const lpwstring specialExtension, lpwstring title, lpwstring& encoding, lpwstring& start, int& repeatStart, lpwstring& etext,
 	int &numWordsOverAllSource, int &globalTotalUnmatched, int &globalOverMatchedPositionsTotal)
 {
 	int ret = 0;
@@ -1520,7 +1400,7 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 			case cSource::REQUEST_TYPE:
 				if ((ret = source.tokenize(title, etext, source.sourcePath, encoding, start, repeatStart, unknownCount)) < 0)
 				{
-					lplog(LOG_ERROR, L"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).", source.sourcePath.c_str(), ret, start.c_str(), repeatStart);
+					lplog(LOG_ERROR, u"ERROR:Unable to parse %s - %d (start=%s, repeatStart=%d).", source.sourcePath.c_str(), ret, start.c_str(), repeatStart);
 					return;
 				}
 				quotationExceptions = source.doQuotesOwnershipAndContractions(totalQuotations);
@@ -1545,12 +1425,12 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 		//int cap2=source.m.capacity();
 		int totalUnmatched = source.printSentences(true, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
 		if (totalUnmatched < 0)
-			lplog(LOG_FATAL_ERROR, L"Cannot print sentences.");
+			lplog(LOG_FATAL_ERROR, u"Cannot print sentences.");
 		globalTotalUnmatched += totalUnmatched;
 	}
 	else
 	{
-		lplog(LOG_INFO, L"%s already parsed.", source.sourcePath.c_str());
+		lplog(LOG_INFO, u"%s already parsed.", source.sourcePath.c_str());
 		source.m.shrink_to_fit(); // C++ 11 only
 		source.printSentencesCheck(false);
 	}
@@ -1599,7 +1479,7 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 	//source.printObjects(); // only necessary if printing objects
 	//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
 	if (sourceWrite && !source.write(source.sourcePath, true, false, specialExtension))
-		lplog(LOG_FATAL_ERROR, L"buffer overrun");
+		lplog(LOG_FATAL_ERROR, u"buffer overrun");
 	vector <int> badSpeakers;
 	source.printResolutionCheck(badSpeakers);
 	source.logSpaceCheck();
@@ -1617,10 +1497,10 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 		source.writeWNMaps(source.sourcePath);
 	if (source.debugTrace.traceSpeakerResolution)
 	{
-		source.printTenseStatistics(L"Narrator", source.narratorTenseStatistics, source.numTotalNarratorVerbTenses);
-		source.printTenseStatistics(L"Speaker", source.speakerTenseStatistics, source.numTotalSpeakerVerbTenses);
-		source.printTenseStatistics(L"Narrator All Tenses", source.narratorFullTenseStatistics, source.numTotalNarratorFullVerbTenses);
-		source.printTenseStatistics(L"Speaker All Tenses", source.speakerFullTenseStatistics, source.numTotalSpeakerFullVerbTenses);
+		source.printTenseStatistics(u"Narrator", source.narratorTenseStatistics, source.numTotalNarratorVerbTenses);
+		source.printTenseStatistics(u"Speaker", source.speakerTenseStatistics, source.numTotalSpeakerVerbTenses);
+		source.printTenseStatistics(u"Narrator All Tenses", source.narratorFullTenseStatistics, source.numTotalNarratorFullVerbTenses);
+		source.printTenseStatistics(u"Speaker All Tenses", source.speakerFullTenseStatistics, source.numTotalSpeakerFullVerbTenses);
 		if (source.debugTrace.traceSpeakerResolution)
 			source.printSectionStatistics();
 	}
@@ -1639,17 +1519,41 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 		cWord::resetCapitalizationAndProperNounUsageStatistics(source.debugTrace);
 }
 
+// Batch B4a: installs one signal handler, replacing SetUnhandledExceptionFilter
+// (the four fault signals) and SetConsoleCtrlHandler (the three interrupt signals).
+// SA_RESTART keeps an interrupt from turning every in-flight read/write into a
+// spurious EINTR failure in code that has never checked for it.
+static void installSignalHandlers()
+{
+	struct sigaction interruptAction;
+	memset(&interruptAction, 0, sizeof(interruptAction));
+	interruptAction.sa_handler = interruptHandler;
+	sigemptyset(&interruptAction.sa_mask);
+	interruptAction.sa_flags = SA_RESTART;
+	sigaction(SIGINT, &interruptAction, nullptr);
+	sigaction(SIGTERM, &interruptAction, nullptr);
+	sigaction(SIGHUP, &interruptAction, nullptr);
+
+	struct sigaction crashAction;
+	memset(&crashAction, 0, sizeof(crashAction));
+	crashAction.sa_handler = crashHandler;
+	sigemptyset(&crashAction.sa_mask);
+	crashAction.sa_flags = 0;
+	sigaction(SIGSEGV, &crashAction, nullptr);
+	sigaction(SIGBUS, &crashAction, nullptr);
+	sigaction(SIGFPE, &crashAction, nullptr);
+	sigaction(SIGILL, &crashAction, nullptr);
+}
+
 void initialize()
 {
-	// Create a dump file whenever this program crashes (only on windows)
-	SetUnhandledExceptionFilter(unhandled_handler);
-	setConsoleWindowSize(100, 8);
+	// Log a stack trace whenever this program crashes, and handle Ctrl-C.
+	installSignalHandlers();
 	createLocks();
 	set_new_handler(no_memory);
-	SetConsoleCtrlHandler(ConsoleHandler, true);
 	initializeCounter();
-	wchar_t dir[1024];
-	GetCurrentDirectoryW(1024, dir);
+	// Batch B4a: the GetCurrentDirectoryW(1024, dir) that used to sit here is gone
+	// along with its buffer -- `dir` was written and then never read.
 	if (chdir(".."))
 		exit(-1);
 	cacheDir = getCacheDir().c_str();
@@ -1662,24 +1566,25 @@ void initialize()
 // -cacheDir named a valid directory.
 void validateCacheDir()
 {
-	if (_waccess(cacheDir, 0) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cache directory %s does not exist!", cacheDir);
+	// Batch B4a: access(F_OK) is the POSIX spelling of lp_waccess(path, 0).
+	if (access(lp_utf16_to_utf8(lpwstring(cacheDir)).c_str(), F_OK) < 0)
+		lplog(LOG_FATAL_ERROR, u"Cache directory %s does not exist!", cacheDir);
 }
 
 void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmatched, int globalOverMatchedPositionsTotal, int overallTime)
 {
 	if (numWordsOverAllSource)
 	{
-		wprintf(L"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
+		lp_wprintf(u"\n%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
 			(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWordsOverAllSource,
 			globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWordsOverAllSource, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWordsOverAllSource);
-		lplog(L"%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
+		lplog(u"%d milliseconds elapsed (%d words, %d unmatched (%5.2f%%) %d overmatched (%5.2f%%)",
 			(int)((clock() - overallTime) / (CLOCKS_PER_SEC / 1000)), numWordsOverAllSource,
 			globalTotalUnmatched, (float)globalTotalUnmatched * 100 / numWordsOverAllSource, globalOverMatchedPositionsTotal, (float)globalOverMatchedPositionsTotal * 100 / numWordsOverAllSource);
 		lplog();
 	}
 	else
-		lplog(L"%d milliseconds elapsed. No words processed.", (clock() - overallTime) / (CLOCKS_PER_SEC / 1000));
+		lplog(u"%d milliseconds elapsed. No words processed.", (clock() - overallTime) / (CLOCKS_PER_SEC / 1000));
 }
 
 /*
@@ -1699,9 +1604,9 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 // -Interactive 0 + -BC 0 -cacheDir J:\caches -SR -SW -SWNR -SWNW -TNMS
 
 // test gutenberg by generating usage statistics
-  if (argc>1 && !wcscmp(argv[1],L"-tg"))
+  if (argc>1 && !lp_strcmp(argv[1],u"-tg"))
   {
-  	cSource source2(L"localhost",0,false,true,true);
+  	cSource source2(u"localhost",0,false,true,true);
   	source2.testStartCode();
   	return 0;
 //}
@@ -1715,10 +1620,10 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 	vector <mbInfoRecordingType> mbRecordingsTypes;
 	vector <mbInfoReleaseType> mbReleasesTypes;
 	vector <mbInfoArtistType> mbArtistsTypes;
-	getArtists(L"artist",L"Jay-Z",mbArtistsTypes);
-	getArtists(L"compactLabel",L"Roc-A-Fella Records",mbArtistsTypes);
-	getReleases(L"compactLabel",L"Roc-A-Fella Records",mbReleasesTypes);
-	getRecordings(L"artist",L"Jay-Z",mbRecordingsTypes);
+	getArtists(u"artist",u"Jay-Z",mbArtistsTypes);
+	getArtists(u"compactLabel",u"Roc-A-Fella Records",mbArtistsTypes);
+	getReleases(u"compactLabel",u"Roc-A-Fella Records",mbReleasesTypes);
+	getRecordings(u"artist",u"Jay-Z",mbRecordingsTypes);
 // TEST thesaurus
 	// build thesaurus
 	//source.createThesaurusTables();
@@ -1726,10 +1631,10 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 	//for (int I = 0; I < thesaurus.size(); I++)
 	//	source.writeThesaurusEntry(thesaurus[I]);
 	// synonym testing
-	//vector <set <wstring> > synonyms;
-	//source.getWordNetSynonymsOnly(L"car", synonyms, 1);
+	//vector <set <lpwstring> > synonyms;
+	//source.getWordNetSynonymsOnly(u"car", synonyms, 1);
 	//for (int I = 0; I < synonyms.size(); I++)
-		//for (set<wstring>::iterator ss = synonyms[I].begin(), ssEnd = synonyms[I].end(); ss != ssEnd; ss++)
+		//for (set<lpwstring>::iterator ss = synonyms[I].begin(), ssEnd = synonyms[I].end(); ss != ssEnd; ss++)
 			//printf("%d:%S\n", I, ss->c_str());
 
 // TEST PATTERNS
@@ -1738,26 +1643,57 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 
 // NOUN/VERB class analysis (debugging)
 	//bool measurableObject,notMeasurableObject,grouping;
-	//analyzeNounClass(0,L"fish",0,measurableObject,notMeasurableObject,grouping,t);
-	//wstring proposedSubstitute;
+	//analyzeNounClass(0,u"fish",0,measurableObject,notMeasurableObject,grouping,t);
+	//lpwstring proposedSubstitute;
 	//int inflectionFlags=0;
 	//bool isNoun=false,isVerb=true,isAdjective=false,isAdverb=false;
-	//analyzeSense(false,L"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
+	//analyzeSense(false,u"draft",proposedSubstitute,numIrregular,inflectionFlags,isNoun,isVerb,isAdjective,isAdverb);
 */
-int wmain(int argc, wchar_t* argv[])
+// Batch B4a: MSVC's wmain(int, wchar_t*[]) entry point does not exist on any POSIX
+// platform, so the real entry point is now a standard main() that widens argv once,
+// up front, and hands the same shape to the same lpMain() body below.
+//
+// The conversion has to outlive lpMain (argv strings are stored and referenced for
+// the whole run, e.g. processCommandArguments keeps `cacheDir = argv[++I]`), so the
+// decoded strings live in function-local statics that are deliberately never freed
+// -- the process-lifetime equivalent of what the CRT did for wmain's argv.
+//
+// The pointers handed on are non-const, matching wmain's own `lpchar_t*[]`, so that
+// every downstream signature (processCommandArguments, processPatternTransformTypeSource
+// and everything they reach) is untouched by this change. They point into the
+// reserved-and-then-filled `wideArguments` strings, so they stay valid and are
+// legitimately mutable. argv[argc] is NULL, matching the C standard's guarantee,
+// which several call sites here rely on by reading argv[sourceArgs + 2].
+int lpMain(int argc, lpchar_t* argv[]);
+
+int main(int argc, char* argv[])
+{
+	static std::vector<lpwstring> wideArguments;
+	static std::vector<lpchar_t*> wideArgv;
+	wideArguments.reserve(argc); // no reallocation, so the pointers taken below stay valid
+	for (int i = 0; i < argc; i++)
+		wideArguments.push_back(lpwstring(lp_narrow_to_wide(std::string(argv[i]))));
+	wideArgv.reserve(argc + 1);
+	for (int i = 0; i < argc; i++)
+		wideArgv.push_back(&wideArguments[i][0]);
+	wideArgv.push_back(nullptr);
+	return lpMain(argc, wideArgv.data());
+}
+
+int lpMain(int argc, lpchar_t* argv[])
 {
 	initialize();
 	bool viterbiTest = false;
 	cProfile profile("");
 	int overallTime = clock();
-	wchar_t sourceHost[1024];
-	wcscpy(sourceHost, L"localhost");
+	lpchar_t sourceHost[1024];
+	lp_strcpy(sourceHost, u"localhost");
 	bool forceSourceReread = false, sourceWrite = false, sourceWordNetRead = false, sourceWordNetWrite = false;
 	bool resetAllSource = false, resetProcessingFlags = false, generateFormStatistics = false, retry = false;
 	bool parseOnly = false, makeCopyBeforeSourceWrite = false;
 	int sourceArgs = -1, numSourcesPerProcess = 5;
 	enum cSource::sourceTypeEnum sourceType;
-	wstring specialExtension;
+	lpwstring specialExtension;
 	processCommandArguments(argc, argv, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite,
 		resetAllSource, resetProcessingFlags, generateFormStatistics, retry,
 		parseOnly, makeCopyBeforeSourceWrite,	sourceArgs, numSourcesPerProcess, sourceType, specialExtension,	sourceHost);
@@ -1777,40 +1713,42 @@ int wmain(int argc, wchar_t* argv[])
 	int globalTotalUnmatched = 0, globalOverMatchedPositionsTotal = 0, numWordsOverAllSource = 0;
 	if (iswdigit(argv[sourceArgs + 1][0]))
 	{
-		int beginSource = _wtoi(argv[sourceArgs + 1]), endSource;
-		endSource = (argv[sourceArgs + 2][0] == '+') ? -1 : ((iswdigit(argv[sourceArgs + 2][0])) ? _wtoi(argv[sourceArgs + 2]) : beginSource + 1);
+		int beginSource = lp_wtoi(argv[sourceArgs + 1]), endSource;
+		endSource = (argv[sourceArgs + 2][0] == '+') ? -1 : ((iswdigit(argv[sourceArgs + 2][0])) ? lp_wtoi(argv[sourceArgs + 2]) : beginSource + 1);
 		if (retry)
 		{
-			wprintf(L"Resetting sources...               \r");
+			lp_wprintf(u"Resetting sources...               \r");
 			source.resetSource(beginSource, endSource);
 		}
 		if (multiProcess > 0)
 		{
-			HWND consoleWindowHandle = GetConsoleWindow();
-			SetWindowPos(consoleWindowHandle, HWND_NOTOPMOST, 900, 0, 700, 180, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+			// Batch B4a: the GetConsoleWindow/SetWindowPos pair that moved the
+			// controller's own console window out of the way of its children's
+			// is deleted -- a process cannot position the terminal it runs in on
+			// macOS, and with no per-child windows there is nothing to move for.
 			startProcesses(source.mysql, source.sourceType, 1, 0, beginSource, endSource, sourceType, multiProcess, numSourcesPerProcess, forceSourceReread, sourceWrite, sourceWordNetRead, sourceWordNetWrite, makeCopyBeforeSourceWrite, parseOnly, specialExtension);
 			return 0;
 		}
-		wprintf(L"Getting number of sources to process...               \r");
+		lp_wprintf(u"Getting number of sources to process...               \r");
 		int numSources = getNumSources(source.mysql, source.sourceType, false);
-		int numSourcesProcessed = 0, pid = GetCurrentProcessId();
+		int numSourcesProcessed = 0, pid = (int)getpid();
 		while (!exitNow && !exitEventually && (numSourceLimit == 0 || numSourcesProcessed++ < numSourceLimit))
 		{
 			int repeatStart;
-			wstring path, encoding, etext, author, title, start;
-			wprintf(L"Getting number of sources left...               \r");
+			lpwstring path, encoding, etext, author, title, start;
+			lp_wprintf(u"Getting number of sources left...               \r");
 			int numSourcesLeft = getNumSources(source.mysql, source.sourceType, true);
 			if (!getNextUnprocessedSource(source.mysql, beginSource, endSource, source.sourceType, true, source.sourceId, path, encoding, start, repeatStart, etext, author, title))
 				break;
-			path.insert(0, L"\\");
+			path.insert(0, u"\\");
 			path = path.insert(0, getTextDir());
-			wchar_t consoleTitle[1500];
-			wsprintf(consoleTitle, L"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", source.sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == L"**SKIP**" || start == L"**START NOT FOUND**") ? L"Skipping" : L"", title.c_str());
-			_putws(consoleTitle);
-			lplog(LOG_INFO | LOG_ERROR, L"%s\n", consoleTitle);
-			SetConsoleTitle(consoleTitle);
+			lpchar_t consoleTitle[1500];
+			lp_snprintf(consoleTitle, 1500, u"[%03d:%03d-%03d:%03d%%]PID%05d %s '%s'...", source.sourceId, beginSource, numSources, (numSources - numSourcesLeft) * 100 / numSources, pid, (start == u"**SKIP**" || start == u"**START NOT FOUND**") ? u"Skipping" : u"", title.c_str());
+			lp_wprintf(u"%s\n", consoleTitle);
+			lplog(LOG_INFO | LOG_ERROR, u"%s\n", consoleTitle);
+			lpReportProgress(consoleTitle);
 			unlockTables(source.mysql);
-			if (start == L"**SKIP**")
+			if (start == u"**SKIP**")
 				continue;
 			source.sourcePath = path;
 			processSource(source, forceSourceReread, sourceWordNetRead, sourceWordNetWrite, sourceWrite, viterbiTest, parseOnly, makeCopyBeforeSourceWrite, 
@@ -1823,11 +1761,11 @@ int wmain(int argc, wchar_t* argv[])
 	}
 	else
 	{
-		wstring start = L"~~BEGIN", title, etext, encoding = L"NOT FOUND";
-		if (argv[sourceArgs + 2][0] == L'~')
+		lpwstring start = u"~~BEGIN", title, etext, encoding = u"NOT FOUND";
+		if (argv[sourceArgs + 2][0] == u'~')
 			start = argv[sourceArgs + 2];
 		int repeatStart = 1;
-		source.sourcePath = L"tests\\" + std::wstring(argv[sourceArgs + 1]) + L".txt";
+		source.sourcePath = u"tests\\" + lpwstring(argv[sourceArgs + 1]) + u".txt";
 		source.sourceType = cSource::GUTENBERG_SOURCE_TYPE;
 		processSource(source, forceSourceReread, sourceWordNetRead, sourceWordNetWrite, sourceWrite, viterbiTest, parseOnly, makeCopyBeforeSourceWrite,
 			specialExtension, title, encoding, start, repeatStart, etext,

@@ -1,4 +1,9 @@
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 /*
 	vcXML.h - VerbNet XML tree model and per-class semantic flags
 
@@ -32,9 +37,9 @@
 class cXMLAttribute 
 {
 public:
-	wstring a;
-	wstring as;
-	cXMLAttribute(wstring &ina,wstring &inas)
+	lpwstring a;
+	lpwstring as;
+	cXMLAttribute(lpwstring &ina,lpwstring &inas)
 	{
 		a=ina;
 		as=inas;
@@ -44,7 +49,7 @@ public:
 // One XML element: tag name XClass, attributes av, nested elements vxc.
 class cXMLClass {
 public:
-	wstring XClass;
+	lpwstring XClass;
 	vector <cXMLAttribute> av;
 	vector <cXMLClass> vxc;
 };
@@ -107,7 +112,7 @@ public:
 	bool ignore;
 	bool am;
 	int totalFrequency;
-	unordered_map <wstring,int> frequencyByMember;
+	unordered_map <lpwstring,int> frequencyByMember;
 	cVerbNet()
 	{
 		establish=false;
@@ -167,42 +172,42 @@ public:
 					 metaContains || metaDesire || metaBelief || metaRole || spatialOrientation || ignore || am;
 	}
 	// Appends a space-separated list of set flag names onto tmpstr and returns it.
-	wstring incorporatedVerbClassString(wstring &tmpstr)
+	lpwstring incorporatedVerbClassString(lpwstring &tmpstr)
 	{
-		if (establish) tmpstr+=L"establish "; 
-		if (move) tmpstr+=L"move ";
-		if (moveInPlace) tmpstr+=L"moveInPlace ";
-		if (moveObject) tmpstr+=L"moveObject "; 
-		if (exit) tmpstr+=L"exit "; 
-		if (enter) tmpstr+=L"enter ";
-		if (contiguous) tmpstr+=L"contiguous "; 
-		if (start) tmpstr+=L"start "; 
-		if (stay) tmpstr+=L"stay "; 
-		if (has) tmpstr+=L"has "; 
-		if (transfer) tmpstr+=L"transfer "; 
-		if (contact) tmpstr+=L"contact "; 
-		if (_near) tmpstr+=L"_near "; 
-		if (think) tmpstr+=L"think "; 
-		if (thinkObject) tmpstr+=L"thinkObject "; 
-		if (communicate) tmpstr+=L"communicate "; 
-		if (control) tmpstr+=L"control "; 
-		if (changeState) tmpstr+=L"changeState "; 
-		if (agentChangeObjectInternalState) tmpstr+=L"agentChangeObjectInternalState "; 
-		if (sense) tmpstr+=L"sense "; 
-		if (create) tmpstr+=L"create "; 
-		if (consume) tmpstr+=L"consume "; 
-		if (metaProfession) tmpstr+=L"metaProfession "; 
-		if (metaFutureHave) tmpstr+=L"metaFutureHave "; 
-		if (metaFutureContact) tmpstr+=L"metaFutureContact "; 
-		if (metaInfo) tmpstr+=L"metaInfo "; 
-		if (metaIfThen) tmpstr+=L"metaIfThen "; 
-		if (metaContains) tmpstr+=L"metaContains "; 
-		if (metaDesire) tmpstr+=L"metaDesire "; 
-		if (metaBelief) tmpstr+=L"metaBelief "; 
-		if (metaRole) tmpstr+=L"metaRole "; 
-		if (spatialOrientation) tmpstr+=L"spatialOrientation "; 
-		if (ignore) tmpstr+=L"ignore "; 
-		if (am) tmpstr+=L"am ";
+		if (establish) tmpstr+=u"establish "; 
+		if (move) tmpstr+=u"move ";
+		if (moveInPlace) tmpstr+=u"moveInPlace ";
+		if (moveObject) tmpstr+=u"moveObject "; 
+		if (exit) tmpstr+=u"exit "; 
+		if (enter) tmpstr+=u"enter ";
+		if (contiguous) tmpstr+=u"contiguous "; 
+		if (start) tmpstr+=u"start "; 
+		if (stay) tmpstr+=u"stay "; 
+		if (has) tmpstr+=u"has "; 
+		if (transfer) tmpstr+=u"transfer "; 
+		if (contact) tmpstr+=u"contact "; 
+		if (_near) tmpstr+=u"_near "; 
+		if (think) tmpstr+=u"think "; 
+		if (thinkObject) tmpstr+=u"thinkObject "; 
+		if (communicate) tmpstr+=u"communicate "; 
+		if (control) tmpstr+=u"control "; 
+		if (changeState) tmpstr+=u"changeState "; 
+		if (agentChangeObjectInternalState) tmpstr+=u"agentChangeObjectInternalState "; 
+		if (sense) tmpstr+=u"sense "; 
+		if (create) tmpstr+=u"create "; 
+		if (consume) tmpstr+=u"consume "; 
+		if (metaProfession) tmpstr+=u"metaProfession "; 
+		if (metaFutureHave) tmpstr+=u"metaFutureHave "; 
+		if (metaFutureContact) tmpstr+=u"metaFutureContact "; 
+		if (metaInfo) tmpstr+=u"metaInfo "; 
+		if (metaIfThen) tmpstr+=u"metaIfThen "; 
+		if (metaContains) tmpstr+=u"metaContains "; 
+		if (metaDesire) tmpstr+=u"metaDesire "; 
+		if (metaBelief) tmpstr+=u"metaBelief "; 
+		if (metaRole) tmpstr+=u"metaRole "; 
+		if (spatialOrientation) tmpstr+=u"spatialOrientation "; 
+		if (ignore) tmpstr+=u"ignore "; 
+		if (am) tmpstr+=u"am ";
 		return tmpstr;
 	}
 
@@ -252,11 +257,11 @@ public:
 		return move || moveObject || exit || enter || transfer;
 	}
 	// VerbNet class ID string (id[0].av[0].as); crashes if id/av is empty.
-	wstring name(void)
+	lpwstring name(void)
 	{
 		return id[0].av[0].as;
 	}
 };
 
-extern unordered_map <wstring,set <int> > vbNetVerbToClassMap;
+extern unordered_map <lpwstring,set <int> > vbNetVerbToClassMap;
 extern vector < cVerbNet > vbNetClasses;

@@ -44,10 +44,14 @@
 		- unMergable() returns true when the candidate is NOT already in the set
 		  (and optionally inserts it).  The name is easy to read backwards.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -65,7 +69,7 @@ bool copy(cOM& num, char* buf, int& where, int limit)
 {
 	DLFS
 	if (where + (int)sizeof(cOM) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (3)!", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached (3)!", limit);
 	num = *((cOM*)(buf + where));
 	where += sizeof(num);
 	return true;
@@ -96,7 +100,7 @@ bool copy(void* buf, cOM num, int& where, int limit)
 {
 	DLFS
 	if (where + sizeof(num) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (3)!", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached (3)!", limit);
 	* ((cOM*)(((char*)buf) + where)) = num;
 	where += sizeof(num);
 	return true;
@@ -161,7 +165,7 @@ cSource::cSpeakerGroup::cSpeakerGroup(char* buffer, int& where, unsigned int lim
 	for (unsigned int I = 0; I < count && !error; I++)
 		groups.push_back(cSpeakerGroup::cGroup(buffer, where, limit, error));
 	if (error) return;
-	__int64 flags;
+	int64_t flags;
 	if (error = !::copy(flags, buffer, where, limit)) return;
 	speakersAreNeverGroupedTogether = (flags & 1) ? true : false;
 	tlTransition = (flags & 2) ? true : false;
@@ -216,7 +220,7 @@ bool cSource::cSpeakerGroup::copy(void* buffer, int& where, int limit)
 	if (!::copy(buffer, (int)groups.size(), where, limit)) return false;
 	for (unsigned int I = 0; I < groups.size(); I++)
 		if (!groups[I].copy(buffer, where, limit)) return false;
-	__int64 flags = (speakersAreNeverGroupedTogether) ? 1 : 0;
+	int64_t flags = (speakersAreNeverGroupedTogether) ? 1 : 0;
 	flags |= (tlTransition) ? 2 : 0;
 	if (!::copy(buffer, flags, where, limit)) return false;
 	return true;
@@ -235,9 +239,9 @@ void cSource::ageSpeakerWithoutSpeakerInfo(int where, bool inPrimaryQuote, bool 
 		lfi->numIdentifiedAsSpeaker == 0 &&
 		lfi->numEncounters < 2)
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d:%02d     object %s eliminated from local objects",
+			lplog(LOG_SG, u"%06d:%02d     object %s eliminated from local objects",
 				where, section, objectString(lfi->om.object, tmpstr, true).c_str());
 		lfi = localObjects.erase(lfi);
 	}
@@ -255,7 +259,7 @@ void cSource::mergeName(int where, int& o, set <int>& speakers)
 	for (set<int>::iterator i = speakers.begin(); i != speakers.end(); i++)
 		if (o != *i && object->confidentMatch(objects[*i], debugTrace))
 		{
-			replaceObjectWithObject(where, object, *i, L"mergeName");
+			replaceObjectWithObject(where, object, *i, u"mergeName");
 			speakers.erase(o);
 			o = *i;
 			object = objects.begin() + *i;
@@ -430,15 +434,15 @@ bool cSource::unMergable(int where, int o, vector <int>& speakers, bool& uniquel
 void cSource::replaceSpeaker(int begin, int end, int fromObject, int toObject)
 {
 	LFS
-		wstring tmpstr, tmpstr2, tmpstr3;
+		lpwstring tmpstr, tmpstr2, tmpstr3;
 	vector <cSpeakerGroup>::iterator lastSG = (speakerGroups.size()) ? speakerGroups.begin() + speakerGroups.size() - 1 : speakerGroups.end();
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%06d-%06d:%02d replaced speaker %s with %s in %s", begin, end, section,
+		lplog(LOG_SG, u"%06d-%06d:%02d replaced speaker %s with %s in %s", begin, end, section,
 			objectString(fromObject, tmpstr, true).c_str(), objectString(toObject, tmpstr2, true).c_str(), toText(*lastSG, tmpstr3));
 	if (objects[fromObject].originalLocation >= begin && objects[fromObject].originalLocation < end)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:RS %02d AT %d pushed %s (1)", begin, end, section, objects[fromObject].originalLocation, objectString(toObject, tmpstr2, true).c_str());
+			lplog(LOG_SG, u"%06d-%06d:RS %02d AT %d pushed %s (1)", begin, end, section, objects[fromObject].originalLocation, objectString(toObject, tmpstr2, true).c_str());
 		m[objects[fromObject].originalLocation].objectMatches.clear();
 		m[objects[fromObject].originalLocation].objectMatches.push_back(cOM(toObject, SALIENCE_THRESHOLD));
 		objects[toObject].locations.push_back(objects[fromObject].originalLocation);
@@ -450,7 +454,7 @@ void cSource::replaceSpeaker(int begin, int end, int fromObject, int toObject)
 			!(m[li->at].flags & cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup)) // but not where this object is matched against others!
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:RS %02d AT %d pushed %s (2)", begin, end, section, li->at, objectString(toObject, tmpstr2, true).c_str());
+				lplog(LOG_SG, u"%06d-%06d:RS %02d AT %d pushed %s (2)", begin, end, section, li->at, objectString(toObject, tmpstr2, true).c_str());
 			m[li->at].objectMatches.clear();
 			m[li->at].objectMatches.push_back(cOM(toObject, SALIENCE_THRESHOLD));
 			objects[toObject].locations.push_back(li->at);
@@ -468,10 +472,10 @@ void cSource::replaceSpeaker(int begin, int end, int fromObject, int toObject)
 			sg->replacedSpeakers.push_back(cOM(o, toObject)); // for unresolvable speakers which are only replaced in section
 			sg->speakers.insert(toObject);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d replaced -> %s", begin, end, section, toText(*sg, tmpstr3));
+				lplog(LOG_SG, u"%06d-%06d:%02d replaced -> %s", begin, end, section, toText(*sg, tmpstr3));
 		}
 		else if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d %s NOT FOUND", begin, end, section, toText(*sg, tmpstr3));
+			lplog(LOG_SG, u"%06d-%06d:%02d %s NOT FOUND", begin, end, section, toText(*sg, tmpstr3));
 		if (sg == speakerGroups.begin()) break;
 	}
 }
@@ -500,7 +504,7 @@ void cSource::determineSpeakerRemoval(int where)
 		if (speakerGroups.empty()) return;
 	vector <cSpeakerGroup>::iterator lastSG = speakerGroups.begin() + speakerGroups.size() - 1;
 	if (lastSG->speakers.size() < 3) return;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	vector <int> oldSpeakers;
 	for (set <int>::iterator s = lastSG->speakers.begin(); s != lastSG->speakers.end(); s++)
 		if (speakerAges[*s] > 2 && tempSpeakerGroup.speakers.find(*s) == tempSpeakerGroup.speakers.end() && objects[*s].objectClass != META_GROUP_OBJECT_CLASS)
@@ -508,7 +512,7 @@ void cSource::determineSpeakerRemoval(int where)
 	if (oldSpeakers.empty())
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%d:Ages of %s are all < 2.", where, objectString(tempSpeakerGroup.speakers, tmpstr).c_str());
+			lplog(LOG_SG, u"%d:Ages of %s are all < 2.", where, objectString(tempSpeakerGroup.speakers, tmpstr).c_str());
 		return;
 	}
 	while (oldSpeakers.size())
@@ -521,13 +525,13 @@ void cSource::determineSpeakerRemoval(int where)
 		if (oldestAge > (int)speakerSections.size())
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%d:Age of %s is illegal (%d>=%d)", where, objectString(oldestSpeaker, tmpstr, true).c_str(), oldestAge, speakerSections.size());
+				lplog(LOG_SG, u"%d:Age of %s is illegal (%d>=%d)", where, objectString(oldestSpeaker, tmpstr, true).c_str(), oldestAge, speakerSections.size());
 			break;
 		}
 		if (lastSG->sgEnd == speakerSections[speakerSections.size() - oldestAge])
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%d:Oldest age of %s (%d) reached the end of the speaker group (%d)", where, objectString(oldestSpeaker, tmpstr, true).c_str(), oldestAge, lastSG->sgEnd);
+				lplog(LOG_SG, u"%d:Oldest age of %s (%d) reached the end of the speaker group (%d)", where, objectString(oldestSpeaker, tmpstr, true).c_str(), oldestAge, lastSG->sgEnd);
 			break;
 		}
 		// sanity check - is there a conversation in the speakergroup with only one speaker?
@@ -543,28 +547,28 @@ void cSource::determineSpeakerRemoval(int where)
 				{
 					if (debugTrace.traceSpeakerResolution)
 					{
-						lplog(LOG_SG, L"%d:speaker removal from %s leading to only one speaker in a group %d-%d with a quote is rejected.", where,
+						lplog(LOG_SG, u"%d:speaker removal from %s leading to only one speaker in a group %d-%d with a quote is rejected.", where,
 							toText(*lastSG, tmpstr), lastSG->sgBegin, speakerSections[speakerSections.size() - oldestAge]);
-						lplog(LOG_SG, L"%d:%s", where, objectString(oldSpeakers, tmpstr).c_str());
+						lplog(LOG_SG, u"%d:%s", where, objectString(oldSpeakers, tmpstr).c_str());
 					}
 					return;
 				}
 		}
 		// end sanity check
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d   %s added (speakerRemoval)", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr));
+			lplog(LOG_SG, u"%06d-%06d:%02d   %s added (speakerRemoval)", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr));
 		speakerGroups.push_back(*lastSG);
 		lastSG = speakerGroups.begin() + speakerGroups.size() - 2;
 		vector <cSpeakerGroup>::iterator newSG = speakerGroups.begin() + speakerGroups.size() - 1;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"section demarcation=%d from age %d.", speakerSections[speakerSections.size() - oldestAge], oldestAge);
+			lplog(LOG_SG, u"section demarcation=%d from age %d.", speakerSections[speakerSections.size() - oldestAge], oldestAge);
 		newSG->sgBegin = lastSG->sgEnd = speakerSections[speakerSections.size() - oldestAge];
 		// if the new speaker group also contains meta-group class speakers that are older (they aren't in the new speaker group at all)
 		for (set <int>::iterator s = newSG->speakers.begin(); s != newSG->speakers.end(); )
 			if (speakerAges[*s] >= oldestAge)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%d:%s removed (olderAge=%d).", where, objectString(*s, tmpstr, true).c_str(), speakerAges[*s]);
+					lplog(LOG_SG, u"%d:%s removed (olderAge=%d).", where, objectString(*s, tmpstr, true).c_str(), speakerAges[*s]);
 				newSG->speakers.erase(s++);
 			}
 			else
@@ -579,7 +583,7 @@ void cSource::determineSpeakerRemoval(int where)
 			if (lastSG->embeddedSpeakerGroups[esg].sgEnd <= 0 || lastSG->embeddedSpeakerGroups[esg].sgBegin > lastSG->sgEnd)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d-%06d:%02d   embedded erased (lastSG) %s", lastSG->embeddedSpeakerGroups[esg].sgBegin, lastSG->embeddedSpeakerGroups[esg].sgEnd, section, toText(lastSG->embeddedSpeakerGroups[esg], tmpstr));
+					lplog(LOG_SG, u"%06d-%06d:%02d   embedded erased (lastSG) %s", lastSG->embeddedSpeakerGroups[esg].sgBegin, lastSG->embeddedSpeakerGroups[esg].sgEnd, section, toText(lastSG->embeddedSpeakerGroups[esg], tmpstr));
 				lastSG->embeddedSpeakerGroups.erase(lastSG->embeddedSpeakerGroups.begin() + esg);
 			}
 			else
@@ -589,13 +593,13 @@ void cSource::determineSpeakerRemoval(int where)
 			if (newSG->embeddedSpeakerGroups[esg].sgBegin < newSG->sgBegin)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d-%06d:%02d   embedded erased (newSG) %s", newSG->embeddedSpeakerGroups[esg].sgBegin, newSG->embeddedSpeakerGroups[esg].sgEnd, section, toText(newSG->embeddedSpeakerGroups[esg], tmpstr));
+					lplog(LOG_SG, u"%06d-%06d:%02d   embedded erased (newSG) %s", newSG->embeddedSpeakerGroups[esg].sgBegin, newSG->embeddedSpeakerGroups[esg].sgEnd, section, toText(newSG->embeddedSpeakerGroups[esg], tmpstr));
 				newSG->embeddedSpeakerGroups.erase(newSG->embeddedSpeakerGroups.begin() + esg);
 			}
 			else
 				esg++;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d   %s added", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr));
+			lplog(LOG_SG, u"%06d-%06d:%02d   %s added", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr));
 		determinePreviousSubgroup(where, speakerGroups.size() - 2, &speakerGroups[speakerGroups.size() - 2]);
 		lastSG = newSG;
 	}
@@ -674,7 +678,7 @@ int cSource::getLastSpeakerGroup(int o, int lastSG)
 void cSource::determineSubgroupFromGroups(cSpeakerGroup& sg)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	for (vector < cSpeakerGroup::cGroup >::iterator gi = sg.groups.begin(), giEnd = sg.groups.end(); gi != giEnd; gi++)
 	{
 		bool allIn, oneIn;
@@ -682,7 +686,7 @@ void cSource::determineSubgroupFromGroups(cSpeakerGroup& sg)
 		if (gi->objects.size() >= sg.speakers.size())
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   groupSpeakers %s rejected (group==all speakers)", sg.sgBegin, sg.sgEnd, section, objectString(*gi, tmpstr).c_str());
+				lplog(LOG_SG, u"%06d-%06d:%02d   groupSpeakers %s rejected (group==all speakers)", sg.sgBegin, sg.sgEnd, section, objectString(*gi, tmpstr).c_str());
 		}
 		else if (intersect(gi->objects, sg.speakers, allIn, oneIn) && allIn)
 		{
@@ -691,7 +695,7 @@ void cSource::determineSubgroupFromGroups(cSpeakerGroup& sg)
 			sg.singularSpeakers.clear();
 			subtract(sg.speakers, sg.groupedSpeakers, sg.singularSpeakers);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   groupSpeakers %s added (2)", sg.sgBegin, sg.sgEnd, section, objectString(*gi, tmpstr).c_str());
+				lplog(LOG_SG, u"%06d-%06d:%02d   groupSpeakers %s added (2)", sg.sgBegin, sg.sgEnd, section, objectString(*gi, tmpstr).c_str());
 			break;
 		}
 	}
@@ -712,7 +716,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 	bool headerPrinted = !debugTrace.traceSpeakerResolution, possibleCurrentSubgroup = false, allIn, oneIn;
 	if (lastSG->speakers.size() >= 2)
 	{
-		wstring tmpstr, tmpstr2, tmpstr3;
+		lpwstring tmpstr, tmpstr2, tmpstr3;
 		set <int> speakers = lastSG->speakers;
 		// if there are any mplural grouped entities, use them first.
 		for (vector < cSpeakerGroup::cGroup >::iterator gi = lastSG->groups.begin(), giEnd = lastSG->groups.end(); gi != giEnd; gi++)
@@ -723,7 +727,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 				if (preferredMPluralGroup != gi->objects)
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_SG, L"SGP:   %d:Subgroup [FROM MPLURAL group] is %s.", where, objectString(gi->objects, tmpstr2).c_str());
+						lplog(LOG_SG, u"SGP:   %d:Subgroup [FROM MPLURAL group] is %s.", where, objectString(gi->objects, tmpstr2).c_str());
 					preferredMPluralGroup = gi->objects;
 				}
 			}
@@ -749,13 +753,13 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			{
 				lastSG->previousSubsetSpeakerGroup = beforeLastSG->previousSubsetSpeakerGroup;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d:SGP[1]:   Subgroup is %s->%s.", where, objectString(lastSG->groupedSpeakers, tmpstr2).c_str(), objectString(beforeLastSG->groupedSpeakers, tmpstr3).c_str());
+					lplog(LOG_SG, u"%06d:SGP[1]:   Subgroup is %s->%s.", where, objectString(lastSG->groupedSpeakers, tmpstr2).c_str(), objectString(beforeLastSG->groupedSpeakers, tmpstr3).c_str());
 				lastSG->groupedSpeakers = beforeLastSG->groupedSpeakers;
 				lastSG->singularSpeakers.clear();
 				subtract(lastSG->speakers, lastSG->groupedSpeakers, lastSG->singularSpeakers);
 				if (!headerPrinted)
 				{
-					lplog(LOG_SG, L"SGP[1]:------ %s -------", toText(*lastSG, tmpstr));
+					lplog(LOG_SG, u"SGP[1]:------ %s -------", toText(*lastSG, tmpstr));
 					headerPrinted = true;
 				}
 				break;
@@ -766,13 +770,13 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			{
 				lastSG->previousSubsetSpeakerGroup = sg;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d:SGP[2]:   Subgroup is %s->%s.", where, objectString(lastSG->groupedSpeakers, tmpstr2).c_str(), objectString(beforeLastSG->groupedSpeakers, tmpstr3).c_str());
+					lplog(LOG_SG, u"%06d:SGP[2]:   Subgroup is %s->%s.", where, objectString(lastSG->groupedSpeakers, tmpstr2).c_str(), objectString(beforeLastSG->groupedSpeakers, tmpstr3).c_str());
 				lastSG->groupedSpeakers = beforeLastSG->speakers;
 				lastSG->singularSpeakers.clear();
 				subtract(lastSG->speakers, lastSG->groupedSpeakers, lastSG->singularSpeakers);
 				if (!headerPrinted)
 				{
-					lplog(LOG_SG, L"SGP[2]:------ %s -------", toText(*lastSG, tmpstr));
+					lplog(LOG_SG, u"SGP[2]:------ %s -------", toText(*lastSG, tmpstr));
 					headerPrinted = true;
 				}
 				break;
@@ -782,13 +786,13 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 				possibleCurrentSubgroup |= (lastSG->speakers.size() >= 3 && sg == whichSG - 1 && numFound == 1);
 				if (!headerPrinted)
 				{
-					lplog(LOG_SG, L"SGP[3]:------ %s -------", toText(*lastSG, tmpstr));
+					lplog(LOG_SG, u"SGP[3]:------ %s -------", toText(*lastSG, tmpstr));
 					headerPrinted = true;
 				}
 				else if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"SGP:   left:%s", objectString(speakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"SGP:   left:%s", objectString(speakers, tmpstr2).c_str());
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"SGP:   %d found in #%d:%s.", numFound, sg, toText(*beforeLastSG, tmpstr));
+					lplog(LOG_SG, u"SGP:   %d found in #%d:%s.", numFound, sg, toText(*beforeLastSG, tmpstr));
 				set <int>::iterator si;
 				// if any members found in previous speaker groups, but not all
 				for (set <int>::iterator blsi = beforeLastSG->speakers.begin(), blsiEnd = beforeLastSG->speakers.end(); blsi != blsiEnd; blsi++)
@@ -816,7 +820,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			if (!groupingFound)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"SGP:   Subgroup rejected [current subgroup - no group found] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"SGP:   Subgroup rejected [current subgroup - no group found] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
 				lastSG->groupedSpeakers.clear();
 				return;
 			}
@@ -824,7 +828,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 				lastSG->povSpeakers != lastSG->groupedSpeakers)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"SGP:   Subgroup rejected [current subgroup - no match with povSpeakers] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"SGP:   Subgroup rejected [current subgroup - no match with povSpeakers] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
 				lastSG->groupedSpeakers = lastSG->povSpeakers;
 			}
 			lastSG->singularSpeakers.clear();
@@ -832,11 +836,11 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			lastSG->previousSubsetSpeakerGroup = CURRENT_SUBSET_SG;
 			if (!headerPrinted)
 			{
-				lplog(LOG_SG, L"SGP[4]:------ %s -------", toText(*lastSG, tmpstr));
+				lplog(LOG_SG, u"SGP[4]:------ %s -------", toText(*lastSG, tmpstr));
 				headerPrinted = true;
 			}
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"SGP:   Subgroup is [current subgroup] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
+				lplog(LOG_SG, u"SGP:   Subgroup is [current subgroup] #%d:%s.", whichSG, objectString(lastSG->groupedSpeakers, tmpstr2).c_str());
 		}
 		allIn = oneIn = false;
 		lastSG->speakersAreNeverGroupedTogether = true;
@@ -884,7 +888,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			if (intersect(preferredMPluralGroup, lastSG->groupedSpeakers, allIn, oneIn) || preferredMPluralGroup.size() + lastSG->groupedSpeakers.size() < speakers.size())
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG | LOG_RESOLUTION, L"%06d:Subgrouping disagreement preferred %s", where, objectString(preferredMPluralGroup, tmpstr2).c_str());
+					lplog(LOG_SG | LOG_RESOLUTION, u"%06d:Subgrouping disagreement preferred %s", where, objectString(preferredMPluralGroup, tmpstr2).c_str());
 				lastSG->groupedSpeakers.clear();
 				lastSG->singularSpeakers.clear();
 				for (int I = 0; I < (signed)preferredMPluralGroup.size(); I++)
@@ -893,7 +897,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 			}
 		}
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:Subgrouping resulted in %s", where, toText(*lastSG, tmpstr));
+			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:Subgrouping resulted in %s", where, toText(*lastSG, tmpstr));
 	}
 }
 
@@ -905,7 +909,7 @@ void cSource::determinePreviousSubgroup(int where, int whichSG, cSpeakerGroup* l
 void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& sg, bool speakerGroupCrossesSectionBoundary)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	// eliminate all speakers having only PISHail counts
 	// remove hail objects that have not been detected any other way.  This is to minimize the effect of parsing errors.
 	// how many gendered PP non-name objects are there?
@@ -913,7 +917,7 @@ void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& s
 	for (vector <cLocalFocus>::iterator lsi = localObjects.begin(); lsi != localObjects.end(); lsi++)
 		if (lsi->physicallyPresent && objects[lsi->om.object].isAgent(false) && objects[lsi->om.object].objectClass != BODY_OBJECT_CLASS && objects[lsi->om.object].objectClass != META_GROUP_OBJECT_CLASS)
 		{
-			//lplog(LOG_SG,L"%s",objectString(lsi->om,tmpstr,true).c_str());
+			//lplog(LOG_SG,u"%s",objectString(lsi->om,tmpstr,true).c_str());
 			physicallyPresentSpeakers++;
 		}
 	for (set <int>::iterator s = sg.speakers.begin(); s != sg.speakers.end(); s++)
@@ -936,14 +940,14 @@ void cSource::eliminateSpuriousHailSpeakers(int begin, int end, cSpeakerGroup& s
 		{
 			if (debugTrace.traceSpeakerResolution)
 			{
-				lplog(LOG_SG, L"%06d-%06d:%02d   hail deleted: %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d) [physicallyPresentSpeakers=%d] (%s)", begin, end, section,
+				lplog(LOG_SG, u"%06d-%06d:%02d   hail deleted: %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d) [physicallyPresentSpeakers=%d] (%s)", begin, end, section,
 					objectString(*s, tmpstr, true).c_str(), objects[*s].PISHail,
 					objects[*s].numEncounters, objects[*s].numIdentifiedAsSpeaker, objects[*s].numDefinitelyIdentifiedAsSpeaker,
 					objects[*s].numEncountersInSection, objects[*s].numSpokenAboutInSection, objects[*s].numIdentifiedAsSpeakerInSection, objects[*s].numDefinitelyIdentifiedAsSpeakerInSection,
-					physicallyPresentSpeakers, (speakerGroupCrossesSectionBoundary) ? L"speakerGroupCrossesSectionBoundary" : L"");
+					physicallyPresentSpeakers, (speakerGroupCrossesSectionBoundary) ? u"speakerGroupCrossesSectionBoundary" : u"");
 				if (lsi != localObjects.end())
-					lplog(LOG_SG, L"%06d-%06d:%02d   LW=%d,PW=%d,%s", begin, end, section,
-					lsi->lastWhere, lsi->previousWhere, (lsi->physicallyPresent) ? L"PP" : L"not PP");
+					lplog(LOG_SG, u"%06d-%06d:%02d   LW=%d,PW=%d,%s", begin, end, section,
+					lsi->lastWhere, lsi->previousWhere, (lsi->physicallyPresent) ? u"PP" : u"not PP");
 			}
 			sg.groupedSpeakers.erase(*s);
 			sg.singularSpeakers.erase(*s);
@@ -997,9 +1001,9 @@ int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 		objects[unresolvableObject].objectClass != GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && // if the unresolvableObject is an occupation, this is always wrong or unnecessary (24 cases)
 		objects[*futureSpeakers.begin()].matchGender(objects[unresolvableObject]))
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"Speaker %s resolvable by future speakerGroup object %s.",
+			lplog(LOG_RESOLUTION, u"Speaker %s resolvable by future speakerGroup object %s.",
 				objectString(unresolvableObject, tmpstr, false).c_str(), objectString(*futureSpeakers.begin(), tmpstr2, false).c_str());
 		return *futureSpeakers.begin();
 	}
@@ -1061,12 +1065,12 @@ int cSource::determineIfSpeakerMoved(int begin, int end, bool endOfSection)
 					// has moved out and should not be considered a current speaker.
 					if (!isReflexive && !actingUponBodyPart && !prepObjectIsNotPhysical && sr != syntacticRelationGroups.end() && (sr->relationType == stMOVE || sr->relationType == stEXIT || sr->relationType == stENTER))
 					{
-						wstring tmpstr, tmpstr2;
+						lpwstring tmpstr, tmpstr2;
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_SG, L"%06d-%06d:%02d rejected subjectsInPreviousUnquotedSection [%s subjectMoved@%d %s POV@%d] %s into %s prepObjectIsNotPhysical=%s", begin, end, section,
-								(endOfSection) ? L"EOS" : L"not EOS", loc->at, relationString(sr->relationType).c_str(), wherePOV,
+							lplog(LOG_SG, u"%06d-%06d:%02d rejected subjectsInPreviousUnquotedSection [%s subjectMoved@%d %s POV@%d] %s into %s prepObjectIsNotPhysical=%s", begin, end, section,
+								(endOfSection) ? u"EOS" : u"not EOS", loc->at, relationString(sr->relationType).c_str(), wherePOV,
 								objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str(), objectString(tempSpeakerGroup.speakers, tmpstr2).c_str(),
-								(prepObjectIsNotPhysical) ? L"true" : L"false");
+								(prepObjectIsNotPhysical) ? u"true" : u"false");
 						return loc->at;
 					}
 				}
@@ -1085,11 +1089,11 @@ void cSource::insertPreviousUnquotedSpeakers(int begin, int end)
 		set <int>::iterator stsi;
 		// if the next sentence is not fully quoted, this subject will not be used
 		bool uniquelyMergable, inserted = (unMergable(-1, subjectsInPreviousUnquotedSection[spusi], tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		//vector <cLocalFocus>::iterator lsi=in(subjectsInPreviousUnquotedSection[spusi]);
-		//wchar_t *physicallyPresent=(lsi!=localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent>=0) ? L"[PP]":L"[NPP]";
+		//lpchar_t *physicallyPresent=(lsi!=localObjects.end() && lsi->physicallyPresent && lsi->whereBecamePhysicallyPresent>=0) ? u"[PP]":u"[NPP]";
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d   %s subjectsInPreviousUnquotedSection %s into %s", begin, end, section, (inserted) ? L"inserted" : L"merged",
+			lplog(LOG_SG, u"%06d-%06d:%02d   %s subjectsInPreviousUnquotedSection %s into %s", begin, end, section, (inserted) ? u"inserted" : u"merged",
 				objectString(subjectsInPreviousUnquotedSection[spusi], tmpstr, true).c_str(), objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
 		if (inserted)
 		{
@@ -1112,7 +1116,7 @@ void cSource::mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersN
 {
 	for (set <int>::iterator s = tempSpeakerGroup.speakers.begin(), sEnd = tempSpeakerGroup.speakers.end(); s != sEnd; s++)
 	{
-		wstring tmpstr, tmpstr2, tmpstr3;
+		lpwstring tmpstr, tmpstr2, tmpstr3;
 		if (in(*s, lastSG->replacedSpeakers) != lastSG->replacedSpeakers.end())
 			continue;
 		bool uniquelyMergable;
@@ -1120,12 +1124,12 @@ void cSource::mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersN
 		if (unMergable(-1, *s, lastSG->speakers, uniquelyMergable, false, speakerGroupCrossesSectionBoundary, resolvableByFutureSpeaker == *s, true, mergedSpeakerObject))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   Speaker %s of current group unmergable with last speaker group %s.",
+				lplog(LOG_SG, u"%06d-%06d:%02d   Speaker %s of current group unmergable with last speaker group %s.",
 					begin, end, section, objectString(*s, tmpstr, true).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
 			if (lastSG->speakers.size() > 1 && objects[*s].PISHail >= 0 && objects[*s].numEncounters == 0 && objects[*s].numEncountersInSection == 0)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d-%06d:%02d  just hail speaker don't create a new group - %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d)", begin, end, section,
+					lplog(LOG_SG, u"%06d-%06d:%02d  just hail speaker don't create a new group - %s (HAIL=%d,%d,%d,%d:%d,%d,%d,%d)", begin, end, section,
 						objectString(*s, tmpstr, true).c_str(), objects[*s].PISHail,
 						objects[*s].numEncounters, objects[*s].numIdentifiedAsSpeaker, objects[*s].numDefinitelyIdentifiedAsSpeaker,
 						objects[*s].numEncountersInSection, objects[*s].numSpokenAboutInSection, objects[*s].numIdentifiedAsSpeakerInSection, objects[*s].numDefinitelyIdentifiedAsSpeakerInSection);
@@ -1143,13 +1147,13 @@ void cSource::mergeTempSpeakerGroupWithLastSG(int begin, int end, int& speakersN
 			speakerGroups[objects[*s].getFirstSpeakerGroup()].sgBegin < objects[*mergedSpeakerObject].begin)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   Speaker %s of current group unmergable (Unique but without new object) with last speaker group %s.",
+				lplog(LOG_SG, u"%06d-%06d:%02d   Speaker %s of current group unmergable (Unique but without new object) with last speaker group %s.",
 					begin, end, section, objectString(*s, tmpstr, true).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
 			speakersNotMergable++;
 		}
 		else
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   Speaker %s of current group merged with %s in last speaker group %s.",
+				lplog(LOG_SG, u"%06d-%06d:%02d   Speaker %s of current group merged with %s in last speaker group %s.",
 					begin, end, section, objectString(*s, tmpstr, true).c_str(), objectString(*mergedSpeakerObject, tmpstr3, false).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
 	}
 }
@@ -1166,7 +1170,7 @@ bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpea
 	bool atLeastOneMerged = false;
 	for (set <int>::iterator s = tempSpeakerGroup.speakers.begin(); s != tempSpeakerGroup.speakers.end(); s++)
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		if (in(*s, lastSG->replacedSpeakers) != lastSG->replacedSpeakers.end())
 			continue;
 		bool uniquelyMergable;
@@ -1184,7 +1188,7 @@ bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpea
 				objects[*s].male = objects[saveObject].male;
 				objects[*s].female = objects[saveObject].female;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG | LOG_RESOLUTION, L"%06d-%06d:%02d %s narrowed to %s.", begin, end, section, objectString(*s, tmpstr, true).c_str(), (objects[*s].male) ? L"male" : L"female");
+					lplog(LOG_SG | LOG_RESOLUTION, u"%06d-%06d:%02d %s narrowed to %s.", begin, end, section, objectString(*s, tmpstr, true).c_str(), (objects[*s].male) ? u"male" : u"female");
 			}
 			tempSpeakerGroup.speakers.erase(saveObject); // must use *mergedSpeakerObject before it is replaced
 			replaceSpeaker(lastSG->sgBegin, end, saveObject, *s);
@@ -1199,7 +1203,7 @@ bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpea
 		else if (mergedSpeakerObject == lastSG->speakers.end())
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d %s inserted -> %s", begin, end, section, objectString(*s, tmpstr, true).c_str(), toText(*lastSG, tmpstr2));
+				lplog(LOG_SG, u"%06d-%06d:%02d %s inserted -> %s", begin, end, section, objectString(*s, tmpstr, true).c_str(), toText(*lastSG, tmpstr2));
 			lastSG->speakers.insert(*s);
 			speakerAges.insert(tSA(*s, 0));
 		}
@@ -1224,7 +1228,7 @@ bool cSource::mergeTempSpeakerGroupWithLastSG2(int begin, int end, vector <cSpea
 // speaker with quotes, also fold lastISNarrationSubjects in as audience.
 void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGroup>::iterator lastSG, int resolvableByFutureSpeaker, int& lastSpeakerGroupOfPreviousSection, bool speakerGroupCrossesSectionBoundary, bool endOfSection)
 {
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	while (mergeTempSpeakerGroupWithLastSG2(begin, end, lastSG, resolvableByFutureSpeaker, speakerGroupCrossesSectionBoundary));
 	lastSG->groups.insert(lastSG->groups.end(), tempSpeakerGroup.groups.begin(), tempSpeakerGroup.groups.end());
 	for (vector < cSpeakerGroup::cGroup >::iterator gi = tempSpeakerGroup.groups.begin(), giEnd = tempSpeakerGroup.groups.end(); gi != giEnd; gi++)
@@ -1238,20 +1242,20 @@ void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGro
 			for (vector <int>::iterator si = gi->objects.begin(), siEnd = gi->objects.end(); si != siEnd; si++)
 				lastSG->groupedSpeakers.insert(*si);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   groupSpeakers %s added (1)", begin, end, section, objectString(*gi, tmpstr).c_str());
+				lplog(LOG_SG, u"%06d-%06d:%02d   groupSpeakers %s added (1)", begin, end, section, objectString(*gi, tmpstr).c_str());
 			break;
 		}
 	}
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%06d-%06d:%02d   PIS speakerGroup %s extended to %d%s", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr), end, (endOfSection) ? L" end of section" : L"");
+		lplog(LOG_SG, u"%06d-%06d:%02d   PIS speakerGroup %s extended to %d%s", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr), end, (endOfSection) ? u" end of section" : u"");
 	lastSG->sgEnd = end;
 	if (debugTrace.traceSpeakerResolution)
 		for (set <int>::iterator s = lastSG->speakers.begin(); s != lastSG->speakers.end(); s++)
-			lplog(LOG_SG, L"%06d-%06d:%02d %s speakerAge=%d.", lastSG->sgBegin, lastSG->sgEnd, section, objectString(*s, tmpstr, true).c_str(), speakerAges[*s]);
+			lplog(LOG_SG, u"%06d-%06d:%02d %s speakerAge=%d.", lastSG->sgBegin, lastSG->sgEnd, section, objectString(*s, tmpstr, true).c_str(), speakerAges[*s]);
 	lastSG->conversationalQuotes += tempSpeakerGroup.conversationalQuotes;
 	tempSpeakerGroup.clearTemp(end);
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%06d-%06d:%02d insert nextISNarrationSubjects %s into lastISNarrationSubjects %s.", begin, end, section, objectString(nextISNarrationSubjects, tmpstr).c_str(), objectString(lastISNarrationSubjects, tmpstr).c_str());
+		lplog(LOG_SG, u"%06d-%06d:%02d insert nextISNarrationSubjects %s into lastISNarrationSubjects %s.", begin, end, section, objectString(nextISNarrationSubjects, tmpstr).c_str(), objectString(lastISNarrationSubjects, tmpstr).c_str());
 	lastISNarrationSubjects.insert(lastISNarrationSubjects.end(), nextISNarrationSubjects.begin(), nextISNarrationSubjects.end());
 	whereLastISNarrationSubjects.insert(whereLastISNarrationSubjects.end(), whereNextISNarrationSubjects.begin(), whereNextISNarrationSubjects.end());
 	// if there has been a conversation, but there is no audience
@@ -1263,18 +1267,18 @@ void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGro
 			set <int>::iterator stsi;
 			bool uniquelyMergable = false, inserted = (unMergable(-1, *s, lastSG->speakers, uniquelyMergable, true, false, false, false, stsi));
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   lastISNarrationSubjects [IS] %d:%s %s into %d:%s", begin, end, section, whereLastISNarrationSubjects[offset], objectString(*s, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", tempSpeakerGroup.sgBegin, objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
+				lplog(LOG_SG, u"%06d-%06d:%02d   lastISNarrationSubjects [IS] %d:%s %s into %d:%s", begin, end, section, whereLastISNarrationSubjects[offset], objectString(*s, tmpstr, true).c_str(), (inserted) ? u"inserted" : u"merged", tempSpeakerGroup.sgBegin, objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
 		}
 		lastISNarrationSubjects.clear();
 		whereLastISNarrationSubjects.clear();
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d cleared lastISNarrationSubjects.", begin, end, section);
+			lplog(LOG_SG, u"%06d-%06d:%02d cleared lastISNarrationSubjects.", begin, end, section);
 	}
 	if (endOfSection)
 	{
 		lastSpeakerGroupOfPreviousSection = speakerGroups.size() - 1;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"set lastSpeakerGroupOfPreviousSection=%d.", lastSpeakerGroupOfPreviousSection);
+			lplog(LOG_SG, u"set lastSpeakerGroupOfPreviousSection=%d.", lastSpeakerGroupOfPreviousSection);
 	}
 }
 
@@ -1284,7 +1288,7 @@ void cSource::extendLastSGToEndOfSection(int begin, int end, vector <cSpeakerGro
 // fresh temp at 'end'.
 void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSection, int& lastSpeakerGroupOfPreviousSection)
 {
-	wstring tmpstr;
+	lpwstring tmpstr;
 	vector <cSpeakerGroup>::iterator lastSG = (speakerGroups.size()) ? speakerGroups.begin() + speakerGroups.size() - 1 : speakerGroups.end();
 	bool speakerGroupCrossesSectionBoundary = speakerGroups.size() > 0 && lastSpeakerGroupOfPreviousSection == speakerGroups.size() - 1;
 	lastSG = (speakerGroups.size()) ? speakerGroups.begin() + speakerGroups.size() - 1 : speakerGroups.end();
@@ -1298,8 +1302,8 @@ void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSe
 	if (debugTrace.traceSpeakerResolution)
 	{
 		if (speakerGroups.size())
-			lplog(LOG_SG, L"%06d-%06d:%02d**** speakerGroup %s CLOSED%s", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr), (endOfSection) ? L" end of section" : L"");
-		lplog(LOG_SG, L"%06d-%06d:%02d   %s added%s", begin, end, section, toText(tempSpeakerGroup, tmpstr), (endOfSection) ? L" end of section" : L"");
+			lplog(LOG_SG, u"%06d-%06d:%02d**** speakerGroup %s CLOSED%s", lastSG->sgBegin, lastSG->sgEnd, section, toText(*lastSG, tmpstr), (endOfSection) ? u" end of section" : u"");
+		lplog(LOG_SG, u"%06d-%06d:%02d   %s added%s", begin, end, section, toText(tempSpeakerGroup, tmpstr), (endOfSection) ? u" end of section" : u"");
 	}
 	determineSubgroupFromGroups(tempSpeakerGroup);
 	speakerGroups.push_back(tempSpeakerGroup);
@@ -1320,12 +1324,12 @@ void cSource::pushTemporarySpeakerGroupAndErase(int begin, int end, bool endOfSe
 	whereLastISNarrationSubjects = whereNextISNarrationSubjects;
 	introducedByReference.clear();
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"lastISNarrationSubjects=nextISNarrationSubjects=%s.", objectString(nextISNarrationSubjects, tmpstr).c_str());
+		lplog(LOG_SG, u"lastISNarrationSubjects=nextISNarrationSubjects=%s.", objectString(nextISNarrationSubjects, tmpstr).c_str());
 	if (endOfSection)
 	{
 		lastSpeakerGroupOfPreviousSection = speakerGroups.size() - 1;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"set lastSpeakerGroupOfPreviousSection=%d.", lastSpeakerGroupOfPreviousSection);
+			lplog(LOG_SG, u"set lastSpeakerGroupOfPreviousSection=%d.", lastSpeakerGroupOfPreviousSection);
 	}
 }
 
@@ -1355,7 +1359,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 			return false;
 	set <int> saveSpeakers = tempSpeakerGroup.speakers;
 	tempSpeakerGroup.sgEnd = end;
-	wstring tmpstr, tmpstr2, tmpstr3;
+	lpwstring tmpstr, tmpstr2, tmpstr3;
 	bool uniquelyMergable, inserted;
 	set <int>::iterator stsi;
 	//int sectionBegin=(sections.size()) ? sections[section].begin:0;
@@ -1366,7 +1370,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 	{
 		inserted = (unMergable(-1, *s, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d-%06d:%02d   spNextNarrationSubject %s %s into %s", begin, end, section, objectString(*s, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
+			lplog(LOG_SG, u"%06d-%06d:%02d   spNextNarrationSubject %s %s into %s", begin, end, section, objectString(*s, tmpstr, true).c_str(), (inserted) ? u"inserted" : u"merged", objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
 	}
 	// nextNarrationSubjects - narration subjects in-between begin and end AND only subjects which are also IS_OBJECT
 	if (tempSpeakerGroup.speakers.size() < 2 && conversationOccurred)
@@ -1376,14 +1380,14 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 		{
 			inserted = (unMergable(-1, *s, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, stsi));
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d-%06d:%02d   nextISNarrationSubjects [IS] %d:%s %s into %d:%s", begin, end, section, whereNextISNarrationSubjects[offset], objectString(*s, tmpstr, true).c_str(), (inserted) ? L"inserted" : L"merged", tempSpeakerGroup.sgBegin, objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
+				lplog(LOG_SG, u"%06d-%06d:%02d   nextISNarrationSubjects [IS] %d:%s %s into %d:%s", begin, end, section, whereNextISNarrationSubjects[offset], objectString(*s, tmpstr, true).c_str(), (inserted) ? u"inserted" : u"merged", tempSpeakerGroup.sgBegin, objectString(tempSpeakerGroup.speakers, tmpstr2).c_str());
 		}
 		nextISNarrationSubjects.clear();
 		whereNextISNarrationSubjects.clear();
 	}
 	// this does not actually include another more thorough way - is the speaker specified after the quote?
 	// if there are less than 2 speakers, there were subjects in the previous unquoted section and the section ended with an open double quote
-	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == L"�")
+	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == u"�")
 	{
 		// bool BF=(tempSpeakerGroup.begin+1<m.size() && m[tempSpeakerGroup.begin+1].forms.isSet(quoteForm)); all speaker groups at this point start with an unquoted paragraph
 		if (determineIfSpeakerMoved(begin, end, endOfSection) < 0)
@@ -1405,7 +1409,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 		}
 		// if lastSG is not composed of a single quoted paragraph
 		bool lastSGNotClosable = false;
-		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == L"�")
+		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == u"�")
 		{
 			int q = lastSG->sgBegin + 1;
 			while (m[q].getQuoteForwardLink() >= 0) q = m[q].getQuoteForwardLink();
@@ -1418,11 +1422,11 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 			if (debugTrace.traceSpeakerResolution)
 			{
 				if (lastSGNotClosable)
-					lplog(LOG_SG, L"%06d-%06d:%02d   lastSG %s is a single quote.", begin, end, section, objectString(lastSG->speakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"%06d-%06d:%02d   lastSG %s is a single quote.", begin, end, section, objectString(lastSG->speakers, tmpstr2).c_str());
 				else if (!speakersNotMergable)
-					lplog(LOG_SG, L"%06d-%06d:%02d   All of tempSpeakerGroup %s were found in %s.", begin, end, section, objectString(tempSpeakerGroup.speakers, tmpstr).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"%06d-%06d:%02d   All of tempSpeakerGroup %s were found in %s.", begin, end, section, objectString(tempSpeakerGroup.speakers, tmpstr).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
 				else
-					lplog(LOG_SG, L"%06d-%06d:%02d   All but one of tempSpeakerGroup %s were found in %s.", begin, end, section, objectString(tempSpeakerGroup.speakers, tmpstr).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
+					lplog(LOG_SG, u"%06d-%06d:%02d   All but one of tempSpeakerGroup %s were found in %s.", begin, end, section, objectString(tempSpeakerGroup.speakers, tmpstr).c_str(), objectString(lastSG->speakers, tmpstr2).c_str());
 			}
 			extendLastSGToEndOfSection(begin, end, lastSG, resolvableByFutureSpeaker, lastSpeakerGroupOfPreviousSection, speakerGroupCrossesSectionBoundary, endOfSection);
 			return true;
@@ -1440,7 +1444,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 	return false;
 }
 
-const wchar_t* metaResponse[] = { L"reply",L"response", L"answer", NULL }; // initialized
+const lpchar_t* metaResponse[] = { u"reply",u"response", u"answer", NULL }; // initialized
 
 // Mark POV_OBJECT_ROLE (and push where / owner into povInSpeakerGroups) when
 // the mention is an internal body-part of an owner, the subject of an
@@ -1450,7 +1454,7 @@ const wchar_t* metaResponse[] = { L"reply",L"response", L"answer", NULL }; // in
 bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	if (m[where].flags & cWordMatch::flagAdjectivalObject)
 	{
 		int I = where;
@@ -1466,7 +1470,7 @@ bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote
 		m[where].objectRole |= POV_OBJECT_ROLE; // used in determining point of view/observer status for speakerGroups
 		m[objects[m[where].getObject()].getOwnerWhere()].objectRole |= POV_OBJECT_ROLE;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   speaker %s has pov status [1].", where, section, objectString(m[objects[m[where].getObject()].getOwnerWhere()].getObject(), tmpstr, true).c_str());
+			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   speaker %s has pov status [1].", where, section, objectString(m[objects[m[where].getObject()].getOwnerWhere()].getObject(), tmpstr, true).c_str());
 		return true;
 	}
 	if (!inPrimaryQuote && !inSecondaryQuote && m[where].getObject() >= 0 && objects[m[where].getObject()].getOwnerWhere() < 0 && m[where].getRelObject() >= 0 &&
@@ -1477,7 +1481,7 @@ bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote
 		povInSpeakerGroups.push_back(where);
 		m[where].objectRole |= POV_OBJECT_ROLE; // used in determining point of view/observer status for speakerGroups
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   speaker %s has pov status [SUBJECT of internal object].", where, section, objectString(m[where].getObject(), tmpstr, true).c_str());
+			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   speaker %s has pov status [SUBJECT of internal object].", where, section, objectString(m[where].getObject(), tmpstr, true).c_str());
 		return true;
 	}
 	// he was conscious
@@ -1488,7 +1492,7 @@ bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote
 		povInSpeakerGroups.push_back(where);
 		m[where].objectRole |= POV_OBJECT_ROLE; // used in determining point of view/observer status for speakerGroups
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   speaker %s has pov status [SUBJECT of internal description].", where, section, objectString(m[where].getObject(), tmpstr, true).c_str());
+			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   speaker %s has pov status [SUBJECT of internal description].", where, section, objectString(m[where].getObject(), tmpstr, true).c_str());
 		return true;
 	}
 	return false;
@@ -1501,7 +1505,7 @@ bool cSource::setPOVStatus(int where, bool inPrimaryQuote, bool inSecondaryQuote
 bool cSource::notPhysicallyPresentByMissive(int where)
 {
 	LFS
-		if (m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relPrep >= 0 && m[m[m[where].getRelVerb()].relPrep].word->first == L"in" &&
+		if (m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relPrep >= 0 && m[m[m[where].getRelVerb()].relPrep].word->first == u"in" &&
 			m[m[m[where].getRelVerb()].relPrep].getRelObject() >= 0 && m[m[m[m[where].getRelVerb()].relPrep].getRelObject()].getObject() >= 0)
 		{
 			int wpo = m[m[m[where].getRelVerb()].relPrep].getRelObject(), prepObject = m[wpo].getObject();
@@ -1510,7 +1514,7 @@ bool cSource::notPhysicallyPresentByMissive(int where)
 			{
 				isPlace |= objects[m[wpo].objectMatches[I].object].getSubType() >= 0;
 				int lastLetterBegin = -1, wmo = objects[m[wpo].objectMatches[I].object].originalLocation;
-				isLetterWord |= detectLetterAsObject(wmo, lastLetterBegin) || m[wmo].word->first == L"appeal";
+				isLetterWord |= detectLetterAsObject(wmo, lastLetterBegin) || m[wmo].word->first == u"appeal";
 				for (int p = 0; metaResponse[p]; p++)
 					isLetterWord |= (m[wmo].word->first == metaResponse[p]);
 				isPhysical |= (m[wmo].word->second.flags & cSourceWordInfo::physicalObjectByWN) != 0;
@@ -1521,7 +1525,7 @@ bool cSource::notPhysicallyPresentByMissive(int where)
 			{
 				isPlace |= objects[prepObject].getSubType() >= 0;
 				int lastLetterBegin = -1;
-				isLetterWord |= detectLetterAsObject(wpo, lastLetterBegin) || m[wpo].word->first == L"appeal";
+				isLetterWord |= detectLetterAsObject(wpo, lastLetterBegin) || m[wpo].word->first == u"appeal";
 				for (int p = 0; metaResponse[p]; p++)
 					isLetterWord |= (m[wpo].word->first == metaResponse[p]);
 				isPhysical |= (m[wpo].word->second.flags & cSourceWordInfo::physicalObjectByWN) != 0;
@@ -1530,9 +1534,9 @@ bool cSource::notPhysicallyPresentByMissive(int where)
 			}
 			if (isLetterWord && !isPlace && !isTime && !isGendered)
 			{
-				wstring tmpstr;
+				lpwstring tmpstr;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s not physically present (in non-physical object/letter %d:%s).", where, section, whereString(where, tmpstr, true).c_str(), wpo, whereString(wpo, tmpstr, true).c_str());
+					lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s not physically present (in non-physical object/letter %d:%s).", where, section, whereString(where, tmpstr, true).c_str(), wpo, whereString(wpo, tmpstr, true).c_str());
 				return true;
 			}
 		}
@@ -1551,17 +1555,17 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 {
 	LFS
 		if (o < 0 || objects[o].isKindOf) return false;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	int objectClass = objects[o].objectClass;
 	//vector <cLocalFocus>::iterator lsi=in(o);
 	// he[tommy] rattled off the formula to the elderly woman , looking more like a housekeeper than a servant , who opened the door to him[tommy]
 	//if (lsi!=localObjects.end() && lsi->notSpeaker) return false; must not restrict in this way because of the above sentence.
 	// if preposition is 'to', then discard PREP_OBJECT_ROLE
 	// this leads to correct results for such examples as 'to the elderly woman' but avoids 'request for Mr. Carter'
-	unsigned __int64 objectRole = m[where].objectRole;
+	uint64_t objectRole = m[where].objectRole;
 	tIWMM before = (m[where].beginObjectPosition > 0) ? m[m[where].beginObjectPosition - 1].word : wNULL;
 	if ((objectRole & PREP_OBJECT_ROLE) &&
-		(before != wNULL && (before->first == L"to" || before->first == L"over")) &&
+		(before != wNULL && (before->first == u"to" || before->first == u"over")) &&
 		m[where].principalWhereAdjectivalPosition < 0 &&
 		// prevents "Whittington directed the driver to go to Waterloo"
 		(objectClass != NAME_OBJECT_CLASS || objects[o].numIdentifiedAsSpeaker) &&
@@ -1580,19 +1584,19 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 	if (objectClass == META_GROUP_OBJECT_CLASS && cObject::whichOrderWord(m[objects[o].originalLocation].word) != -1 && !inPrimaryQuote && !(objectRole & SENTENCE_IN_REL_ROLE))
 	{
 		if ((isNotPhysicallyPresent = (objectRole & NONPAST_OBJECT_ROLE) != 0) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although OUTSIDE_QUOTE_NONPAST.", where, section, objectString(o, tmpstr, true).c_str());
+			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although OUTSIDE_QUOTE_NONPAST.", where, section, objectString(o, tmpstr, true).c_str());
 		return (m[where].objectRole & UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE) != 0;
 	}
 	bool acceptableMetaGroupObject =
 		objectClass == META_GROUP_OBJECT_CLASS && !objects[o].neuter &&
 		((cObject::whichOrderWord(m[where].word) == -1 ||
 			(objectRole & (IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) != IS_OBJECT_ROLE &&
-			(objects[o].getOwnerWhere() != -1 || m[m[where].beginObjectPosition].word->first == L"the")));
+			(objects[o].getOwnerWhere() != -1 || m[m[where].beginObjectPosition].word->first == u"the")));
 	// exclude "the memory of Aunt Jane" and "picture of Jane Finn"
 	// but include META_GROUP objects because they are not resolved till later, and most of the time they will be resolved and disappear
 	bool allowablePrepObject = subjectAllowPrep &&
 		(objectRole & PREP_OBJECT_ROLE) && m[where].principalWhereAdjectivalPosition < 0 &&
-		before != wNULL && before->first != L"of" &&
+		before != wNULL && before->first != u"of" &&
 		(objects[o].firstLocation < where || objectClass == META_GROUP_OBJECT_CLASS);
 	int beginObjectPosition = (o == m[where].getObject() && objects[o].begin >= m[where].beginObjectPosition) ? m[where].beginObjectPosition : objects[o].begin;
 	vector <cLocalFocus>::iterator lsi;
@@ -1608,7 +1612,7 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 		(((objectRole & SUBJECT_ROLE) && !(objectRole & PREP_OBJECT_ROLE)) ||
 			// exclude Tommy's ring
 			((objectRole & OBJECT_ROLE) && m[where].principalWhereAdjectivalPosition < 0 &&
-				(!(objectRole & PREP_OBJECT_ROLE) || (before == wNULL || before->first != L"of") || ((lsi = in(o)) != localObjects.end() && lsi->physicallyPresent))) ||
+				(!(objectRole & PREP_OBJECT_ROLE) || (before == wNULL || before->first != u"of") || ((lsi = in(o)) != localObjects.end() && lsi->physicallyPresent))) ||
 			allowablePrepObject) &&
 		((objectClass == NAME_OBJECT_CLASS && (m[beginObjectPosition].queryWinnerForm(determinerForm) < 0 || objects[o].numIdentifiedAsSpeaker > 0)) ||
 			objectClass == GENDERED_GENERAL_OBJECT_CLASS ||
@@ -1626,89 +1630,89 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 			if (I == m.size() || !(m[I].objectRole & SUBJECT_ROLE) || m[I].getObject() < 0 || objects[m[I].getObject()].objectClass != BODY_OBJECT_CLASS)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected - adjective", where, section, objectString(o, tmpstr, true).c_str());
+					lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected - adjective", where, section, objectString(o, tmpstr, true).c_str());
 				return false;
 			}
 		}
 		// there came the accents of Number One
 		if ((objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE | OBJECT_ROLE)) == OBJECT_ROLE &&
 			(m[where].relSubject < 0 || m[m[where].relSubject].getObject() < 0 || objects[m[m[where].relSubject].getObject()].neuter) &&
-			m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].word->first == L"came")
+			m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].word->first == u"came")
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted through special 'came' object", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted through special 'came' object", where, section, objectString(o, tmpstr, true).c_str());
 			objectRole |= SUBJECT_ROLE;
 		}
 		if ((!(objectRole & SUBJECT_ROLE) || (objectRole & PREP_OBJECT_ROLE)) && !objects[o].numIdentifiedAsSpeakerInSection && objects[o].objectClass != META_GROUP_OBJECT_CLASS)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (not a prior speaker)", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (not a prior speaker)", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		if ((objectRole & RE_OBJECT_ROLE) && objects[o].whereRelativeClause < 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (repeat object)", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (repeat object)", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		if ((m[where].flags & cWordMatch::flagInQuestion) != 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (question).", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (question).", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		if ((m[where].flags & cWordMatch::flagInPStatement) != 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (probability statement).", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (probability statement).", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		if (!(objectRole & (FOCUS_EVALUATED | PRIMARY_SPEAKER_ROLE)))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s ROLES=%s rejected for focus (not evaluated).", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s ROLES=%s rejected for focus (not evaluated).", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str());
 			return false;
 		}
 		if (isNotPhysicallyPresent = (objectRole & NOT_OBJECT_ROLE) != 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although NOT_ROLE.", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although NOT_ROLE.", where, section, objectString(o, tmpstr, true).c_str());
 			return !objects[o].plural;
 		}
 		if (isNotPhysicallyPresent = (!inPrimaryQuote && !inSecondaryQuote && (objectRole & NONPAST_OBJECT_ROLE) != 0))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although OUTSIDE_QUOTE_NONPAST (%s).", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although OUTSIDE_QUOTE_NONPAST (%s).", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str());
 			return !objects[o].plural;
 		}
 		if (!(objectRole & IN_EMBEDDED_STORY_OBJECT_ROLE) && (isNotPhysicallyPresent = (inPrimaryQuote && (objectRole & NONPRESENT_OBJECT_ROLE) != 0)))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although IN_QUOTE_NONPRESENT.", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although IN_QUOTE_NONPRESENT.", where, section, objectString(o, tmpstr, true).c_str());
 			return !objects[o].plural;
 		}
 		if (inPrimaryQuote && (objectRole & IN_EMBEDDED_STORY_OBJECT_ROLE) && (isNotPhysicallyPresent = (inPrimaryQuote && (objectRole & NONPAST_OBJECT_ROLE) != 0)))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although IN_QUOTE_NONPAST (inside story).", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although IN_QUOTE_NONPAST (inside story).", where, section, objectString(o, tmpstr, true).c_str());
 			return !objects[o].plural;
 		}
 		if (isNotPhysicallyPresent = (objectRole & SENTENCE_IN_REL_ROLE) != 0) // 
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s accepted for focus although SENTENCE_IN_REL.", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s accepted for focus although SENTENCE_IN_REL.", where, section, objectString(o, tmpstr, true).c_str());
 			return !objects[o].plural;
 		}
 		if (!objects[o].plural && (objectRole & POV_OBJECT_ROLE) && !(objectRole & EXTENDED_OBJECT_ROLE) && !(m[where].flags & cWordMatch::flagInQuestion) && m[where].objectMatches.size() <= 1)
 		{
 			povInSpeakerGroups.push_back(where);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   speaker %s has pov status [2].", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   speaker %s has pov status [2].", where, section, objectString(o, tmpstr, true).c_str());
 		}
-		if (m[objects[o].begin].word->first == L"each")
+		if (m[objects[o].begin].word->first == u"each")
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (each).", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (each).", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		// in 'the answer', in 'the letter' in 'the missive' - assertion of place that is not physical
@@ -1716,7 +1720,7 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 		if (notPhysicallyPresentByMissive(where))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d   object %s rejected for focus (in non-physical object/letter).", where, section, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d   object %s rejected for focus (in non-physical object/letter).", where, section, objectString(o, tmpstr, true).c_str());
 			return false;
 		}
 		if (objects[o].firstPhysicalManifestation == -1)
@@ -1729,7 +1733,7 @@ bool cSource::isFocus(int where, bool inPrimaryQuote, bool inSecondaryQuote, int
 			m[where].nextCompoundPartObject < 0 && m[where].previousCompoundPartObject < 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:First present in section - %s is POV?", where, whereString(where, tmpstr, true).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:First present in section - %s is POV?", where, whereString(where, tmpstr, true).c_str());
 		}
 		return !objects[o].plural;
 	}
@@ -1759,7 +1763,7 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 		set <int>::iterator stsi;
 		if (unMergable(where, o, tempSpeakerGroup.speakers, uniquelyMergable, false, false, false, false, stsi))
 		{
-			wstring tmpstr, tmpstr2, tmpstr3;
+			lpwstring tmpstr, tmpstr2, tmpstr3;
 			vector <int>::iterator vtsi;
 			if ((m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) && objects[o].getSubType() >= 0 && m[where].getRelObject() >= 0 &&
 				m[m[where].getRelObject()].getObject() >= 0 && objects[m[m[where].getRelObject()].getObject()].getSubType() >= 0)
@@ -1767,7 +1771,7 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 				objects[o].male = objects[o].female = false;
 				objects[o].neuter = true;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d:%02d   subject %d:%s%s rejected (IS_OBJECT and PLACE)", where, section, where, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str());
+					lplog(LOG_SG, u"%06d:%02d   subject %d:%s%s rejected (IS_OBJECT and PLACE)", where, section, where, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str());
 				return false;
 			}
 			else if ((m[where].objectRole & IS_OBJECT_ROLE) && objects[o].firstPhysicalManifestation >= 0 && objects[o].firstPhysicalManifestation < where &&
@@ -1776,8 +1780,8 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 				bool inserted = (unMergable(where, o, nextISNarrationSubjects, uniquelyMergable, true, false, false, false, vtsi));
 				if (inserted) whereNextISNarrationSubjects.push_back(where);
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_SG, L"%06d:%02d   subject %d:%s %s %s into ZXZ nextISNarrationSubjects %s%s", where, section, where, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
-						(inserted) ? L"inserted" : L"merged", (inserted) ? objectString(nextISNarrationSubjects, tmpstr2).c_str() : objectString(*vtsi, tmpstr2, true).c_str(), (clearBeforeSet) ? L" ZXZ cleared lastSubjects beforehand" : L"");
+					lplog(LOG_SG, u"%06d:%02d   subject %d:%s %s %s into ZXZ nextISNarrationSubjects %s%s", where, section, where, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
+						(inserted) ? u"inserted" : u"merged", (inserted) ? objectString(nextISNarrationSubjects, tmpstr2).c_str() : objectString(*vtsi, tmpstr2, true).c_str(), (clearBeforeSet) ? u" ZXZ cleared lastSubjects beforehand" : u"");
 			}
 			else
 			{
@@ -1797,12 +1801,12 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 				{
 					bool inserted = (unMergable(where, o, nextNarrationSubjects, uniquelyMergable, true, false, false, false, vtsi));
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_SG, L"%06d:%02d   subject %s %s %s into ZXZ nextNarrationSubjects %s%s", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
-							(inserted) ? L"inserted" : L"merged", (inserted) ? objectString(nextNarrationSubjects, tmpstr2).c_str() : objectString(*vtsi, tmpstr2, true).c_str(), (clearBeforeSet) ? L" ZXZ cleared lastSubjects beforehand" : L"");
+						lplog(LOG_SG, u"%06d:%02d   subject %s %s %s into ZXZ nextNarrationSubjects %s%s", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
+							(inserted) ? u"inserted" : u"merged", (inserted) ? objectString(nextNarrationSubjects, tmpstr2).c_str() : objectString(*vtsi, tmpstr2, true).c_str(), (clearBeforeSet) ? u" ZXZ cleared lastSubjects beforehand" : u"");
 				}
 				else
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_SG, L"%06d:%02d   subject %s %s REJECTED (not PP) from ZXZ nextNarrationSubjects %s", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
+						lplog(LOG_SG, u"%06d:%02d   subject %s %s REJECTED (not PP) from ZXZ nextNarrationSubjects %s", where, section, objectString(o, tmpstr, true).c_str(), m[where].roleString(tmpstr3).c_str(),
 							objectString(nextNarrationSubjects, tmpstr2).c_str());
 			}
 		}
@@ -1828,7 +1832,7 @@ bool cSource::mergeFocus(bool inPrimaryQuote, bool inSecondaryQuote, int o, int 
 void cSource::mergeObjectIntoSpeakerGroup(int where, int speakerObject)
 {
 	LFS
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 	set <int>::iterator mergedSpeakerObject;
 	bool uniquelyMergable;
 	if (objects[speakerObject].objectClass == META_GROUP_OBJECT_CLASS && cObject::whichOrderWord(m[objects[speakerObject].originalLocation].word) != -1)
@@ -1845,12 +1849,12 @@ void cSource::mergeObjectIntoSpeakerGroup(int where, int speakerObject)
 		if (unMergable(where, speakerObject, tempSpeakerGroup.speakers, uniquelyMergable, true, false, false, false, mergedSpeakerObject))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d:%02d     definite %s (1)", where, section, objectString(speakerObject, tmpstr, true).c_str());//,(isSpeakerObjectNonResolvable) ? "nonResolvable":"");
+				lplog(LOG_SG, u"%06d:%02d     definite %s (1)", where, section, objectString(speakerObject, tmpstr, true).c_str());//,(isSpeakerObjectNonResolvable) ? "nonResolvable":"");
 		}
 		else
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d:%02d     definite %s %smergable with %s", where, section, objectString(speakerObject, tmpstr, true).c_str(), (uniquelyMergable) ? L"uniquely " : L"", objectString(*mergedSpeakerObject, tmpstr2, true).c_str());
+				lplog(LOG_SG, u"%06d:%02d     definite %s %smergable with %s", where, section, objectString(speakerObject, tmpstr, true).c_str(), (uniquelyMergable) ? u"uniquely " : u"", objectString(*mergedSpeakerObject, tmpstr2, true).c_str());
 			if (uniquelyMergable && objects[speakerObject].objectClass == NAME_OBJECT_CLASS && objects[*mergedSpeakerObject].objectClass == PRONOUN_OBJECT_CLASS)
 			{
 				tempSpeakerGroup.speakers.erase(mergedSpeakerObject);
@@ -1866,21 +1870,21 @@ void cSource::mergeObjectIntoSpeakerGroup(int where, int speakerObject)
 				!mergableBySex(speakerObject, speakerGroups[speakerGroups.size() - 1].speakers, uniquelyMergable, mergedSpeakerObject)))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d:%02d     definite %s (2)", where, section, objectString(speakerObject, tmpstr, true).c_str());
+				lplog(LOG_SG, u"%06d:%02d     definite %s (2)", where, section, objectString(speakerObject, tmpstr, true).c_str());
 			if (section < sections.size()) sections[section].preIdentifiedSpeakerObjects.insert(speakerObject);
 			tempSpeakerGroup.speakers.insert(speakerObject);
 		}
 		else if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d:%02d     definite %s %smergable with %s (2)", where, section, objectString(speakerObject, tmpstr, true).c_str(), (uniquelyMergable) ? L"uniquely " : L"", (mergedSpeakerObject == sNULL) ? L"" : objectString(*mergedSpeakerObject, tmpstr2, true).c_str());
+			lplog(LOG_SG, u"%06d:%02d     definite %s %smergable with %s (2)", where, section, objectString(speakerObject, tmpstr, true).c_str(), (uniquelyMergable) ? u"uniquely " : u"", (mergedSpeakerObject == sNULL) ? u"" : objectString(*mergedSpeakerObject, tmpstr2, true).c_str());
 	}
 	else if (section < sections.size() && !unMergable(where, speakerObject, sections[section].preIdentifiedSpeakerObjects, uniquelyMergable, false, false, false, false, mergedSpeakerObject))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%06d:%02d     definite %s unMergable discovered from predefined", where, section, objectString(*mergedSpeakerObject, tmpstr, true).c_str());
+			lplog(LOG_SG, u"%06d:%02d     definite %s unMergable discovered from predefined", where, section, objectString(*mergedSpeakerObject, tmpstr, true).c_str());
 		tempSpeakerGroup.speakers.insert(*mergedSpeakerObject);
 	}
 	else if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%06d:%02d     definite %s rejected (wrong class)", where, section, objectString(speakerObject, tmpstr, true).c_str());
+		lplog(LOG_SG, u"%06d:%02d     definite %s rejected (wrong class)", where, section, objectString(speakerObject, tmpstr, true).c_str());
 }
 
 // if this is punctuation, but it is actually matched by a pattern, then
@@ -1895,10 +1899,10 @@ bool cSource::isEOS(int where)
 {
 	LFS
 		vector <cWordMatch>::iterator im = m.begin() + where;
-	return (im->word->first == L"?" || im->word->first == L"!" || im->word->first == L";" || (im->word->first == L"." && !im->PEMACount) ||
-		(im->word->first == L":" && (im + 1)->word == Words.sectionWord) ||
-		(where + 1 < (signed)m.size() && (im->queryForm(dashForm) >= 0 || im->word->first == L"--"/*BUG*/ || im->word->first == L".") &&
-			(m[where + 1].word->first == L"�" || m[where + 1].word->first == L"�")));
+	return (im->word->first == u"?" || im->word->first == u"!" || im->word->first == u";" || (im->word->first == u"." && !im->PEMACount) ||
+		(im->word->first == u":" && (im + 1)->word == Words.sectionWord) ||
+		(where + 1 < (signed)m.size() && (im->queryForm(dashForm) >= 0 || im->word->first == u"--"/*BUG*/ || im->word->first == u".") &&
+			(m[where + 1].word->first == u"�" || m[where + 1].word->first == u"�")));
 }
 
 // True for dummy/existential subjects "what" / "where" / "there" / "here"
@@ -1907,7 +1911,7 @@ bool cSource::isEOS(int where)
 bool cSource::isPleonastic(tIWMM w)
 {
 	LFS
-		return /*w->first==L"it" || */w->first == L"what" || w->first == L"where" || w->first == L"there" || w->first == L"here"; // || w->first==L"that"; // 'this and 'that' refers to something immediately before, and so are resolvable. || subjectWord->first==L"this" || subjectWord->first==L"that"))
+		return /*w->first==u"it" || */w->first == u"what" || w->first == u"where" || w->first == u"there" || w->first == u"here"; // || w->first==u"that"; // 'this and 'that' refers to something immediately before, and so are resolvable. || subjectWord->first==u"this" || subjectWord->first==u"that"))
 }
 
 // the following has two subchains: (Siebel and his flowers), (Faust and Mephistopheles)
@@ -1933,7 +1937,7 @@ bool cSource::compoundObjectSubChain(vector < int >& objectPositions)
 void cSource::translateBodyObjects(cSpeakerGroup& sg)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	vector <int> translatedBodyObjects;
 	for (set<int>::iterator i = sg.speakers.begin(); i != sg.speakers.end(); )
 		if (objects[*i].objectClass == BODY_OBJECT_CLASS && objects[*i].getOwnerWhere() >= 0)
@@ -1968,7 +1972,7 @@ void cSource::translateBodyObjects(cSpeakerGroup& sg)
 int cSource::detectMetaResponse(int I, int element)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	if (m[I].skipResponse >= 0)
 	{
 		if (m[I].relSubject >= 0)
@@ -1979,7 +1983,7 @@ int cSource::detectMetaResponse(int I, int element)
 				objectString(m[m[I].relSubject].getObject(), tmpstr, true);
 		}
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d-%06d:Detected meta-response [subject %d:%s].", I, m[I].skipResponse, m[I].relSubject, tmpstr.c_str());
+			lplog(LOG_RESOLUTION, u"%06d-%06d:Detected meta-response [subject %d:%s].", I, m[I].skipResponse, m[I].relSubject, tmpstr.c_str());
 		return m[I].skipResponse;
 	}
 	int where = m[I].principalWherePosition, skipResponse = I + m[I].pma[element].len;
@@ -1989,11 +1993,11 @@ int cSource::detectMetaResponse(int I, int element)
 		endsParagraph = isEOS(skipResponse) && m[skipResponse + 1].word == Words.sectionWord;
 		if (endsParagraph) skipResponse += 2;
 		// another voice[boris] which Tommy rather thought was that of Boris replied :
-		if (!endsParagraph && (endsParagraph = m[skipResponse - 1].word->first == L":" && m[skipResponse].word == Words.sectionWord))
+		if (!endsParagraph && (endsParagraph = m[skipResponse - 1].word->first == u":" && m[skipResponse].word == Words.sectionWord))
 			skipResponse++;
 		if (endsParagraph) break;
 		int nextSubSentence = skipResponse;
-		while (nextSubSentence + 1 < (signed)m.size() && !isEOS(nextSubSentence) && ((element = m[nextSubSentence].pma.queryPattern(L"__S1")) == -1))
+		while (nextSubSentence + 1 < (signed)m.size() && !isEOS(nextSubSentence) && ((element = m[nextSubSentence].pma.queryPattern(u"__S1")) == -1))
 			nextSubSentence++;
 		if (nextSubSentence + 1 >= (signed)m.size()) return -1;
 		if (isEOS(nextSubSentence)) break;
@@ -2015,7 +2019,7 @@ int cSource::detectMetaResponse(int I, int element)
 		{
 			m[I].skipResponse = skipResponse;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d-%06d:Detected meta-response (1) [subject %d:%s].", I, skipResponse, m[where].relSubject, tmpstr.c_str());
+				lplog(LOG_RESOLUTION, u"%06d-%06d:Detected meta-response (1) [subject %d:%s].", I, skipResponse, m[where].relSubject, tmpstr.c_str());
 			if (m[where].relSubject >= 0 && !(m[m[where].relSubject].objectRole & NONPAST_OBJECT_ROLE))
 				m[I].relSubject = m[where].relSubject;
 			return skipResponse;
@@ -2024,15 +2028,15 @@ int cSource::detectMetaResponse(int I, int element)
 	// if the verb of the only sentence indicates the character of the response, don't split.  If verb has an object, return false, unless the object is 'question'.
 	if (whereVerb < 0 || m[whereVerb].word->second.mainEntry == wNULL) return -1;
 	// Boris asked a question:
-	if (m[whereVerb].getRelObject() >= 0 && m[m[whereVerb].getRelObject()].word->first != L"question") return -1;
+	if (m[whereVerb].getRelObject() >= 0 && m[m[whereVerb].getRelObject()].word->first != u"question") return -1;
 	// �Unresolved I am not sure where she[jane] is at the present moment[moment] , � she[jane] replied .
-	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == L"�") return -1;
+	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == u"�") return -1;
 	// the Sinn feiner[irish] was speaking . his[irish] rich Irish voice[irish] was unmistakable :
 	// another voice[number] , which Tommy fancied was that[number] of the tall , commanding - looking man[number] whose face[number] had seemed familiar to him[number,tommy] , said :
 	// the Russian[boris] seemed to consider :
 	// if subject is new, then this doesn't represent a continuation of a conversation
 	//if (unResolvablePosition(I)) return -1;
-	wstring mainEntry = m[whereVerb].word->second.mainEntry->first;
+	lpwstring mainEntry = m[whereVerb].word->second.mainEntry->first;
 	if (m[whereVerb].relSubject >= 0)
 	{
 		if (m[m[whereVerb].relSubject].objectMatches.size())
@@ -2045,7 +2049,7 @@ int cSource::detectMetaResponse(int I, int element)
 		{
 			m[I].skipResponse = skipResponse;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d-%06d:Detected meta-response (2) [subject %d:%s].", I, skipResponse, m[whereVerb].relSubject, tmpstr.c_str());
+				lplog(LOG_RESOLUTION, u"%06d-%06d:Detected meta-response (2) [subject %d:%s].", I, skipResponse, m[whereVerb].relSubject, tmpstr.c_str());
 			if (m[whereVerb].relSubject >= 0 && !(m[m[whereVerb].relSubject].objectRole & NONPAST_OBJECT_ROLE))
 				m[I].relSubject = m[whereVerb].relSubject;
 			return skipResponse;
@@ -2061,12 +2065,12 @@ void cSource::associatePossessions(int where)
 	LFS
 		if (m[where].objectMatches.size() > 1 || (m[where].flags & cWordMatch::flagInPStatement)) return;
 	int o = m[where].getObject(), ro = m[where].getRelObject(), wv = m[where].getRelVerb(); // rs=m[where].relSubject,
-	__int64 objectRole = m[where].objectRole;
+	int64_t objectRole = m[where].objectRole;
 	if (o >= 0 && (objectRole & SUBJECT_ROLE) && wv >= 0 && ro >= 0 && m[ro].getObject() >= 0)
 	{
-		wstring verb;
+		lpwstring verb;
 		bool has = false;
-		unordered_map <wstring, set <int> >::iterator lvtoCi = getVerbClasses(wv, verb);
+		unordered_map <lpwstring, set <int> >::iterator lvtoCi = getVerbClasses(wv, verb);
 		if (lvtoCi != vbNetVerbToClassMap.end())
 			for (set <int>::iterator vbi = lvtoCi->second.begin(), vbiEnd = lvtoCi->second.end(); vbi != vbiEnd; vbi++)
 				has = vbNetClasses[*vbi].has;
@@ -2090,11 +2094,11 @@ void cSource::associateNyms(int where)
 {
 	LFS
 		if (m[where].objectMatches.size() > 1 || (m[where].flags & cWordMatch::flagInPStatement)) return;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	//int o=(m[where].objectMatches.size()==1) ? m[where].objectMatches[0].object : m[where].getObject(); this routine should be used BEFORE object is resolved
 	// at speakerResolution, because this is used before resolveObject the object matched is the old object from the last phase, so it is invalid.
 	int o = m[where].getObject(), wv = m[where].getRelVerb(), tsSense = (wv >= 0) ? m[wv].verbSense : 0; // rs=m[where].relSubject,ro=m[where].getRelObject(),
-	__int64 objectRole = m[where].objectRole, ror = -1;
+	int64_t objectRole = m[where].objectRole, ror = -1;
 	// vS                               simple examine                     VT_PRESENT                                          R=E=S
 	// vS+past                          examined                           VT_PAST                                             R=E<S
 	// vB                               has examined                       VT_PRESENT_PERFECT                                  E<S=R
@@ -2120,11 +2124,11 @@ void cSource::associateNyms(int where)
 		if (m[m[where].getRelObject()].getObject() >= 0)
 		{
 			if ((objects[o].plural ^ objects[m[m[where].getRelObject()].getObject()].plural) &&
-				m[where].word->first != L"you" && m[m[where].getRelObject()].word->first != L"you")
+				m[where].word->first != u"you" && m[m[where].getRelObject()].word->first != u"you")
 			{
-				wstring tmpstr2;
+				lpwstring tmpstr2;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:objects %s and %s differ in number - adjectival association rejected.", where, whereString(m[where].getRelObject(), tmpstr, true).c_str(), objectString(o, tmpstr2, true).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:objects %s and %s differ in number - adjectival association rejected.", where, whereString(m[where].getRelObject(), tmpstr, true).c_str(), objectString(o, tmpstr2, true).c_str());
 				return;
 			}
 			int ao = (m[m[where].getRelObject()].objectMatches.size() == 1) ? m[m[where].getRelObject()].objectMatches[0].object : m[m[where].getRelObject()].getObject();
@@ -2133,24 +2137,24 @@ void cSource::associateNyms(int where)
 			// also may reject possible aliases ('a hustler')
 			if (objects[ao].neuter && !objects[o].neuter && objects[o].objectClass != BODY_OBJECT_CLASS)
 			{
-				wstring tmpstr2;
+				lpwstring tmpstr2;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Neuter object %s.  Adjectives associated with %s are rejected.", where, objectString(ao, tmpstr, true).c_str(), objectString(o, tmpstr2, true).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:Neuter object %s.  Adjectives associated with %s are rejected.", where, objectString(ao, tmpstr, true).c_str(), objectString(o, tmpstr2, true).c_str());
 				return;
 			}
-			wstring logMatch;
+			lpwstring logMatch;
 			tIWMM fromMatch, toMatch, toMapMatch;
-			if (nymNoMatch(where, objects.begin() + o, objects.begin() + ao, true, false, logMatch, fromMatch, toMatch, toMapMatch, L"NoMatchSelf"))
+			if (nymNoMatch(where, objects.begin() + o, objects.begin() + ao, true, false, logMatch, fromMatch, toMatch, toMapMatch, u"NoMatchSelf"))
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Contradictory (2) object %s (on %s)!", where, objectString(o, tmpstr, true).c_str(), logMatch.c_str());
+					lplog(LOG_RESOLUTION, u"%06d:Contradictory (2) object %s (on %s)!", where, objectString(o, tmpstr, true).c_str(), logMatch.c_str());
 				return;
 			}
 			if ((objects[ao].associatedNouns.size() || objects[ao].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
 			{
-				wstring nouns, adjectives;
+				lpwstring nouns, adjectives;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Object %s original associated nouns (%s) and adjectives (%s) taking from %d:%s (3)",
+					lplog(LOG_RESOLUTION, u"%06d:Object %s original associated nouns (%s) and adjectives (%s) taking from %d:%s (3)",
 						where, objectString(o, tmpstr, false).c_str(), wordString(objects[o].associatedNouns, nouns).c_str(), wordString(objects[o].associatedAdjectives, adjectives).c_str(),
 						m[where].getRelObject(), objectString(ao, tmpstr, false).c_str());
 			}
@@ -2165,12 +2169,12 @@ void cSource::associateNyms(int where)
 				if (find(objects[o].associatedNouns.begin(), objects[o].associatedNouns.end(), *ai) == objects[o].associatedNouns.end())
 					objects[o].associatedNouns.push_back(*ai);
 			if (!(m[objects[o].originalLocation].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch))
-				objects[o].updateGenericGender(where, m[objects[ao].originalLocation].word, objects[ao].objectGenericAge, L"associateNyms", debugTrace);
+				objects[o].updateGenericGender(where, m[objects[ao].originalLocation].word, objects[ao].objectGenericAge, u"associateNyms", debugTrace);
 			if ((objects[ao].associatedNouns.size() || objects[ao].associatedAdjectives.size()) && debugTrace.traceSpeakerResolution)
 			{
-				wstring nouns, adjectives;
+				lpwstring nouns, adjectives;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Object %s associated nouns (%s) and adjectives (%s) (3)",
+					lplog(LOG_RESOLUTION, u"%06d:Object %s associated nouns (%s) and adjectives (%s) (3)",
 						where, objectString(o, tmpstr, false).c_str(), wordString(objects[ao].associatedNouns, nouns).c_str(), wordString(objects[ao].associatedAdjectives, adjectives).c_str());
 			}
 			// He[Boris] was probably fifty years old
@@ -2191,13 +2195,13 @@ void cSource::associateNyms(int where)
 			{
 				objects[o].associatedAdjectives.push_back(m[aow].word);
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Object %s associated adjective (%s) (1)", where, objectString(o, tmpstr, false).c_str(), m[aow].word->first.c_str());
+					lplog(LOG_RESOLUTION, u"%06d:Object %s associated adjective (%s) (1)", where, objectString(o, tmpstr, false).c_str(), m[aow].word->first.c_str());
 			}
 		// look for expressions
 		for (unsigned int aow = m[where].getRelVerb() + 1; aow + 1 < m.size() && (m[aow + 1].objectRole & IS_ADJ_OBJECT_ROLE); aow++)
 		{
-			wstring word = m[aow].word->first + L"_" + m[aow + 1].word->first;
-			unordered_set <wstring> synonyms;
+			lpwstring word = m[aow].word->first + u"_" + m[aow + 1].word->first;
+			unordered_set <lpwstring> synonyms;
 			getSynonyms(word, synonyms, ADJ);
 			for (auto s = synonyms.begin(), sEnd = synonyms.end(); s != sEnd; s++)
 			{
@@ -2207,7 +2211,7 @@ void cSource::associateNyms(int where)
 				{
 					objects[o].associatedAdjectives.push_back(ws);
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Object %s associated multi-word adjective (%s) from %s (2)", where, objectString(o, tmpstr, false).c_str(), ws->first.c_str(), word.c_str());
+						lplog(LOG_RESOLUTION, u"%06d:Object %s associated multi-word adjective (%s) from %s (2)", where, objectString(o, tmpstr, false).c_str(), ws->first.c_str(), word.c_str());
 				}
 			}
 			if (synonyms.size()) aow++;
@@ -2230,14 +2234,14 @@ bool cSource::implicitObject(int where)
 		if (where >= 0 && m[where].getObject() >= 0 && ((m[where].objectRole & SUBJECT_ROLE) || (m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) &&
 			unResolvablePosition(m[where].beginObjectPosition))
 		{
-			const wchar_t* implicitObjects[] = { L"knock",NULL };
+			const lpchar_t* implicitObjects[] = { u"knock",NULL };
 			for (unsigned int J = 0; implicitObjects[J]; J++)
 				if (m[where].word->second.mainEntry != wNULL && m[where].word->second.mainEntry->first == implicitObjects[J])
 					return true;
 		}
 	// the front door bell rang
-	if (where >= 0 && m[where].getObject() >= 0 && m[where].word->first == L"bell" && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].getMainEntry()->first == L"ring" &&
-		m[where - 1].word->first == L"door")
+	if (where >= 0 && m[where].getObject() >= 0 && m[where].word->first == u"bell" && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].getMainEntry()->first == u"ring" &&
+		m[where - 1].word->first == u"door")
 	{
 		m[where].objectRole |= UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE;
 		m[where].flags |= cWordMatch::flagObjectResolved;
@@ -2249,13 +2253,13 @@ bool cSource::implicitObject(int where)
 // Format povInSpeakerGroups[startPOVI, povi) as a space-separated index
 // list for LOG_RESOLUTION.  If the range is empty it still prints
 // povInSpeakerGroups[startPOVI]
-const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGroups, wstring& tmpstr)
+const lpchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGroups, lpwstring& tmpstr)
 {
 	LFS
 		tmpstr.clear();
-	wstring tmp;
+	lpwstring tmp;
 	for (int I = startPOVI; I < povi; I++)
-		tmpstr += itos(povInSpeakerGroups[I], tmp) + L" ";
+		tmpstr += itos(povInSpeakerGroups[I], tmp) + u" ";
 	if (tmpstr.empty() && startPOVI < (signed)povInSpeakerGroups.size())
 		tmpstr = itos(povInSpeakerGroups[startPOVI], tmp);
 	return tmpstr.c_str();
@@ -2267,7 +2271,7 @@ const wchar_t* intString(int startPOVI, int povi, vector <int>& povInSpeakerGrou
 // or remembered from the previous group's single povSpeaker.
 void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSpeakers, const int femaleSpeakers)
 {
-	wstring tmpstr, tmpstr2, tmpstr3;
+	lpwstring tmpstr, tmpstr2, tmpstr3;
 	int mi;
 	int startPOVI = povi;
 	set <int> povAmbiguousSpeakers;
@@ -2299,7 +2303,7 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 			if (sgi && speakerGroups[sgi - 1].povSpeakers.find(povAS) == speakerGroups[sgi - 1].povSpeakers.end() && speakerGroups[sgi - 1].povSpeakers.size())
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:ambiguous pov speaker %s in speakerGroup %s rejected (change in pov).", mi, objectString(povAS, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					lplog(LOG_RESOLUTION, u"%06d:ambiguous pov speaker %s in speakerGroup %s rejected (change in pov).", mi, objectString(povAS, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 			}
 			else
 				povAmbiguousSpeakers.insert(povAS);
@@ -2308,7 +2312,7 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 		{
 			speakerGroups[sgi].povSpeakers.insert(o);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:POVI speaker %s (1) inserted into speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"%06d:POVI speaker %s (1) inserted into speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 		}
 		povi++;
 	}
@@ -2327,7 +2331,7 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 						speakerGroups[sgi].speakers.find(*speakerGroups[I].povSpeakers.begin()) != speakerGroups[sgi].speakers.end())
 					{
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%s:POVI speaker %s remembered and inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(speakerGroups[I].povSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+							lplog(LOG_RESOLUTION, u"%s:POVI speaker %s remembered and inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(speakerGroups[I].povSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
 						speakerGroups[sgi].povSpeakers = speakerGroups[I].povSpeakers;
 						break;
 					}
@@ -2335,7 +2339,7 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 			if (speakerGroups[sgi].povSpeakers.empty())
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (2) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(povAmbiguousSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+					lplog(LOG_RESOLUTION, u"%s:POVI speaker %s (2) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(povAmbiguousSpeakers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
 				speakerGroups[sgi].povSpeakers = povAmbiguousSpeakers;
 			}
 		}
@@ -2346,7 +2350,7 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 				if (povAmbiguousSpeakers.find(*si) != povAmbiguousSpeakers.end())
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%s:POVI speaker %s (3) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(*si, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						lplog(LOG_RESOLUTION, u"%s:POVI speaker %s (3) inserted into speakerGroup %s.", intString(startPOVI, povi, povInSpeakerGroups, tmpstr3), objectString(*si, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 					speakerGroups[sgi].povSpeakers.insert(*si);
 				}
 		}
@@ -2357,8 +2361,8 @@ void cSource::dropPOVIntoSpeakerGroup(const int sgi, int &povi, const int maleSp
 			(!sgi || speakerGroups[sgi-1].observers.empty() || find(speakerGroups[sgi-1].observers.begin(),speakerGroups[sgi-1].observers.end(),*speakerGroups[sgi].speakers.begin())!=speakerGroups[sgi-1].observers.end()))
 	{
 		speakerGroups[sgi].povSpeakers.insert(speakerGroups[sgi].speakers.begin(),speakerGroups[sgi].speakers.end());
-		lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) previous speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi-1],tmpstr2));
-		lplog(LOG_RESOLUTION,L"%s:POVI speakers (4) inserted into speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi],tmpstr2));
+		lplog(LOG_RESOLUTION,u"%s:POVI speakers (4) previous speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi-1],tmpstr2));
+		lplog(LOG_RESOLUTION,u"%s:POVI speakers (4) inserted into speakerGroup %s.",intString(startPOVI,povi,povInSpeakerGroups,tmpstr3),toText(speakerGroups[sgi],tmpstr2));
 	}
 	*/
 }
@@ -2372,7 +2376,7 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 	int mi;
 	while (dni < (signed)definitelyIdentifiedAsSpeakerInSpeakerGroups.size() && (mi = definitelyIdentifiedAsSpeakerInSpeakerGroups[dni]) < speakerGroups[sgi].sgEnd)
 	{
-		wstring tmpstr, tmpstr2, tmpstr3;
+		lpwstring tmpstr, tmpstr2, tmpstr3;
 		int o = m[mi].getObject();
 		bool found = speakerGroups[sgi].speakers.find(o) != speakerGroups[sgi].speakers.end(), ambiguous = false;
 		if (!found && m[mi].objectMatches.size() == 1 &&
@@ -2382,7 +2386,7 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 		{
 			if (objects[m[mi].getObject()].objectClass != GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS) // must set 'found' - something that matches occupation is much less likely to be ambiguous
 			{
-				lplog(LOG_RESOLUTION, L"%06d:ambiguous dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"%06d:ambiguous dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 				ambiguous = true;
 			}
 			else
@@ -2411,17 +2415,17 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 			if (numFound == 1 && speakerGroups[sgi].metaNameOthers.find(o) == speakerGroups[sgi].metaNameOthers.end() && sections.size())
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:new dn speaker %s - replacing %s in speakerGroup %s", mi, objectString(o, tmpstr, false).c_str(), objectString(nonNameObjectFound, tmpstr2, false).c_str(), toText(speakerGroups[sgi], tmpstr3));
+					lplog(LOG_RESOLUTION, u"%06d:new dn speaker %s - replacing %s in speakerGroup %s", mi, objectString(o, tmpstr, false).c_str(), objectString(nonNameObjectFound, tmpstr2, false).c_str(), toText(speakerGroups[sgi], tmpstr3));
 				for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < mi; section++);
 				currentSpeakerGroup = sgi;
-				replaceObjectInSection(mi, o, nonNameObjectFound, L"new name mentioned only in quotes");
+				replaceObjectInSection(mi, o, nonNameObjectFound, u"new name mentioned only in quotes");
 				int beginLimit = sections[section].begin, untilLimit = sections[section + 1].begin;
 				for (vector <cObject::cLocation>::iterator li = objects[nonNameObjectFound].locations.begin(), liEnd = objects[nonNameObjectFound].locations.end(); li != liEnd; li++)
 					if (li->at >= beginLimit && li->at <= untilLimit && m[li->at].getObject() == nonNameObjectFound && !(m[li->at].flags & cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup))
 					{
 						m[li->at].flags |= cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup;
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_SG, L"%06d:flagUnresolvableObjectResolvedThroughSpeakerGroup:%s", li->at, objectString(o, tmpstr2, true).c_str());
+							lplog(LOG_SG, u"%06d:flagUnresolvableObjectResolvedThroughSpeakerGroup:%s", li->at, objectString(o, tmpstr2, true).c_str());
 						if (m[li->at].objectMatches.empty())
 						{
 							m[li->at].objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
@@ -2436,10 +2440,10 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 		{
 			speakerGroups[sgi].dnSpeakers.insert(o);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:dn speaker %s found in speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"%06d:dn speaker %s found in speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 		}
 		else if (!ambiguous && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+			lplog(LOG_RESOLUTION, u"%06d:dn speaker %s rejected from speakerGroup %s.", mi, objectString(o, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 		dni++;
 	}
 }
@@ -2451,7 +2455,7 @@ void cSource::dropDefinitelyIdentifiedSpeakersIntoSpeakerGroup(const int sgi, in
 // group; nonObserver is the last non-observer when conversationRestricted.
 void cSource::determineObserverStatus(const int sgi, int &nonObserver, const bool conversationRestricted, bool &isAnyNonObserverSpeakerNew, bool &isAnyObserverSpeakerNew)
 {
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	vector <cSyntacticRelationGroup>::iterator location = findSyntacticRelationGroup((sgi > 0) ? speakerGroups[sgi - 1].sgBegin : speakerGroups[sgi].sgBegin);
 	for (set <int>::iterator mo = speakerGroups[sgi].speakers.begin(), moEnd = speakerGroups[sgi].speakers.end(); mo != moEnd; mo++)
 	{
@@ -2464,7 +2468,7 @@ void cSource::determineObserverStatus(const int sgi, int &nonObserver, const boo
 		// follower? - search for hasSyntacticRelationGroup 'follow'
 		bool follower = false;
 		for (vector <cSyntacticRelationGroup>::iterator li = location; li != syntacticRelationGroups.end() && li->where < speakerGroups[sgi].sgEnd && !follower; li++)
-			follower = (in(*mo, li->whereSubject) && li->whereVerb >= 0 && isVerbClass(li->whereVerb, L"chase"));
+			follower = (in(*mo, li->whereSubject) && li->whereVerb >= 0 && isVerbClass(li->whereVerb, u"chase"));
 		// if there is more than one conversational quote, and there is only one definitively named speaker, and there are more than two speakers, and
 		//   the speaker was not an observer in a pervious group, then speaker is not an observer (because we don't know whether the other speaker is actually an observer)
 		bool uncertainObserver = speakerGroups[sgi].conversationalQuotes && speakerGroups[sgi].dnSpeakers.size() <= 1 && speakerGroups[sgi].speakers.size() > 2 && !isPreviousObserver;
@@ -2472,7 +2476,7 @@ void cSource::determineObserverStatus(const int sgi, int &nonObserver, const boo
 		if (isPOV && !isDN && (!speakerGroups[sgi].dnSpeakers.empty() || isPreviousObserver) && !(isPreviousSpeaker && currentSpeakerGroupSuperGroupToPrevious) && (!uncertainObserver || follower))
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"OBS observer %s found in speakerGroup %s.", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"OBS observer %s found in speakerGroup %s.", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 			speakerGroups[sgi].observers.insert(*mo);
 			if (sgi)
 				isAnyObserverSpeakerNew |= speakerGroups[sgi - 1].speakers.find(*mo) == speakerGroups[sgi - 1].speakers.end();
@@ -2527,9 +2531,9 @@ void cSource::addPreviousObserver(const int sgi, const bool previousSpeakerGroup
 					speakerGroups[sgi].speakers.find(*mo) != speakerGroups[sgi].speakers.end() &&
 					find(speakerGroups[sgi].observers.begin(), speakerGroups[sgi].observers.end(), *mo) == speakerGroups[sgi].observers.end())
 				{
-					wstring tmpstr, tmpstr2;
+					lpwstring tmpstr, tmpstr2;
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"POVI OBS observer %s found in speakerGroup %s (2).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						lplog(LOG_RESOLUTION, u"POVI OBS observer %s found in speakerGroup %s (2).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 					speakerGroups[sgi].observers.insert(*mo);
 					speakerGroups[sgi].povSpeakers.insert(*mo);
 				}
@@ -2548,7 +2552,7 @@ void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSam
 // also all the povSpeakers must be also of the current group.
 	if (speakerGroups[sgi].povSpeakers.empty() && sgi && speakerGroups[sgi - 1].povSpeakers.size() && previousSpeakerGroupInSameSection)
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		// all the previous povSpeakers also have to be in the current group
 		bool oneIn, allIn;
 		intersect(speakerGroups[sgi - 1].povSpeakers, speakerGroups[sgi].speakers, allIn, oneIn);
@@ -2556,7 +2560,7 @@ void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSam
 		{
 			speakerGroups[sgi].povSpeakers = speakerGroups[sgi - 1].povSpeakers;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"pov speakers from %s moved forward into speakerGroup %s.", toText(speakerGroups[sgi - 1], tmpstr), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"pov speakers from %s moved forward into speakerGroup %s.", toText(speakerGroups[sgi - 1], tmpstr), toText(speakerGroups[sgi], tmpstr2));
 			// if there are no definite speakers in speakerGroup, then the povSpeaker would probably NOT be the one not speaking, so skip this observer test
 			if (speakerGroups[sgi].dnSpeakers.size() || !speakerGroups[sgi].conversationalQuotes)
 			{
@@ -2566,14 +2570,14 @@ void cSource::addPreviousPOV(const int sgi, const bool previousSpeakerGroupInSam
 					if (speakerGroups[sgi].dnSpeakers.find(*mo) == speakerGroups[sgi].dnSpeakers.end())
 					{
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s (3).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+							lplog(LOG_RESOLUTION, u"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s (3).", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 						speakerGroups[sgi].observers.insert(*mo);
 					}
 				}
 				if (speakerGroups[sgi].observers.size() == 1 && speakerGroups[sgi].groupedSpeakers.find(*speakerGroups[sgi].observers.begin()) != speakerGroups[sgi].groupedSpeakers.end())
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s CANCELLED (in group).", objectString(speakerGroups[sgi].observers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						lplog(LOG_RESOLUTION, u"OBS observer %s derived from pov in previous speakerGroup in speakerGroup %s CANCELLED (in group).", objectString(speakerGroups[sgi].observers, tmpstr).c_str(), toText(speakerGroups[sgi], tmpstr2));
 					speakerGroups[sgi].observers.clear();
 				}
 			}
@@ -2603,9 +2607,9 @@ void cSource::removeObserverAssociatedWithSpeakingGroup(const int sgi)
 					mo++;
 				else
 				{
-					wstring tmpstr, tmpstr2;
+					lpwstring tmpstr, tmpstr2;
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"observer %s erased from speakerGroup %s [observer is in speaking group].", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+						lplog(LOG_RESOLUTION, u"observer %s erased from speakerGroup %s [observer is in speaking group].", objectString(*mo, tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 					speakerGroups[sgi].observers.erase(mo++);
 				}
 			}
@@ -2636,13 +2640,13 @@ void cSource::setConversationalQuotes(const int sgi, int &currentQuote)
 void cSource::distributeMetaNameOthers()
 {
 	int sgi = 0, mi;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	for (unsigned int I = 0; I < metaNameOthersInSpeakerGroups.size() && sgi < (int)speakerGroups.size(); sgi++)
 		for (; I < (signed)metaNameOthersInSpeakerGroups.size() && (mi = metaNameOthersInSpeakerGroups[I]) < speakerGroups[sgi].sgEnd; I++)
 		{
 			speakerGroups[sgi].metaNameOthers.insert(m[mi].getObject());
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:MNO speaker %s inserted into speakerGroup %s.", mi, objectString(m[mi].getObject(), tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
+				lplog(LOG_RESOLUTION, u"%06d:MNO speaker %s inserted into speakerGroup %s.", mi, objectString(m[mi].getObject(), tmpstr, true).c_str(), toText(speakerGroups[sgi], tmpstr2));
 		}
 }
 
@@ -2659,7 +2663,7 @@ void cSource::distributePOV()
 	LFS
 	int povi = 0, dni = 0, sgi = 0, currentQuote = firstQuote;
 	distributeMetaNameOthers();
-	wstring tmpstr, tmpstr2, tmpstr3;
+	lpwstring tmpstr, tmpstr2, tmpstr3;
 	while (sgi < (signed)speakerGroups.size())
 	{
 		int maleSpeakers = 0, femaleSpeakers = 0;
@@ -2702,8 +2706,8 @@ void cSource::distributePOV()
 			// add previous speakerGroup
 			speakerGroups[sgi].speakers.insert(speakerGroups[sgi - 1].speakers.begin(), speakerGroups[sgi - 1].speakers.end());
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION | LOG_SG, L"speakers added to observer-created speakerGroup %s (conversation restriction isAnyObserverSpeakerNew=%s isAnyNonObserverSpeakerNew=%s observerContinuing=%s).",
-					toText(speakerGroups[sgi], tmpstr2), (isAnyObserverSpeakerNew) ? L"true" : L"false", (isAnyNonObserverSpeakerNew) ? L"true" : L"false", (observerContinuing) ? L"true" : L"false");
+				lplog(LOG_RESOLUTION | LOG_SG, u"speakers added to observer-created speakerGroup %s (conversation restriction isAnyObserverSpeakerNew=%s isAnyNonObserverSpeakerNew=%s observerContinuing=%s).",
+					toText(speakerGroups[sgi], tmpstr2), (isAnyObserverSpeakerNew) ? u"true" : u"false", (isAnyNonObserverSpeakerNew) ? u"true" : u"false", (observerContinuing) ? u"true" : u"false");
 		}
 		for (section = 0; section + 1 < sections.size() && (signed)sections[section + 1].begin < speakerGroups[sgi].sgBegin; section++);
 		if (conversationRestricted)
@@ -2711,7 +2715,7 @@ void cSource::distributePOV()
 			if (speakerGroups[sgi].observers.size())
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"all observers erased in speakerGroup %s (conversation restriction).", toText(speakerGroups[sgi], tmpstr2));
+					lplog(LOG_RESOLUTION, u"all observers erased in speakerGroup %s (conversation restriction).", toText(speakerGroups[sgi], tmpstr2));
 				speakerGroups[sgi].observers.clear();
 			}
 		}
@@ -2729,13 +2733,13 @@ void cSource::distributePOV()
 			{
 				speakerGroups[sgi].povSpeakers = speakerGroups[sgi].speakers;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"POVI only lonely in speakerGroup %s.", toText(speakerGroups[sgi], tmpstr2));
+					lplog(LOG_RESOLUTION, u"POVI only lonely in speakerGroup %s.", toText(speakerGroups[sgi], tmpstr2));
 			}
 			else if (speakerGroups[sgi].speakers.find(0) != speakerGroups[sgi].speakers.end())
 			{
 				speakerGroups[sgi].povSpeakers.insert(0);
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"POVI Narrator in speakerGroup %s.", toText(speakerGroups[sgi], tmpstr2));
+					lplog(LOG_RESOLUTION, u"POVI Narrator in speakerGroup %s.", toText(speakerGroups[sgi], tmpstr2));
 			}
 		}
 		sgi++;
@@ -2763,7 +2767,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 {
 	LFS
 		vector <cWordMatch>::iterator im = m.begin() + where;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	// accumulate groups of objects for speakerGroup subgroups
 	if (groupedObjects.size() && !(im->objectRole & MPLURAL_ROLE))
 	{
@@ -2778,15 +2782,15 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 		{
 			tempSpeakerGroup.groups.push_back(cSpeakerGroup::cGroup(lastWhereMPluralGroupedObject, groupedObjects));
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION | LOG_SG, L"%d:Grouped gendered objects %s in tempSpeakerGroup %s (1).", lastWhereMPluralGroupedObject, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
+				lplog(LOG_RESOLUTION | LOG_SG, u"%d:Grouped gendered objects %s in tempSpeakerGroup %s (1).", lastWhereMPluralGroupedObject, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
 		}
 		groupedObjects.clear();
 	}
 	// Tommy, accompanied by Albert, explored the grounds.
 	int element = -1;
 	int whereWithObject = -1;
-	if ((m[where].objectRole & SUBJECT_ROLE) && where + 3 < (signed)m.size() && (element = m[where + 1].pma.queryPattern(L"__C1_IP")) != -1 && m[where + 2].getMainEntry()->first == L"accompany" &&
-		m[where + 3].word->first == L"by")
+	if ((m[where].objectRole & SUBJECT_ROLE) && where + 3 < (signed)m.size() && (element = m[where + 1].pma.queryPattern(u"__C1_IP")) != -1 && m[where + 2].getMainEntry()->first == u"accompany" &&
+		m[where + 3].word->first == u"by")
 	{
 		whereWithObject = m[where + 3].getRelObject();
 		if (m[where].getRelVerb() >= 0 && whereWithObject >= 0 && m[whereWithObject].getRelVerb() < 0)
@@ -2794,7 +2798,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 	}
 	// With him[conrad] was the evil - looking Number 14 .
 	if ((m[where].objectRole & SUBJECT_ROLE) && m[where].getRelObject() < 0 && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].queryWinnerForm(isForm) >= 0 &&
-		m[m[where].getRelVerb()].relPrep >= 0 && m[m[m[where].getRelVerb()].relPrep].word->first == L"with" && m[m[m[where].getRelVerb()].relPrep].getRelObject() >= 0)
+		m[m[where].getRelVerb()].relPrep >= 0 && m[m[m[where].getRelVerb()].relPrep].word->first == u"with" && m[m[m[where].getRelVerb()].relPrep].getRelObject() >= 0)
 		whereWithObject = m[m[m[where].getRelVerb()].relPrep].getRelObject();
 	if (whereWithObject >= 0 && m[whereWithObject].getObject() >= 0 && im->getObject() >= 0 &&
 		objects[m[whereWithObject].getObject()].objectClass != BODY_OBJECT_CLASS && m[whereWithObject].objectMatches.size() <= 1 &&
@@ -2811,7 +2815,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 			tempSpeakerGroup.groups.push_back(cSpeakerGroup::cGroup(where, groupedObjects));
 			im->objectRole |= MPLURAL_ROLE; // so that this group is assigned the highest preference grouping
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION | LOG_SG, L"%d:Grouped gendered objects %s in tempSpeakerGroup %s (5).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
+				lplog(LOG_RESOLUTION | LOG_SG, u"%d:Grouped gendered objects %s in tempSpeakerGroup %s (5).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
 			groupedObjects.clear();
 		}
 	}
@@ -2882,7 +2886,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 				{
 					tempSpeakerGroup.groups.push_back(cSpeakerGroup::cGroup(where, groupedPluralMatchedObjects));
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION | LOG_SG, L"%d:Grouped gendered objects %s in tempSpeakerGroup %s (2).", where, objectString(groupedPluralMatchedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
+						lplog(LOG_RESOLUTION | LOG_SG, u"%d:Grouped gendered objects %s in tempSpeakerGroup %s (2).", where, objectString(groupedPluralMatchedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
 				}
 				else
 				{
@@ -2891,7 +2895,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 						groupedObjects.push_back(im->objectMatches[om].object);
 					tempSpeakerGroup.groups.push_back(cSpeakerGroup::cGroup(where, groupedObjects));
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION | LOG_SG, L"%d:Grouped gendered objects %s in tempSpeakerGroup %s (3).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
+						lplog(LOG_RESOLUTION | LOG_SG, u"%d:Grouped gendered objects %s in tempSpeakerGroup %s (3).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
 				}
 			}
 			groupedObjects.clear();
@@ -2907,7 +2911,7 @@ void cSource::accumulateGroups(int where, vector <int>& groupedObjects, int& las
 				groupedObjects.push_back(o);
 				tempSpeakerGroup.groups.push_back(cSpeakerGroup::cGroup(where, groupedObjects));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Grouped gendered objects %s in tempSpeakerGroup %s (4).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
+					lplog(LOG_RESOLUTION | LOG_SG, u"%d:Grouped gendered objects %s in tempSpeakerGroup %s (4).", where, objectString(groupedObjects, tmpstr).c_str(), toText(tempSpeakerGroup, tmpstr2));
 			}
 			groupedObjects.clear();
 		}
@@ -2950,9 +2954,9 @@ void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPa
 		(mustBeExtension = (lastSpeakerPosition < 0 && lastEmbeddedStory >= 0 && m[lastOpeningPrimaryQuote].endQuote >= 0 &&
 			(m[m[lastOpeningPrimaryQuote].endQuote].flags & cWordMatch::flagInsertedQuote) != 0)))
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d-%06d:LQ past=%03d	nonPast=%03d first=%03d second=%03d lastEmbeddedStory=%d %d:%d %s",
+			lplog(LOG_RESOLUTION, u"%06d-%06d:LQ past=%03d	nonPast=%03d first=%03d second=%03d lastEmbeddedStory=%d %d:%d %s",
 				lastQuote, m[lastOpeningPrimaryQuote].endQuote, numPastSinceLastQuote, numNonPastSinceLastQuote,
 				numFirstInQuote, numSecondInQuote, lastEmbeddedStory, lastEmbeddedImposedSpeakerPosition, lastSpeakerPosition,
 				objectString(m[lastQuote].objectMatches, tmpstr, true).c_str());
@@ -2976,7 +2980,7 @@ void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPa
 			if (switchPersonGap = (((m[lastEmbeddedStory].flags & (cWordMatch::flagSecondEmbeddedStory | cWordMatch::flagFirstEmbeddedStory)) == cWordMatch::flagFirstEmbeddedStory && numSecondInQuote && !numFirstInQuote) ||
 				((m[lastEmbeddedStory].flags & (cWordMatch::flagSecondEmbeddedStory | cWordMatch::flagFirstEmbeddedStory)) == cWordMatch::flagSecondEmbeddedStory && numFirstInQuote && !numSecondInQuote)) &&
 				gap <= 1)
-				lplog(LOG_RESOLUTION, L"%06d,%06d:LQ person violation", lastEmbeddedStory, lastQuote);
+				lplog(LOG_RESOLUTION, u"%06d,%06d:LQ person violation", lastEmbeddedStory, lastQuote);
 			if (gap > 1 || switchPersonGap)
 			{
 				if (mustBeExtension) return;
@@ -2991,9 +2995,9 @@ void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPa
 				if (debugTrace.traceSpeakerResolution)
 				{
 					if (gap)
-						lplog(LOG_RESOLUTION, L"%06d,%06d:LQ EXTENDED (GAP@%d)", lastEmbeddedStory, m[lastOpeningPrimaryQuote].endQuote, lastGap);
+						lplog(LOG_RESOLUTION, u"%06d,%06d:LQ EXTENDED (GAP@%d)", lastEmbeddedStory, m[lastOpeningPrimaryQuote].endQuote, lastGap);
 					else
-						lplog(LOG_RESOLUTION, L"%06d,%06d:LQ EXTENDED", lastEmbeddedStory, m[lastOpeningPrimaryQuote].endQuote);
+						lplog(LOG_RESOLUTION, u"%06d,%06d:LQ EXTENDED", lastEmbeddedStory, m[lastOpeningPrimaryQuote].endQuote);
 				}
 				if (lastEmbeddedImposedSpeakerPosition < 0)
 					lastEmbeddedImposedSpeakerPosition = lastSpeakerPosition;
@@ -3027,7 +3031,7 @@ void cSource::embeddedStory(int where, int& numPastSinceLastQuote, int& numNonPa
 			m[lastQuote].flags |= cWordMatch::flagFirstEmbeddedStory;
 	}
 	else if (debugTrace.traceSpeakerResolution && lastOpeningPrimaryQuote >= 0)
-		lplog(LOG_RESOLUTION, L"%06d-%06d:L past=%03d	nonPast=%03d first=%03d second=%03d", lastQuote, m[lastOpeningPrimaryQuote].endQuote, numPastSinceLastQuote, numNonPastSinceLastQuote, numFirstInQuote, numSecondInQuote);
+		lplog(LOG_RESOLUTION, u"%06d-%06d:L past=%03d	nonPast=%03d first=%03d second=%03d", lastQuote, m[lastOpeningPrimaryQuote].endQuote, numPastSinceLastQuote, numNonPastSinceLastQuote, numFirstInQuote, numSecondInQuote);
 	numPastSinceLastQuote = numNonPastSinceLastQuote = numSecondInQuote = numFirstInQuote = 0;
 }
 
@@ -3039,7 +3043,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 {
 	LFS
 		vector <cWordMatch>::iterator im = m.begin() + where;
-	unsigned __int64 objectRole = im->objectRole & (HAIL_ROLE | MPLURAL_ROLE | RE_OBJECT_ROLE);
+	uint64_t objectRole = im->objectRole & (HAIL_ROLE | MPLURAL_ROLE | RE_OBJECT_ROLE);
 	int oc = (im->getObject() >= 0) ? objects[im->getObject()].objectClass : -1;
 	// Here[here] we[tommy,julius] are . Ebury , Yorks .
 	// Come at once , Moat House , Ebury , Yorkshire , great developments -- Tommy
@@ -3049,7 +3053,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 		im->beginObjectPosition > 0 &&
 		(m[im->beginObjectPosition - 1].word->second.isSeparator() || (m[where].objectRole & MOVEMENT_PREP_OBJECT_ROLE)) &&
 		im->endObjectPosition + 2 < (signed)m.size() && m[im->endObjectPosition + 1].endObjectPosition < (signed)m.size() &&
-		m[im->endObjectPosition].word->first == L"," &&
+		m[im->endObjectPosition].word->first == u"," &&
 		(so = m[im->endObjectPosition + 1].getObject()) >= 0 && !objects[so].PISDefinite &&
 		(objects[so].getSubType() >= 0 || (objects[so].name.hon == wNULL && !objects[so].isNotAPlace && objects[im->getObject()].getSubType() >= 0)) &&
 		objects[so].objectClass == NAME_OBJECT_CLASS &&
@@ -3060,14 +3064,14 @@ void cSource::adjustHailRoleDuringScan(int where)
 			objectRole &= ~HAIL_ROLE;
 			im->objectRole &= ~HAIL_ROLE;
 			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Removed HAIL role (PLACE).", where);
+				lplog(LOG_ROLE, u"%06d:Removed HAIL role (PLACE).", where);
 		}
 		objects[im->getObject()].setSubType(WORLD_CITY_TOWN_VILLAGE);
 		if (m[im->endObjectPosition + 1].objectRole & HAIL_ROLE)
 		{
 			m[im->endObjectPosition + 1].objectRole &= ~HAIL_ROLE;
 			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Removed HAIL role (PLACE).", im->endObjectPosition + 1);
+				lplog(LOG_ROLE, u"%06d:Removed HAIL role (PLACE).", im->endObjectPosition + 1);
 		}
 	}
 	// guarded like 'oc' above: getObject()==-1 must not form an out-of-range iterator
@@ -3075,7 +3079,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 	// dereferenced below once im->getObject()>=0 is confirmed.
 	vector <cObject>::iterator o = objects.begin() + ((im->getObject() >= 0) ? im->getObject() : 0);
 	if (im->getObject() >= 0 && !(im->objectRole & HAIL_ROLE) && o->objectClass == NAME_OBJECT_CLASS && (im->objectRole & IN_PRIMARY_QUOTE_ROLE) &&
-		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == L"�" && m[im->endObjectPosition].word->first == L"," && m[im->endObjectPosition + 1].word->first == L"�" &&
+		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == u"�" && m[im->endObjectPosition].word->first == u"," && m[im->endObjectPosition + 1].word->first == u"�" &&
 		(o->PISDefinite || o->PISHail > 1 || (o->name.hon != wNULL && !o->name.justHonorific() && o->numEncountersInSection > 1))) // encounters already at least one because of resolveObject
 	{
 		vector <cLocalFocus>::iterator lsi = in(im->getObject());
@@ -3085,7 +3089,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 		{
 			im->objectRole |= HAIL_ROLE;
 			if (debugTrace.traceRole)
-				lplog(LOG_ROLE, L"%06d:Acquired HAIL role (4) definite=%d subject=%d encountered=%d.", where, o->PISDefinite, o->PISSubject, o->numEncountersInSection);
+				lplog(LOG_ROLE, u"%06d:Acquired HAIL role (4) definite=%d subject=%d encountered=%d.", where, o->PISDefinite, o->PISSubject, o->numEncountersInSection);
 		}
 	}
 	// if the last quote has the speaker talking to himself/herself, remove hail
@@ -3095,7 +3099,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 		objectRole &= ~HAIL_ROLE;
 		im->objectRole &= ~HAIL_ROLE;
 		if (debugTrace.traceRole)
-			lplog(LOG_ROLE, L"%06d:Removed HAIL role (REFLEXIVE).", where);
+			lplog(LOG_ROLE, u"%06d:Removed HAIL role (REFLEXIVE).", where);
 	}
 }
 
@@ -3125,7 +3129,7 @@ void cSource::eraseAliasesAndReplacementsInSpeakerGroups(void)
 					if (o.lastSpeakerGroup >= numSG)
 						o.lastSpeakerGroup--;
 				}
-				lplog(LOG_RESOLUTION, L"speakerGroup erased: %d", sg - speakerGroups.begin());
+				lplog(LOG_RESOLUTION, u"speakerGroup erased: %d", sg - speakerGroups.begin());
 				sg = speakerGroups.erase(sg);
 			}
 			else
@@ -3142,15 +3146,15 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 		bool block = false;
 	if (quotesSeenSinceLastSentence) // if the previous paragraph was a quote
 	{
-		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == L"�"); // in the middle of a conversation
+		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == u"�"); // in the middle of a conversation
 		// also block if the present paragraph's only sentence is a speaker attribution
 		if (!block)
 		{
 			// (search for next quote)
 			int beginQuote = nsAfter;
-			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != L"�" &&
-				m[beginQuote].word->first != L"?" && m[beginQuote].word->first != L"!" && (m[beginQuote].word->first != L"." || m[beginQuote].PEMACount); beginQuote++);
-			if (beginQuote < (int)m.size() && m[beginQuote].word->first == L"�")
+			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != u"�" &&
+				m[beginQuote].word->first != u"?" && m[beginQuote].word->first != u"!" && (m[beginQuote].word->first != u"." || m[beginQuote].PEMACount); beginQuote++);
+			if (beginQuote < (int)m.size() && m[beginQuote].word->first == u"�")
 			{
 				// (search for the speaker position)
 				bool definitelySpeaker = true, previousParagraph = false, crossedSectionBoundary = false; // checkCataSpeaker=false,
@@ -3165,14 +3169,14 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 			if (!block && speakerGroups.size() && lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].endQuote + 1 == endSection)
 			{
 				int firstQuoteAfter = speakerGroups[speakerGroups.size() - 1].sgBegin + 1;
-				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != L"�"; firstQuoteAfter++);
+				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != u"�"; firstQuoteAfter++);
 				while (m[firstQuoteAfter].getQuoteForwardLink() >= 0) firstQuoteAfter = m[firstQuoteAfter].getQuoteForwardLink();
 				block |= firstQuoteAfter == lastOpeningPrimaryQuote;
 			}
 		}
 	}
 	// also block if the last paragraph ends with a colon (so the subject is saying something)
-	return block | (endSection && m[endSection - 1].word->first == L":");
+	return block | (endSection && m[endSection - 1].word->first == u":");
 }
 
 // Pick a physically-present speaker position to retain across a time /
@@ -3211,9 +3215,9 @@ int cSource::getSpeakersToKeep(vector<cSyntacticRelationGroup>::iterator sr)
 // the new section.
 void cSource::beginSection(int& lastSpeakerGroupPositionConsidered, int& lastSpeakerGroupOfPreviousSection, int I, vector <int>& previousLastSubjects, vector <int>& lastSubjects)
 {
-	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
+	lpwstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:%02d     aging speakers %s End Of Section", I, section, (currentSpeakerGroup == 0) ? L"" : objectString(speakerGroups[currentSpeakerGroup - 1].speakers, tmpstr).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:%02d     aging speakers %s End Of Section", I, section, (currentSpeakerGroup == 0) ? u"" : objectString(speakerGroups[currentSpeakerGroup - 1].speakers, tmpstr).c_str());
 	for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); lfi++)
 	{
 		m[I].flags |= cWordMatch::flagAge;
@@ -3227,16 +3231,16 @@ void cSource::beginSection(int& lastSpeakerGroupPositionConsidered, int& lastSpe
 		if (objects[*s].PISHail && !objects[*s].PISDefinite && !objects[*s].PISSubject)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG, L"%06d:%02d     hail %s deleted from preidentified", I, section, objectString(*s, tmpstr, true).c_str());
+				lplog(LOG_SG, u"%06d:%02d     hail %s deleted from preidentified", I, section, objectString(*s, tmpstr, true).c_str());
 			sections[section].preIdentifiedSpeakerObjects.erase(s++);
 		}
 		else
 			s++;
 	}
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%d-%d:---------------%s---------------\n nextNarrationSubjects=[%s]\n nextISNarrationSubjects=[%s]\n endOfSection=[true]\n lastSpeakerGroupOfPreviousSection=#%03d of %03d\n lastSpeakerGroup=[%s]\n currentSpeakerGroup=[%s]\n subjectsInPreviousUnquotedSection=[%s]",
-			lastSpeakerGroupPositionConsidered, I, (I == m.size() - 1) ? L"EOF" : L"EOS", objectString(nextNarrationSubjects, tmpstr2).c_str(), objectString(nextISNarrationSubjects, tmpstr6).c_str(),
-			lastSpeakerGroupOfPreviousSection, speakerGroups.size(), (speakerGroups.size()) ? toText(speakerGroups[speakerGroups.size() - 1], tmpstr3) : L"", toText(tempSpeakerGroup, tmpstr4), objectString(subjectsInPreviousUnquotedSection, tmpstr5).c_str());
+		lplog(LOG_SG, u"%d-%d:---------------%s---------------\n nextNarrationSubjects=[%s]\n nextISNarrationSubjects=[%s]\n endOfSection=[true]\n lastSpeakerGroupOfPreviousSection=#%03d of %03d\n lastSpeakerGroup=[%s]\n currentSpeakerGroup=[%s]\n subjectsInPreviousUnquotedSection=[%s]",
+			lastSpeakerGroupPositionConsidered, I, (I == m.size() - 1) ? u"EOF" : u"EOS", objectString(nextNarrationSubjects, tmpstr2).c_str(), objectString(nextISNarrationSubjects, tmpstr6).c_str(),
+			lastSpeakerGroupOfPreviousSection, speakerGroups.size(), (speakerGroups.size()) ? toText(speakerGroups[speakerGroups.size() - 1], tmpstr3) : u"", toText(tempSpeakerGroup, tmpstr4), objectString(subjectsInPreviousUnquotedSection, tmpstr5).c_str());
 	speakerSections.push_back(lastSpeakerGroupPositionConsidered);
 	if (speakerGroups.size())
 		for (set <int>::iterator s = speakerGroups[speakerGroups.size() - 1].speakers.begin(); s != speakerGroups[speakerGroups.size() - 1].speakers.end(); s++)
@@ -3250,7 +3254,7 @@ void cSource::beginSection(int& lastSpeakerGroupPositionConsidered, int& lastSpe
 	previousLastSubjects.clear();
 	lastSubjects.clear();
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%d:ZXZ reset subjectsInPreviousUnquotedSection, previousLastSubjects, lastSubjects etc", I);
+		lplog(LOG_SG, u"%d:ZXZ reset subjectsInPreviousUnquotedSection, previousLastSubjects, lastSubjects etc", I);
 	section++;
 	clearNextSection(I, section - 1);
 }
@@ -3264,7 +3268,7 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 	bool& endOfSentence, bool& immediatelyAfterEndOfParagraph, bool& quotesSeenSinceLastSentence, bool inSecondaryQuote, bool inPrimaryQuote, bool& quotesSeen, bool& firstQuotedSentenceOfSpeakerGroupNotSeen,
 	vector <int> previousLastSubjects)
 {
-	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
+	lpwstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
 	int element;
 	// question tracking
 	if (questionSpeakerLastParagraph >= 0 && whereFirstSubjectInParagraph >= 0)
@@ -3277,15 +3281,15 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 	for (nsAfter = I + 1; nsAfter < (int)m.size() && m[nsAfter].word == Words.sectionWord; nsAfter++);
 	// skip / another voice[boris] which Tommy rather thought was that of Boris replied :
 	bool metaResponseDetected = false;
-	if (nsAfter != m.size() && (element = m[nsAfter].pma.queryPattern(L"__S1")) != -1)
+	if (nsAfter != m.size() && (element = m[nsAfter].pma.queryPattern(u"__S1")) != -1)
 		metaResponseDetected = (nsSkipAfter = detectMetaResponse(nsAfter, element & ~cMatchElement::patternFlag)) >= 0;
 	if (metaResponseDetected) nsAfter = nsSkipAfter;
 	// detect if we should not create a speaker group
 	bool block = blockSpeakerGroupCreation(I, quotesSeenSinceLastSentence, nsAfter);
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_SG, L"%d-%d:--------%s-------------------\n nextNarrationSubjects=[%s]\n nextISNarrationSubjects=[%s]\n endOfSection=[false]\n lastSpeakerGroupOfPreviousSection=#%03d of %03d\n lastSpeakerGroup=[%s]\n currentSpeakerGroup=[%s]\n subjectsInPreviousUnquotedSection=[%s]",
-			lastSpeakerGroupPositionConsidered, I, (block) ? L"BLOCKED" : L"-------", objectString(nextNarrationSubjects, tmpstr2).c_str(), objectString(nextISNarrationSubjects, tmpstr6).c_str(),
-			lastSpeakerGroupOfPreviousSection, speakerGroups.size(), (speakerGroups.size()) ? toText(speakerGroups[speakerGroups.size() - 1], tmpstr3) : L"", toText(tempSpeakerGroup, tmpstr4), objectString(subjectsInPreviousUnquotedSection, tmpstr5).c_str());
+		lplog(LOG_SG, u"%d-%d:--------%s-------------------\n nextNarrationSubjects=[%s]\n nextISNarrationSubjects=[%s]\n endOfSection=[false]\n lastSpeakerGroupOfPreviousSection=#%03d of %03d\n lastSpeakerGroup=[%s]\n currentSpeakerGroup=[%s]\n subjectsInPreviousUnquotedSection=[%s]",
+			lastSpeakerGroupPositionConsidered, I, (block) ? u"BLOCKED" : u"-------", objectString(nextNarrationSubjects, tmpstr2).c_str(), objectString(nextISNarrationSubjects, tmpstr6).c_str(),
+			lastSpeakerGroupOfPreviousSection, speakerGroups.size(), (speakerGroups.size()) ? toText(speakerGroups[speakerGroups.size() - 1], tmpstr3) : u"", toText(tempSpeakerGroup, tmpstr4), objectString(subjectsInPreviousUnquotedSection, tmpstr5).c_str());
 	speakerSections.push_back(lastSpeakerGroupPositionConsidered);
 	// age speakers
 	cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || inPrimaryQuote, true, objectToBeMatchedInQuote, quoteIndependentAge);
@@ -3297,7 +3301,7 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 			if (speakerAges[*s] > 10 && (lsi = in(*s)) != localObjects.end() && lsi->physicallyPresent && lsi->getAge(false, objectToBeMatchedInQuote, quoteIndependentAge) > 10)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION | LOG_SG, L"%06d:Setting primary speaker %s to not physically present (age %d>10, getAge=%d).", I, objectString(*s, tmpstr, true).c_str(), speakerAges[*s], lsi->getAge(false, objectToBeMatchedInQuote, quoteIndependentAge));
+					lplog(LOG_RESOLUTION | LOG_SG, u"%06d:Setting primary speaker %s to not physically present (age %d>10, getAge=%d).", I, objectString(*s, tmpstr, true).c_str(), speakerAges[*s], lsi->getAge(false, objectToBeMatchedInQuote, quoteIndependentAge));
 				lsi->physicallyPresent = false; // this prevents speakers from being mentioned later in the dialogue (but not actually appearing) and then not removed from the speakerGroup
 			}
 		}
@@ -3321,7 +3325,7 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 		subjectsInPreviousUnquotedSection = previousLastSubjects;
 		subjectsInPreviousUnquotedSectionUsableForImmediateResolution = true;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%d:ZXZ set subjectsInPreviousUnquotedSection=previousLastSubjects=%s", I, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
+			lplog(LOG_SG, u"%d:ZXZ set subjectsInPreviousUnquotedSection=previousLastSubjects=%s", I, objectString(subjectsInPreviousUnquotedSection, tmpstr).c_str());
 	}
 	firstQuotedSentenceOfSpeakerGroupNotSeen = true;
 	lastSpeakerGroupPositionConsidered = I;
@@ -3329,19 +3333,19 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 	{
 		quotesSeenSinceLastSentence = false;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_SG, L"%d:(4) quotesSeenSinceLastSentence set to false", I);
+			lplog(LOG_SG, u"%d:(4) quotesSeenSinceLastSentence set to false", I);
 		quotesSeen = false;
 	}
 	questionSpeakerLastParagraph = questionSpeakerLastSentence;
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:QXQ whereFirstSubjectInParagraph,questionSpeakerLastSentence reset from %d,%d.", I, whereFirstSubjectInParagraph, questionSpeakerLastSentence);
+		lplog(LOG_RESOLUTION, u"%06d:QXQ whereFirstSubjectInParagraph,questionSpeakerLastSentence reset from %d,%d.", I, whereFirstSubjectInParagraph, questionSpeakerLastSentence);
 	questionSpeakerLastSentence = -1;
 	whereFirstSubjectInParagraph = -1;
 	if (m[I].flags & 1)
 	{
 		localObjects.clear();
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:cleared local objects", I);
+			lplog(LOG_RESOLUTION, u"%06d:cleared local objects", I);
 	}
 }
 
@@ -3350,13 +3354,13 @@ void cSource::endSection(int& questionSpeakerLastParagraph, int& questionSpeaker
 void cSource::ageSpeakersPerSentence(int where, int & endMetaResponse, unsigned int & agingStructuresSeen, int & lastBeginS1, const bool inPrimaryQuote, const bool inSecondaryQuote)
 {
 	int element;
-	if ((element = m[where].pma.queryPattern(L"__S1")) != -1)
+	if ((element = m[where].pma.queryPattern(u"__S1")) != -1)
 	{
 		if (endMetaResponse < where && (endMetaResponse = detectMetaResponse(where, element & ~cMatchElement::patternFlag)) < 0)
 		{
 			lastBeginS1 = where;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_SG | LOG_RESOLUTION, L"%06d:%02d     aging speakers (%s) BeginS1", where, section, (inPrimaryQuote) ? L"inQuote" : L"outsideQuote");
+				lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d     aging speakers (%s) BeginS1", where, section, (inPrimaryQuote) ? u"inQuote" : u"outsideQuote");
 			m[where].flags |= cWordMatch::flagAge;
 			for (vector <cLocalFocus>::iterator lfi = localObjects.begin(); lfi != localObjects.end(); )
 				ageSpeaker(where, inPrimaryQuote, inSecondaryQuote, lfi, 1);
@@ -3392,7 +3396,7 @@ void cSource::getWhereFirstSubjectInParagraph(int where, const bool inPrimaryQuo
 		{
 			whereFirstSubjectInParagraph = where;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:QXQ whereFirstSubjectInParagraph set to %d.", where, whereFirstSubjectInParagraph);
+				lplog(LOG_RESOLUTION, u"%06d:QXQ whereFirstSubjectInParagraph set to %d.", where, whereFirstSubjectInParagraph);
 		}
 	}
 }
@@ -3447,7 +3451,7 @@ void cSource::identifySpeakerGroups()
 	vector < vector <cTagLocation> > tagSets;
 	set <int>::iterator stsi;
 	unsigned int agingStructuresSeen = 0;
-	wstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
+	lpwstring tmpstr, tmpstr2, tmpstr3, tmpstr4, tmpstr5, tmpstr6;
 	lastBeginS1 = -1;
 	lastRelativePhrase = -1;
 	lastQ2 = -1;
@@ -3461,7 +3465,7 @@ void cSource::identifySpeakerGroups()
 		if ((int)(I * 100 / m.size()) > lastProgressPercent)
 		{
 			lastProgressPercent = (int)I * 100 / m.size();
-			wprintf(L"PROGRESS: %03d%% speakers identified with %d seconds elapsed \r", lastProgressPercent, clocksec());
+			lp_wprintf(u"PROGRESS: %03d%% speakers identified with %d seconds elapsed \r", lastProgressPercent, clocksec());
 		}
 		debugTrace = m[I].t;
 		logCache = m[I].logCache;
@@ -3474,20 +3478,20 @@ void cSource::identifySpeakerGroups()
 		{
 			m[I].objectRole &= ~SUBJECT_PLEONASTIC_ROLE;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Removed pleonastic role", I);
+				lplog(LOG_RESOLUTION, u"%06d:Removed pleonastic role", I);
 		}
-		if (m[I].pma.queryPattern(L"_REL1") != -1)
+		if (m[I].pma.queryPattern(u"_REL1") != -1)
 		{
 			lastRelativePhrase = I;
-			if (m[I].word->first == L"whose")
+			if (m[I].word->first == u"whose")
 			{
 				cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || inPrimaryQuote, m[I].getObject() == cObject::eOBJECTS::OBJECT_UNKNOWN_NEUTER, objectToBeMatchedInQuote, quoteIndependentAge);
 				resolveAdjectivalObject(I, false, inPrimaryQuote, inSecondaryQuote, lastBeginS1, false);
 			}
 		}
-		if (m[I].pma.queryPattern(L"_Q2") != -1)
+		if (m[I].pma.queryPattern(u"_Q2") != -1)
 			lastQ2 = I;
-		if (m[I].pma.queryPattern(L"_COMMAND1") != -1)
+		if (m[I].pma.queryPattern(u"_COMMAND1") != -1)
 			lastCommand = I;
 		if (m[I].hasVerbRelations)
 			lastVerb = I;
@@ -3506,7 +3510,7 @@ void cSource::identifySpeakerGroups()
 		// �[st:dr] Miss Finn , � he said
 		// �[st:julius] Mr . Hersheimmer , � he[st] said at last , �[st:julius] that is a very large sum . � 
 		bool possibleHail = inPrimaryQuote && m[I].getObject() >= 0 && !(m[I].objectRole & HAIL_ROLE) && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS &&
-			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == L"�" && m[m[I].endObjectPosition].word->first == L"," && m[m[I].endObjectPosition + 1].word->first == L"�";
+			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == u"�" && m[m[I].endObjectPosition].word->first == u"," && m[m[I].endObjectPosition + 1].word->first == u"�";
 		if ((!inPrimaryQuote && !inSecondaryQuote) || (possibleHail && !objects[m[I].getObject()].PISDefinite))
 			resolveObject(I, false, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false); // could change object at I!
 		if (m[I].getObject() != cObject::eOBJECTS::UNKNOWN_OBJECT && lastCommand >= 0)
@@ -3514,7 +3518,7 @@ void cSource::identifySpeakerGroups()
 		if (!narrativeIsQuoted)
 			adjustHailRoleDuringScan(I);
 		if (m[I].objectMatches.size() == 1 && m[I].getObject() >= 0)
-			moveNyms(I, m[I].objectMatches[0].object, m[I].getObject(), L"identifySpeakerGroups");
+			moveNyms(I, m[I].objectMatches[0].object, m[I].getObject(), u"identifySpeakerGroups");
 		identifyMetaNameEquivalence(I, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb);
 		identifyMetaSpeaker(I, inPrimaryQuote | inSecondaryQuote);
 		identifyAnnounce(I, inPrimaryQuote | inSecondaryQuote);
@@ -3529,7 +3533,7 @@ void cSource::identifySpeakerGroups()
 		if (!currentIsQuestion && !(m[I].flags & cWordMatch::flagAdjectivalObject) && !(m[I].flags & cWordMatch::flagRelativeHead) &&
 			!(m[I].getObject() < 0 || !objects[m[I].getObject()].plural || objects[m[I].getObject()].male || objects[m[I].getObject()].female || !objects[m[I].getObject()].neuter || objects[m[I].getObject()].objectClass == BODY_OBJECT_CLASS) &&
 			debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:rejected all objects matched to %s for speaker focus.", I, objectString(m[I].getObject(), tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:rejected all objects matched to %s for speaker focus.", I, objectString(m[I].getObject(), tmpstr, false).c_str());
 		getWhereFirstSubjectInParagraph(I, inPrimaryQuote, inSecondaryQuote, currentIsQuestion, lastSubjects, whereFirstSubjectInParagraph);
 		// CMREADME21
 		if (!inPrimaryQuote && !inSecondaryQuote) // avoid accumulating groups of objects in quotes that have not been disambiguated or resolved yet (and might not match or be invalid)
@@ -3540,14 +3544,14 @@ void cSource::identifySpeakerGroups()
 		identifyHailObjects(I, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, inPrimaryQuote, inSecondaryQuote);
 		// CMREADME24
 		if (I < endMetaResponse) continue;
-		if (m[I].word->first == L"lptable" || m[I].word->first == L"lpendcolumn")
+		if (m[I].word->first == u"lptable" || m[I].word->first == u"lpendcolumn")
 		{
 			localObjects.clear();
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
+				lplog(LOG_RESOLUTION, u"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
 		// CMREADME25
-		if (m[I].word->first == L"�")
+		if (m[I].word->first == u"�")
 		{
 			if (lastOpeningSecondaryQuote >= 0)
 			{
@@ -3558,7 +3562,7 @@ void cSource::identifySpeakerGroups()
 			inSecondaryQuote = true;
 			inPrimaryQuote = false;
 		}
-		else if (m[I].word->first == L"�")
+		else if (m[I].word->first == u"�")
 		{
 			inSecondaryQuote = false;
 			inPrimaryQuote = true;
@@ -3568,7 +3572,7 @@ void cSource::identifySpeakerGroups()
 				setSecondaryQuoteString(I, secondaryQuotesResolutions);
 			}
 		}
-		else if (m[I].word->first == L"�")
+		else if (m[I].word->first == u"�")
 		{
 			if (immediatelyAfterEndOfParagraph && lastQuote >= 0)
 				embeddedStory(I, numPastSinceLastQuote, numNonPastSinceLastQuote, numSecondInQuote, numFirstInQuote,
@@ -3578,7 +3582,7 @@ void cSource::identifySpeakerGroups()
 			inPrimaryQuote = true;
 			quotesSeen = quotesSeenSinceLastSentence = true;
 		}
-		else if (m[I].word->first == L"�" && lastOpeningPrimaryQuote >= 0)
+		else if (m[I].word->first == u"�" && lastOpeningPrimaryQuote >= 0)
 		{
 			processEndOfPrimaryQuote(I, lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 				lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, lastSpeakerPosition, lastQuotedString, quotedObjectCounter,
@@ -3610,14 +3614,14 @@ void cSource::identifySpeakerGroups()
 	distributePOV();
 	if (section < sections.size())
 		clearNextSection(m.size(), section);
-	wprintf(L"PROGRESS: 100%% speakers identified with %d seconds elapsed \n", clocksec());
+	lp_wprintf(u"PROGRESS: 100%% speakers identified with %d seconds elapsed \n", clocksec());
 	if (debugTrace.traceSpeakerResolution || TSROverride)
 	{
-		lplog(LOG_SG, L"SPEAKER GROUPS [LIST]");
+		lplog(LOG_SG, u"SPEAKER GROUPS [LIST]");
 		for (unsigned int I = 0; I < speakerGroups.size(); I++)
 		{
 			translateBodyObjects(speakerGroups[I]);
-			lplog(LOG_SG, L"%d: %s", I, toText(speakerGroups[I], tmpstr));
+			lplog(LOG_SG, u"%d: %s", I, toText(speakerGroups[I], tmpstr));
 		}
 	}
 }

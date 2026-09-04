@@ -31,14 +31,18 @@
 		  other overloads.
 		- getNextPosition seeds minPatternMatch with INT_MIN.
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include "io.h"
 #include "word.h"
 #include "profile.h"
 #include <climits>
@@ -85,7 +89,7 @@ cPatternMatchArray::cPatternMatchArray(const cPatternMatchArray& rhs)
 		content = (tPatternMatch*)tmalloc(allocated * sizeof(*content));
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (1)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (1)");
 			return;
 		}
 		memcpy(content, rhs.content, count * sizeof(*content));
@@ -103,12 +107,12 @@ void cPatternMatchArray::minimize(void)
 }
 
 // Write count then the raw content bytes to a POSIX fd.  Return is always true;
-// _write errors are ignored.
+// ::write errors are ignored.
 bool cPatternMatchArray::write(IOHANDLE file)
 {
 	LFS
-		_write(file, &count, sizeof(count));
-	_write(file, content, count * sizeof(*content));
+		::write(file, &count, sizeof(count));
+	::write(file, content, count * sizeof(*content));
 	return true;
 }
 
@@ -129,7 +133,7 @@ bool cPatternMatchArray::read(char* buffer, int& where, unsigned int limit)
 		return false;
 	}
 	if (where + count * sizeof(*content) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! PMA %d (20)", limit, where + count * sizeof(*content));
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! PMA %d (20)", limit, where + count * sizeof(*content));
 	memcpy(content, buffer + where, count * sizeof(*content));
 	where += count * sizeof(*content);
 	return true;
@@ -142,7 +146,7 @@ bool cPatternMatchArray::write(void* buffer, int& where, unsigned int limit)
 	LFS
 		if (!copy(buffer, count, where, limit)) return false;
 	if (where + count * sizeof(*content) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (16)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (16)", limit);
 	memcpy(((char*)buffer) + where, content, count * sizeof(*content));
 	where += count * sizeof(*content);
 	return true;
@@ -170,7 +174,7 @@ cPatternMatchArray& cPatternMatchArray::operator=(const cPatternMatchArray& rhs)
 		content = (tPatternMatch*)tmalloc(allocated * sizeof(*content));
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (3)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (3)");
 			return *this;
 		}
 		memcpy(content, rhs.content, count * sizeof(*content));
@@ -195,7 +199,7 @@ cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned int _
 		if (_P0 >= count || _P0 < 0)
 		{
 			logCache = 0;
-			lplog(L"Illegal reference (7) to element %d in an array with only %d elements!", _P0, count);
+			lplog(u"Illegal reference (7) to element %d in an array with only %d elements!", _P0, count);
 			if (count == 0) push_back(0, 0, 0, 0);
 			return content[0];
 		}
@@ -211,7 +215,7 @@ const cPatternMatchArray::tPatternMatch& cPatternMatchArray::operator[](unsigned
 		if (_P0 >= count || _P0 < 0)
 		{
 			logCache = 0;
-			lplog(L"Illegal reference (8) to element %d in an array with only %d elements!", _P0, count);
+			lplog(u"Illegal reference (8) to element %d in an array with only %d elements!", _P0, count);
 			if (count == 0) throw;
 			return content[0];
 		}
@@ -275,7 +279,7 @@ int cPatternMatchArray::push_back_unique(int pass, short cost, unsigned short p,
 			reduced = true;
 			// make sure lowest cost possibility of match is recorded
 #ifdef LOG_PATTERN_COST_CHECK
-			lplog(L"%d:%s[%s](%d,%d) PMA cost (will be) reduced from %d to %d", position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + end,
+			lplog(u"%d:%s[%s](%d,%d) PMA cost (will be) reduced from %d to %d", position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + end,
 				c->getCost(), cost);
 #endif
 		}
@@ -292,7 +296,7 @@ int cPatternMatchArray::push_back_unique(int pass, short cost, unsigned short p,
 		reduced = true; // if second pass, a new match MAY also match PEMA pattern
 		// make sure lowest cost possibility of match is recorded
 #ifdef LOG_PATTERN_COST_CHECK
-		lplog(L"%d:%s[%s](%d,%d) PMA cost (will be) reduced from %d to %d (2)", position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + end,
+		lplog(u"%d:%s[%s](%d,%d) PMA cost (will be) reduced from %d to %d (2)", position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position, position + end,
 			MAX_SIGNED_SHORT, cost);
 #endif
 		cost = MAX_SIGNED_SHORT; // ensure update with reduceParents
@@ -309,7 +313,7 @@ int cPatternMatchArray::erase(unsigned int at)
 		if (at >= count || at < 0)
 		{
 			logCache = 0;
-			lplog(L"Illegal reference (9) to element %d in an array with only %d elements!", at, count);
+			lplog(u"Illegal reference (9) to element %d in an array with only %d elements!", at, count);
 			if (count == 0) throw;
 			return count;
 		}
@@ -329,7 +333,7 @@ int cPatternMatchArray::erase(void)
 
 // Longest match whose pattern *name* equals `pattern`.  On success element is
 // the PMA index and the return is true; otherwise element=-1 and false.
-bool cPatternMatchArray::findMaxLen(wstring pattern, int& element)
+bool cPatternMatchArray::findMaxLen(lpwstring pattern, int& element)
 {
 	LFS
 		element = -1;
@@ -359,7 +363,7 @@ int cPatternMatchArray::findMaxLen(void)
 
 // PMA index (OR'd with patternFlag) of the longest match named `pattern`, or
 // the discarded maxLen overload's return (-1 if none).
-int cPatternMatchArray::queryPattern(wstring pattern)
+int cPatternMatchArray::queryPattern(lpwstring pattern)
 {
 	LFS
 		int maxLen;
@@ -368,7 +372,7 @@ int cPatternMatchArray::queryPattern(wstring pattern)
 
 // Longest match named `pattern`.  Returns PMA index | patternFlag, or -1; len
 // is set to that match's length or -1 if none.
-int cPatternMatchArray::queryPattern(wstring pattern, int& len)
+int cPatternMatchArray::queryPattern(lpwstring pattern, int& len)
 {
 	LFS
 		int maxLen = -1, element = -1;
@@ -383,7 +387,7 @@ int cPatternMatchArray::queryPattern(wstring pattern, int& len)
 }
 
 // First PMA index at or after startAt whose pattern name equals `pattern`, or -1.
-int cPatternMatchArray::queryAllPattern(wstring pattern, int startAt)
+int cPatternMatchArray::queryAllPattern(lpwstring pattern, int startAt)
 {
 	LFS
 		for (unsigned int I = startAt; I < count; I++)
@@ -395,7 +399,7 @@ int cPatternMatchArray::queryAllPattern(wstring pattern, int startAt)
 // Among matches named `pattern`, pick the cheapest, breaking ties by longest
 // len.  Returns PMA index | patternFlag (or -1).  minCost starts at 10000, so a
 // match costing more than that is ignored.
-int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
+int cPatternMatchArray::queryMaximumLowestCostPattern(lpwstring pattern, int& len)
 {
 	LFS
 		int maxLen = -1, element = -1, minCost = 10000;
@@ -412,7 +416,7 @@ int cPatternMatchArray::queryMaximumLowestCostPattern(wstring pattern, int& len)
 }
 
 // Longest match of pattern *number* `pattern`.  len is initialized to -1 on
-// entry, same as the wstring overload.
+// entry, same as the lpwstring overload.
 int cPatternMatchArray::queryPattern(int pattern, int& len)
 {
 	LFS
@@ -441,7 +445,7 @@ int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum,
 	for (unsigned int I = 0; I < count; I++)
 		if (content[I].len >= maxLen && patterns[content[I].getPattern()]->tagSetMemberInclusion[desiredTagSetNum])
 		{
-			if (content[I].len == maxLen && tag >= 0 && patternTagStrings[tag] == L"NAME") continue; // NAME tags have precedence over NOUN tags
+			if (content[I].len == maxLen && tag >= 0 && patternTagStrings[tag] == u"NAME") continue; // NAME tags have precedence over NOUN tags
 			tagInSet = 0;
 			tag = patterns[content[I].getPattern()]->hasTagInSet(desiredTagSetNum, tagInSet);
 			maxLen = content[I].len;
@@ -461,7 +465,7 @@ int cPatternMatchArray::queryPatternWithLen(int pattern, int len)
 }
 
 // Last (not first) PMA index | patternFlag whose name and len both match, or -1.
-int cPatternMatchArray::queryPatternWithLen(wstring pattern, int len)
+int cPatternMatchArray::queryPatternWithLen(lpwstring pattern, int len)
 {
 	LFS
 		int element = -1;
@@ -496,9 +500,9 @@ int cPatternMatchArray::findAgent(int& element, int maximumMaxLen, bool includeP
 	for (unsigned int I = 0; I < count; I++)
 	{
 		int p = content[I].getPattern();
-		wchar_t diff = patterns[p]->differentiator[0];
-		if (patterns[p]->name == L"__NOUN" &&
-			(diff == L'2' || (includePronouns && diff == L'C')) &&
+		lpchar_t diff = patterns[p]->differentiator[0];
+		if (patterns[p]->name == u"__NOUN" &&
+			(diff == u'2' || (includePronouns && diff == u'C')) &&
 			content[I].len > maxLen && content[I].len <= maximumMaxLen)
 		{
 			maxLen = content[I].len;
@@ -509,7 +513,7 @@ int cPatternMatchArray::findAgent(int& element, int maximumMaxLen, bool includeP
 }
 
 // Longest match of (pattern, differentiator); discards the maxLen out-param.
-int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator)
+int cPatternMatchArray::queryPatternDiff(lpwstring pattern, lpwstring differentiator)
 {
 	LFS
 		int maxLen = -1;
@@ -518,14 +522,14 @@ int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator
 
 // Longest match of (name, differentiator).  "*" means any differentiator;
 // "X*" means differentiator[0]=='X'.  Returns PMA index | patternFlag, or -1.
-int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator, int& maxLen)
+int cPatternMatchArray::queryPatternDiff(lpwstring pattern, lpwstring differentiator, int& maxLen)
 {
 	LFS
 		maxLen = -1;
-	if (differentiator == L"*")
+	if (differentiator == u"*")
 		return queryPattern(pattern, maxLen);
 	int element = -1;
-	if (differentiator.length() > 1 && differentiator[1] == L'*')
+	if (differentiator.length() > 1 && differentiator[1] == u'*')
 	{
 		for (unsigned int I = 0; I < count; I++)
 			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator[0] == differentiator[0] &&
@@ -550,12 +554,12 @@ int cPatternMatchArray::queryPatternDiff(wstring pattern, wstring differentiator
 
 // Longest match of (name, differentiator) whose len is strictly < the inbound
 // maxLen.  Writes that length back to maxLen.  Same "*" / "X*" wildcards.
-int cPatternMatchArray::queryPatternDiffLessThenLength(wstring pattern, wstring differentiator, int& maxLen)
+int cPatternMatchArray::queryPatternDiffLessThenLength(lpwstring pattern, lpwstring differentiator, int& maxLen)
 {
 	LFS
 		int len = -1;
 	int element = -1;
-	if (differentiator.length() > 1 && differentiator[1] == L'*')
+	if (differentiator.length() > 1 && differentiator[1] == u'*')
 	{
 		for (unsigned int I = 0; I < count; I++)
 			if (patterns[content[I].getPattern()]->name == pattern && patterns[content[I].getPattern()]->differentiator[0] == differentiator[0] &&
@@ -615,7 +619,7 @@ int compare(cPatternMatchArray::tPatternMatch* pm1, cPatternMatchArray::tPattern
 {
 	DLFS
 		//if (t.tracePatternElimination)
-		//  lplog(L"    PMA comparing p=%d end=%d to p=%d end=%d",pm1->pattern,pm1->end,pm2->getParentPattern(),pm2->end);
+		//  lplog(u"    PMA comparing p=%d end=%d to p=%d end=%d",pm1->pattern,pm1->end,pm2->getParentPattern(),pm2->end);
 		if (pm1->getPattern() < pm2->getPattern()) return -1;
 	if (pm1->getPattern() > pm2->getPattern()) return 1;
 	if (pm1->len < pm2->len) return -1;
@@ -632,7 +636,7 @@ cPatternMatchArray::tPatternMatch* cPatternMatchArray::find(unsigned int p, shor
 	key.setPattern(p);
 	key.len = len;
 	//if (t.tracePatternElimination)
-	//  lplog(L"    PMA searching for p=%d end=%d",p,end);
+	//  lplog(u"    PMA searching for p=%d end=%d",p,end);
 	return (tPatternMatch*)bsearch(&key, content, count, sizeof(*content), (int (*)(const void*, const void*))compare);
 	//if (!result) return NULL;
 	//while (result->pattern==p && result->end==end) result--;
@@ -677,7 +681,7 @@ bool cPatternMatchArray::consolidateWinners(int lastPEMAConsolidationIndex, cPat
 		{
 			if (target != J)
 				memcpy(content + target, content + J, sizeof(*content));
-			maxMatch = max(maxMatch, content[target].len);
+			maxMatch = max(maxMatch, (int)content[target].len); // batch B5: maxMatch is int&
 			content[target].removeWinnerFlag();
 			//if (content[target].maxWinner(lowestAverageCost,maxLACMatch))
 			numWinners++;
@@ -687,13 +691,13 @@ bool cPatternMatchArray::consolidateWinners(int lastPEMAConsolidationIndex, cPat
 			pema.translate(lastPEMAConsolidationIndex, wa, &content[target].pemaByChildPatternEnd, cPatternElementMatchArray::BY_CHILD_PATTERN_END);
 			target++;
 			if (t.tracePatternElimination)
-				lplog(L"position %d:pma %d:Kept %s[%s](%d,%d) [winner]", position, J, patterns[content[J].getPattern()]->name.c_str(), patterns[content[J].getPattern()]->differentiator.c_str(), position, position + content[J].len);
+				lplog(u"position %d:pma %d:Kept %s[%s](%d,%d) [winner]", position, J, patterns[content[J].getPattern()]->name.c_str(), patterns[content[J].getPattern()]->differentiator.c_str(), position, position + content[J].len);
 		}
 		else if (t.tracePatternElimination)
-			lplog(L"position %d:pma %d:Eliminated %s[%s](%d,%d) [not winner]", position, J, patterns[content[J].getPattern()]->name.c_str(), patterns[content[J].getPattern()]->differentiator.c_str(), position, position + content[J].len);
+			lplog(u"position %d:pma %d:Eliminated %s[%s](%d,%d) [not winner]", position, J, patterns[content[J].getPattern()]->name.c_str(), patterns[content[J].getPattern()]->differentiator.c_str(), position, position + content[J].len);
 	}
 	if (t.tracePatternElimination)
-		lplog(L"%d:PMA count reduced from %d to %d", position, count, target);
+		lplog(u"%d:PMA count reduced from %d to %d", position, count, target);
 	count = target;
 	return numWinners > 1;
 }

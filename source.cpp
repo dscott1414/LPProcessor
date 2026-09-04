@@ -1,4 +1,3 @@
-#include <windows.h>
 /*
 	source.cpp - the cSource document object: per-word match bookkeeping, pattern
 	             printing, Gutenberg boilerplate trimming and cache serialization.
@@ -62,37 +61,42 @@
 		- sentenceStarts - sentence boundaries; a trailing entry equal to m.size() is
 		  appended by printSentences() so that [starts[s],starts[s+1]) is always valid.
 		- bookBuffer / bufferLen / bufferScanLocation - the raw wide-char book text and
-		  offsets into it, in wchar_t units, owned by the tokenizer.
+		  offsets into it, in lpchar_t units, owned by the tokenizer.
 		- shortNounInflectionMap etc. - static tables mapping inflection bits to the
 		  short tags used in trace output; terminated by a { -1, NULL } sentinel.
 		- ignoreWords / OCSubTypeStrings - NULL-terminated string tables.
 		- printMaxSize - scratch column-width vector reused by printSentence().
 
 	Dependencies:
-		Windows API (CreateFileW / ReadFile / WriteFile, wsprintf), MySQL through
+		POSIX file I/O (open / read / write), MySQL through
 		cSource's mysql handle, the global Words dictionary and Forms table, WordNet
 		(hasHyperNym / getSynonyms), the ontology / DBpedia lookups used by
 		isDefiniteObject(), and the on-disk caches <path>.SourceCache,
 		<path>.patternUsage, <path>.wordCacheFile and WordCacheFile.
 
 	Notes / gotchas:
-		- MSVC/Windows only: wsprintf, _wopen, __int64, wcsupr, HANDLE, and 10 MB
+		- Batch B5 replaced this file's Win32 file layer with POSIX open/read/write/fstat; 10 MB
 		  stack buffers (MAX_BUF) in write()/writePatternUsage()/writeWords().
 		- write() deliberately leaves the file handle open when it returns false (see
 		  the comment on it); several other early returns leak the handle too.
 		- The Gutenberg helpers assume CRLF line endings (see the comment above
 		  getNextLine); aloneOnLine's backward scan behaves differently on LF-only
 		  text.
-		- The trace printers write into fixed 2048-wchar_t stack buffers with almost
+		- The trace printers write into fixed 2048-lpchar_t stack buffers with almost
 		  no bounds checking; printSentence keeps a manual canary (bufferZone) because
 		  of it.
 		- LFS / DLFS / LFSL at the top of most functions are profiling macros
 		  (profile.h) that expand to nothing unless profiling is compiled in; that is
 		  why the first statement of a function is often indented oddly.
 */
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include "word.h"
 #include "ontology.h"
@@ -111,86 +115,86 @@ bool unlockTables(MYSQL& mysql);
 
 tInflectionMap shortNounInflectionMap[] =
 {
-	{ SINGULAR,L"S"},
-	{ PLURAL,L"P"},
-	{ SINGULAR_OWNER,L"SO"},
-	{ PLURAL_OWNER,L"PO"},
-	{ MALE_GENDER,L"MG"},
-	{ FEMALE_GENDER,L"FG"},
-	{ NEUTER_GENDER,L"NG"},
-	{ FIRST_PERSON,L"1P"},
-	{ SECOND_PERSON,L"2P"},
-	{ THIRD_PERSON,L"3P"},
+	{ SINGULAR,u"S"},
+	{ PLURAL,u"P"},
+	{ SINGULAR_OWNER,u"SO"},
+	{ PLURAL_OWNER,u"PO"},
+	{ MALE_GENDER,u"MG"},
+	{ FEMALE_GENDER,u"FG"},
+	{ NEUTER_GENDER,u"NG"},
+	{ FIRST_PERSON,u"1P"},
+	{ SECOND_PERSON,u"2P"},
+	{ THIRD_PERSON,u"3P"},
 	{ -1,NULL}
 };
 
 tInflectionMap shortVerbInflectionMap[] =
 {
-	{ VERB_PAST,L"PAST"},
-	{ VERB_PAST_PARTICIPLE,L"PAST_PART"},
-	{ VERB_PRESENT_PARTICIPLE,L"PRES_PART"},
-	{ VERB_PRESENT_FIRST_SINGULAR,L"PRES_1ST"},
-	{ VERB_PRESENT_SECOND_SINGULAR,L"PRES_2ND"}, // "are"
-	{ VERB_PRESENT_THIRD_SINGULAR,L"PRES_3RD"},
-	{ VERB_PAST_THIRD_SINGULAR,L"PAST_3RD"},
-	{ VERB_PAST_PLURAL,L"PAST_PLURAL"}, // special cases like "were"
-	{ VERB_PRESENT_PLURAL,L"PRES_PLURAL"}, // special cases like "are"
+	{ VERB_PAST,u"PAST"},
+	{ VERB_PAST_PARTICIPLE,u"PAST_PART"},
+	{ VERB_PRESENT_PARTICIPLE,u"PRES_PART"},
+	{ VERB_PRESENT_FIRST_SINGULAR,u"PRES_1ST"},
+	{ VERB_PRESENT_SECOND_SINGULAR,u"PRES_2ND"}, // "are"
+	{ VERB_PRESENT_THIRD_SINGULAR,u"PRES_3RD"},
+	{ VERB_PAST_THIRD_SINGULAR,u"PAST_3RD"},
+	{ VERB_PAST_PLURAL,u"PAST_PLURAL"}, // special cases like "were"
+	{ VERB_PRESENT_PLURAL,u"PRES_PLURAL"}, // special cases like "are"
 	{ -1,NULL}
 };
 
 tInflectionMap shortAdjectiveInflectionMap[] =
 {
-	{ ADJECTIVE_NORMATIVE,L"ADJ"},
-	{ ADJECTIVE_COMPARATIVE,L"ADJ_COMP"},
-	{ ADJECTIVE_SUPERLATIVE,L"ADJ_SUP"},
+	{ ADJECTIVE_NORMATIVE,u"ADJ"},
+	{ ADJECTIVE_COMPARATIVE,u"ADJ_COMP"},
+	{ ADJECTIVE_SUPERLATIVE,u"ADJ_SUP"},
 	{ -1,NULL}
 };
 
 tInflectionMap shortAdverbInflectionMap[] =
 {
-	{ ADVERB_NORMATIVE,L"ADV"},
-	{ ADVERB_COMPARATIVE,L"ADV_COMP"},
-	{ ADVERB_SUPERLATIVE,L"ADV_SUP"},
+	{ ADVERB_NORMATIVE,u"ADV"},
+	{ ADVERB_COMPARATIVE,u"ADV_COMP"},
+	{ ADVERB_SUPERLATIVE,u"ADV_SUP"},
 	{ -1,NULL}
 };
 
 tInflectionMap shortQuoteInflectionMap[] =
 {
-	{ OPEN_INFLECTION,L"OQ"},
-	{ CLOSE_INFLECTION,L"CQ"},
+	{ OPEN_INFLECTION,u"OQ"},
+	{ CLOSE_INFLECTION,u"CQ"},
 	{ -1,NULL}
 };
 
 tInflectionMap shortBracketInflectionMap[] =
 {
-	{ OPEN_INFLECTION,L"OB"},
-	{ CLOSE_INFLECTION,L"CB"},
+	{ OPEN_INFLECTION,u"OB"},
+	{ CLOSE_INFLECTION,u"CB"},
 	{ -1,NULL}
 };
 
-const wchar_t* OCSubTypeStrings[] = {
-	L"canadian province city",
-	L"country",
-	L"island",
-	L"mountain range peak landform",
-	L"ocean sea",
-	L"park monument",
-	L"region",
-	L"river lake waterway",
-	L"us city town village",
-	L"us state territory region",
-	L"world city town village",
-	L"geographical natural feature",
-	L"geographical urban feature",
-	L"geographical urban subfeature",
-	L"geographical urban subsubfeature",
-	L"travel",
-	L"moving",
-	L"moving natural",
-	L"relative direction",
-	L"absolute direction",
-	L"by activity",
-	L"unknown(place)",
+const lpchar_t* OCSubTypeStrings[] = {
+	u"canadian province city",
+	u"country",
+	u"island",
+	u"mountain range peak landform",
+	u"ocean sea",
+	u"park monument",
+	u"region",
+	u"river lake waterway",
+	u"us city town village",
+	u"us state territory region",
+	u"world city town village",
+	u"geographical natural feature",
+	u"geographical urban feature",
+	u"geographical urban subfeature",
+	u"geographical urban subsubfeature",
+	u"travel",
+	u"moving",
+	u"moving natural",
+	u"relative direction",
+	u"absolute direction",
+	u"by activity",
+	u"unknown(place)",
 	NULL
 };
 
@@ -207,7 +211,7 @@ int cWordMatch::getInflectionLength(int inflection, tInflectionMap* map)
 		int len = 0;
 	for (int I = 0; map[I].num >= 0; I++)
 		if (map[I].num & inflection)
-			len += 1 + wcslen(map[I].name);
+			len += 1 + lp_strlen(map[I].name);
 	return len;
 }
 
@@ -267,7 +271,7 @@ void cWordMatch::setForm(void)
 	{
 		// since it is a determiner, and also capitalized, the flagOnlyConsiderOtherNounForms was set, since we do not usually want a determiner to be considered a proper noun.
 		// HOWEVER, the word no is both a determiner, which has block proper noun on it, and an abbreviation, which is a proper noun subclass.  In this case, recognize it as an abbreviation.
-		if (word->first == L"no")
+		if (word->first == u"no")
 		{
 			forms.set(abbreviationForm);
 		}
@@ -299,7 +303,7 @@ void cWordMatch::setForm(void)
 	{
 		if (*fp >= Forms.size())
 		{
-			lplog(LOG_ERROR, L"Illegal form #%d found in word %s.", *fp, word->first.c_str());
+			lplog(LOG_ERROR, u"Illegal form #%d found in word %s.", *fp, word->first.c_str());
 			*fp = 0;
 		}
 		else
@@ -309,34 +313,34 @@ void cWordMatch::setForm(void)
 		forms.reset(PROPER_NOUN_FORM_NUM);
 }
 
-__int64 roles[] = { SUBOBJECT_ROLE,SUBJECT_ROLE,OBJECT_ROLE,META_NAME_EQUIVALENCE,MPLURAL_ROLE,HAIL_ROLE,
+int64_t roles[] = { SUBOBJECT_ROLE,SUBJECT_ROLE,OBJECT_ROLE,META_NAME_EQUIVALENCE,MPLURAL_ROLE,HAIL_ROLE,
 						IOBJECT_ROLE,PREP_OBJECT_ROLE,RE_OBJECT_ROLE,IS_OBJECT_ROLE,NOT_OBJECT_ROLE,NONPAST_OBJECT_ROLE,ID_SENTENCE_TYPE,NO_ALT_RES_SPEAKER_ROLE,
 						IS_ADJ_OBJECT_ROLE,NONPRESENT_OBJECT_ROLE,PLACE_OBJECT_ROLE,MOVEMENT_PREP_OBJECT_ROLE,NON_MOVEMENT_PREP_OBJECT_ROLE,
 						SUBJECT_PLEONASTIC_ROLE,IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE,UNRESOLVABLE_FROM_IMPLICIT_OBJECT_ROLE,SENTENCE_IN_REL_ROLE,
 						PASSIVE_SUBJECT_ROLE, POV_OBJECT_ROLE, MNOUN_ROLE, PRIMARY_SPEAKER_ROLE,SECONDARY_SPEAKER_ROLE,FOCUS_EVALUATED,
 						ID_SENTENCE_TYPE,DELAYED_RECEIVER_ROLE,IN_PRIMARY_QUOTE_ROLE,IN_SECONDARY_QUOTE_ROLE,IN_EMBEDDED_STORY_OBJECT_ROLE,EXTENDED_OBJECT_ROLE,
 						NOT_ENCLOSING_ROLE,EXTENDED_ENCLOSING_ROLE,NONPAST_ENCLOSING_ROLE,NONPRESENT_ENCLOSING_ROLE,POSSIBLE_ENCLOSING_ROLE,THINK_ENCLOSING_ROLE };
-const wchar_t* r_c[] = { L"SUBOBJ",L"SUBJ",L"OBJ",L"META_EQUIV",L"MP",L"H",
-						L"IOBJECT",L"PREP",L"RE",L"IS",L"NOT",L"NONPAST",L"ID",L"NO_ALT_RES_SPEAKER",
-						L"IS_ADJ",L"NONPRESENT",L"PL",L"MOVE",L"NON_MOVE",
-						L"PLEO",L"INQ_SELF_REF_SPEAKER",L"UNRES_FROM_IMPLICIT",L"S_IN_REL",
-						L"PASS_SUBJ",L"POV",L"MNOUN",L"SP",L"SECONDARY_SP",L"EVAL",
-						L"ID",L"DELAY",L"PRIM",L"SECOND",L"EMBED",L"EXT",
-						L"NOT_ENC",L"EXT_ENC",L"NPAST_ENC",L"NPRES_ENC",L"POSS_ENC",L"THINK_ENC" };
+const lpchar_t* r_c[] = { u"SUBOBJ",u"SUBJ",u"OBJ",u"META_EQUIV",u"MP",u"H",
+						u"IOBJECT",u"PREP",u"RE",u"IS",u"NOT",u"NONPAST",u"ID",u"NO_ALT_RES_SPEAKER",
+						u"IS_ADJ",u"NONPRESENT",u"PL",u"MOVE",u"NON_MOVE",
+						u"PLEO",u"INQ_SELF_REF_SPEAKER",u"UNRES_FROM_IMPLICIT",u"S_IN_REL",
+						u"PASS_SUBJ",u"POV",u"MNOUN",u"SP",u"SECONDARY_SP",u"EVAL",
+						u"ID",u"DELAY",u"PRIM",u"SECOND",u"EMBED",u"EXT",
+						u"NOT_ENC",u"EXT_ENC",u"NPAST_ENC",u"NPRES_ENC",u"POSS_ENC",u"THINK_ENC" };
 // Renders the objectRole bitmask as "[SUBJ][OBJ]..." for trace logs, using the parallel
 // roles[] / r_c[] tables above.  sRole is cleared first and also returned.
 // Note the two tables must stay index-aligned; ID_SENTENCE_TYPE appears twice in
 // roles[] (offsets 12 and 29), so that bit prints as "[ID]" from whichever hits first.
-wstring cWordMatch::roleString(wstring& sRole)
+lpwstring cWordMatch::roleString(lpwstring& sRole)
 {
 	LFS
 		sRole.clear();
 	for (unsigned int I = 0; I < sizeof(roles) / sizeof(roles[0]); I++)
 		if (objectRole & roles[I])
 		{
-			sRole += L"[";
+			sRole += u"[";
 			sRole += r_c[I];
-			sRole += L"]";
+			sRole += u"]";
 		}
 	return sRole;
 }
@@ -362,7 +366,7 @@ unsigned int cWordMatch::getShortAllFormAndInflectionLen(void)
 		bool properNoun;
 		int inflectionFlags = word->second.inflectionFlags;
 		if ((properNoun = (flags & flagAddProperNoun) && line == word->second.formsSize()) ||
-			word->second.Form(line)->inflectionsClass == L"noun")
+			word->second.Form(line)->inflectionsClass == u"noun")
 		{
 			if (properNoun)
 				formLen = Forms[PROPER_NOUN_FORM_NUM]->shortName.length();
@@ -379,17 +383,17 @@ unsigned int cWordMatch::getShortAllFormAndInflectionLen(void)
 		}
 		else
 		{
-			wstring inflectionsClass = word->second.Form(line)->inflectionsClass;
+			lpwstring inflectionsClass = word->second.Form(line)->inflectionsClass;
 			formLen = word->second.Form(line)->shortName.length();
-			if (inflectionsClass == L"verb" && (inflectionFlags & VERB_INFLECTIONS_MASK))
+			if (inflectionsClass == u"verb" && (inflectionFlags & VERB_INFLECTIONS_MASK))
 				formLen += getInflectionLength(inflectionFlags & VERB_INFLECTIONS_MASK, shortVerbInflectionMap);
-			else if (inflectionsClass == L"adverb" && (inflectionFlags & ADVERB_INFLECTIONS_MASK))
+			else if (inflectionsClass == u"adverb" && (inflectionFlags & ADVERB_INFLECTIONS_MASK))
 				formLen += getInflectionLength(inflectionFlags & ADVERB_INFLECTIONS_MASK, shortAdverbInflectionMap);
-			else if (inflectionsClass == L"adjective" && (inflectionFlags & ADJECTIVE_INFLECTIONS_MASK))
+			else if (inflectionsClass == u"adjective" && (inflectionFlags & ADJECTIVE_INFLECTIONS_MASK))
 				formLen += getInflectionLength(inflectionFlags & ADJECTIVE_INFLECTIONS_MASK, shortAdjectiveInflectionMap);
-			else if (inflectionsClass == L"quotes" && (inflectionFlags & INFLECTIONS_MASK))
+			else if (inflectionsClass == u"quotes" && (inflectionFlags & INFLECTIONS_MASK))
 				formLen += getInflectionLength(inflectionFlags & INFLECTIONS_MASK, shortQuoteInflectionMap);
-			else if (inflectionsClass == L"brackets" && (inflectionFlags & INFLECTIONS_MASK))
+			else if (inflectionsClass == u"brackets" && (inflectionFlags & INFLECTIONS_MASK))
 				formLen += getInflectionLength(inflectionFlags & INFLECTIONS_MASK, shortBracketInflectionMap);
 			formLen += 2;
 			if (word->second.getUsageCost(line) > 9) formLen++;
@@ -403,16 +407,17 @@ unsigned int cWordMatch::getShortAllFormAndInflectionLen(void)
 // plus its short inflection tags plus "*<usageCost>" when the position is costable().
 // 'line' is an offset into the word's form list; the one-past-the-end offset means the
 // synthetic PROPER_NOUN form added by flagAddProperNoun.
-// 'entry' is a caller-supplied buffer written with wcscpy/wcscat/wsprintf and NO bound
-// checking - the caller must have reserved getShortAllFormAndInflectionLen() wchar_t.
+// 'entry' is a caller-supplied buffer of entryCount lpchar_t (batch B5: the count is
+// now passed, where before this formatted into it with no bound at all)
+// checking - the caller must have reserved getShortAllFormAndInflectionLen() lpchar_t.
 // Returns 0 always; a 0 return with an untouched buffer also means "form filtered out"
 // (see the flagOnlyConsiderProperNounForms early returns), so the return value cannot
 // be used to distinguish the two cases.
-unsigned int cWordMatch::getShortFormInflectionEntry(int line, wchar_t* entry)
+unsigned int cWordMatch::getShortFormInflectionEntry(int line, lpchar_t* entry, size_t entryCount)
 {
 	LFS
 		int inflectionFlags = word->second.inflectionFlags;
-	wstring temp;
+	lpwstring temp;
 	if (flags & flagOnlyConsiderProperNounForms)
 	{
 		if (flags & flagAddProperNoun)
@@ -422,43 +427,51 @@ unsigned int cWordMatch::getShortFormInflectionEntry(int line, wchar_t* entry)
 		}
 		else
 		{
-			if (word->second.Form(line)->inflectionsClass != L"noun" && !word->second.Form(line)->properNounSubClass)
+			if (word->second.Form(line)->inflectionsClass != u"noun" && !word->second.Form(line)->properNounSubClass)
 				return 0;
 		}
 	}
 	if (((flags & flagAddProperNoun) && line == word->second.formsSize()) ||
-		word->second.Form(line)->inflectionsClass == L"noun")
+		word->second.Form(line)->inflectionsClass == u"noun")
 	{
 		if ((flags & flagAddProperNoun) && line == word->second.formsSize())
-			wcscpy(entry, Forms[PROPER_NOUN_FORM_NUM]->shortName.c_str());
+			lp_strcpy(entry, Forms[PROPER_NOUN_FORM_NUM]->shortName.c_str());
 		else
-			wcscpy(entry, word->second.Form(line)->shortName.c_str());
+			lp_strcpy(entry, word->second.Form(line)->shortName.c_str());
 		if (flags & flagNounOwner)
 		{
 			if (inflectionFlags & SINGULAR) inflectionFlags = SINGULAR_OWNER | (inflectionFlags & ~SINGULAR);
 			else if (inflectionFlags & PLURAL) inflectionFlags = PLURAL_OWNER | (inflectionFlags & ~PLURAL);
 			else inflectionFlags |= SINGULAR_OWNER;
 		}
-		wcscat(entry, getInflectionName(inflectionFlags & NOUN_INFLECTIONS_MASK, shortNounInflectionMap, temp));
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & NOUN_INFLECTIONS_MASK, shortNounInflectionMap, temp));
 		// only accumulate or use usage costs IF word is not capitalized
 		if (costable())
-			wsprintf(entry + wcslen(entry), L"*%d", word->second.getUsageCost(line));
+		{
+			size_t entryLength = lp_strlen(entry);
+			if (entryLength < entryCount)
+				lp_snprintf(entry + entryLength, entryCount - entryLength, u"*%d", word->second.getUsageCost(line));
+		}
 		return 0;
 	}
-	wstring inflectionsClass = word->second.Form(line)->inflectionsClass;
-	wcscpy(entry, word->second.Form(line)->shortName.c_str());
-	if (inflectionsClass == L"verb" && (inflectionFlags & VERB_INFLECTIONS_MASK))
-		wcscat(entry, getInflectionName(inflectionFlags & VERB_INFLECTIONS_MASK, shortVerbInflectionMap, temp));
-	else if (inflectionsClass == L"adverb" && (inflectionFlags & ADVERB_INFLECTIONS_MASK))
-		wcscat(entry, getInflectionName(inflectionFlags & ADVERB_INFLECTIONS_MASK, shortAdverbInflectionMap, temp));
-	else if (inflectionsClass == L"adjective" && (inflectionFlags & ADJECTIVE_INFLECTIONS_MASK))
-		wcscat(entry, getInflectionName(inflectionFlags & ADJECTIVE_INFLECTIONS_MASK, shortAdjectiveInflectionMap, temp));
-	else if (inflectionsClass == L"quotes" && (inflectionFlags & INFLECTIONS_MASK))
-		wcscat(entry, getInflectionName(inflectionFlags & INFLECTIONS_MASK, shortQuoteInflectionMap, temp));
-	else if (inflectionsClass == L"brackets" && (inflectionFlags & INFLECTIONS_MASK))
-		wcscat(entry, getInflectionName(inflectionFlags & INFLECTIONS_MASK, shortBracketInflectionMap, temp));
+	lpwstring inflectionsClass = word->second.Form(line)->inflectionsClass;
+	lp_strcpy(entry, word->second.Form(line)->shortName.c_str());
+	if (inflectionsClass == u"verb" && (inflectionFlags & VERB_INFLECTIONS_MASK))
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & VERB_INFLECTIONS_MASK, shortVerbInflectionMap, temp));
+	else if (inflectionsClass == u"adverb" && (inflectionFlags & ADVERB_INFLECTIONS_MASK))
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & ADVERB_INFLECTIONS_MASK, shortAdverbInflectionMap, temp));
+	else if (inflectionsClass == u"adjective" && (inflectionFlags & ADJECTIVE_INFLECTIONS_MASK))
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & ADJECTIVE_INFLECTIONS_MASK, shortAdjectiveInflectionMap, temp));
+	else if (inflectionsClass == u"quotes" && (inflectionFlags & INFLECTIONS_MASK))
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & INFLECTIONS_MASK, shortQuoteInflectionMap, temp));
+	else if (inflectionsClass == u"brackets" && (inflectionFlags & INFLECTIONS_MASK))
+		lp_strcpy((entry) + lp_strlen(entry), getInflectionName(inflectionFlags & INFLECTIONS_MASK, shortBracketInflectionMap, temp));
 	if (costable())
-		wsprintf(entry + wcslen(entry), L"*%d", word->second.getUsageCost(line));
+	{
+		size_t entryLength = lp_strlen(entry);
+		if (entryLength < entryCount)
+			lp_snprintf(entry + entryLength, entryCount - entryLength, u"*%d", word->second.getUsageCost(line));
+	}
 	return 0;
 }
 
@@ -520,7 +533,7 @@ int cWordMatch::queryForm(int form)
 
 // Name-based overload of queryForm(): looks the form name up in the global Forms table
 // first.  Returns -1 both for "no such form name" and "form not present here".
-int cWordMatch::queryForm(wstring sForm)
+int cWordMatch::queryForm(lpwstring sForm)
 {
 	LFS
 		int form;
@@ -554,7 +567,7 @@ int cWordMatch::queryWinnerForm(int form)
 // Human-readable list of the winning form names at this position, space separated and
 // optionally with "[usageCost]" after each.  formsString is cleared, filled and returned.
 // The trailing separator is trimmed with substr() only when something was appended.
-wstring cWordMatch::winnerFormString(wstring& formsString, bool withCost)
+lpwstring cWordMatch::winnerFormString(lpwstring& formsString, bool withCost)
 {
 	LFS
 		formsString.clear();
@@ -564,20 +577,20 @@ wstring cWordMatch::winnerFormString(wstring& formsString, bool withCost)
 			formsString += word->second.Form(f)->name;
 			if (withCost)
 			{
-				wchar_t temp[10];
-				_itow(word->second.getUsageCost(f), temp, 10);
-				formsString += L"[" + wstring(temp) + L"] ";
+				lpchar_t temp[10];
+				lp_itow(word->second.getUsageCost(f), temp);
+				formsString += u"[" + lpwstring(temp) + u"] ";
 			}
 			else
-				formsString += L" ";
+				formsString += u" ";
 		}
 	if (formsString.size() > 1)
 		formsString = formsString.substr(0, formsString.length() - 1);
 	if ((flags & flagAddProperNoun) && isWinner(word->second.formsSize()))
 	{
 		if (formsString.size() > 0)
-			formsString += L" ";
-		formsString += wstring(Forms[PROPER_NOUN_FORM_NUM]->name);
+			formsString += u" ";
+		formsString += lpwstring(Forms[PROPER_NOUN_FORM_NUM]->name);
 	}
 	return formsString;
 }
@@ -612,7 +625,7 @@ int cWordMatch::getNumWinners()
 // Machine-readable form dump used by the tag-set / statistics output:
 // "form|word*cost,form|word*cost".  winnerForms is cleared, filled and returned.
 // Unlike winnerFormString() this never reports the synthetic proper-noun form.
-wstring cWordMatch::patternWinnerFormString(wstring& winnerForms)
+lpwstring cWordMatch::patternWinnerFormString(lpwstring& winnerForms)
 {
 	LFS
 		winnerForms.clear();
@@ -620,12 +633,12 @@ wstring cWordMatch::patternWinnerFormString(wstring& winnerForms)
 		if (isWinner(f))
 		{
 			if (winnerForms.length() > 0)
-				winnerForms += L",";
+				winnerForms += u",";
 			winnerForms += word->second.Form(f)->name;
-			winnerForms += L"|" + word->first;
-			wchar_t temp[10];
-			_itow(word->second.getUsageCost(f), temp, 10);
-			winnerForms += L"*" + wstring(temp);
+			winnerForms += u"|" + word->first;
+			lpchar_t temp[10];
+			lp_itow(word->second.getUsageCost(f), temp);
+			winnerForms += u"*" + lpwstring(temp);
 		}
 	return winnerForms;
 }
@@ -646,10 +659,10 @@ bool cWordMatch::hasWinnerNounForm(void)
 }
 
 // Name-based overload of queryWinnerForm().  Returns -1 if the name is unknown.
-// Note the guard is "<= 0" here but "< 0" in queryForm(wstring): form number 0 is
+// Note the guard is "<= 0" here but "< 0" in queryForm(lpwstring): form number 0 is
 // rejected by this overload, so the form at index 0 of the Forms table can never be
 // queried by name through the winner path.
-int cWordMatch::queryWinnerForm(wstring sForm)
+int cWordMatch::queryWinnerForm(lpwstring sForm)
 {
 	DLFS
 		int form;
@@ -694,7 +707,7 @@ bool cWordMatch::isGendered(void)
 	return ((flags & flagFirstLetterCapitalized) && !(flags & flagRefuseProperNoun));
 }
 
-char* wTM(wstring inString, string& outString);
+char* wTM(lpwstring inString, string& outString);
 
 // when changing this definition, the WNcache must be deleted
 // Decides via WordNet hypernym chains whether this noun denotes a physical object.
@@ -713,9 +726,9 @@ bool cWordMatch::isPhysicalObject(void)
 	if (w->second.mainEntry != wNULL) w = w->second.mainEntry;
 	if (!(w->second.flags & (cSourceWordInfo::physicalObjectByWN | cSourceWordInfo::notPhysicalObjectByWN | cSourceWordInfo::uncertainPhysicalObjectByWN)))
 	{
-		if (hasHyperNym(w->first, L"physical_object", found, false) || hasHyperNym(w->first, L"physical_entity", found, false))
+		if (hasHyperNym(w->first, u"physical_object", found, false) || hasHyperNym(w->first, u"physical_entity", found, false))
 			w->second.flags |= cSourceWordInfo::physicalObjectByWN;
-		else if (hasHyperNym(word->first, L"psychological_feature", found, false) && !hasHyperNym(word->first, L"cognitive_state", found, false))
+		else if (hasHyperNym(word->first, u"psychological_feature", found, false) && !hasHyperNym(word->first, u"cognitive_state", found, false))
 			w->second.flags |= cSourceWordInfo::notPhysicalObjectByWN;
 		else
 			w->second.flags |= cSourceWordInfo::uncertainPhysicalObjectByWN;
@@ -788,48 +801,48 @@ bool cWordMatch::isModifierType(void)
 // Returns false and logs LOG_ERROR when the word cannot be created; note that 'word' is
 // left equal to Words.end() in that case, so callers must not dereference it.
 // Side effects: inserts into the global Words table.
-bool cWordMatch::readWord(const wstring temp, int sourceType)
+bool cWordMatch::readWord(const lpwstring temp, int sourceType)
 {
-	wstring sWord, comment;
+	lpwstring sWord, comment;
 	int sourceId = -1, nounOwner = 0;
-	__int64 bufferLength = temp.length(), bufferScanLocation = 0;
+	int64_t bufferLength = temp.length(), bufferScanLocation = 0;
 	bool added = false;
-	int result = Words.readWord((wchar_t*)temp.c_str(), bufferLength, bufferScanLocation, sWord, comment, nounOwner, false, false, t, NULL, -1, sourceType);
+	int result = Words.readWord((lpchar_t*)temp.c_str(), bufferLength, bufferScanLocation, sWord, comment, nounOwner, false, false, t, NULL, -1, sourceType);
 	word = Words.end();
 	if (result == PARSE_NUM)
-		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_PLURAL_NUM)
-		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, NUMBER_FORM_NUM, PLURAL, 0, u"", sourceId, added);
 	else if (result == PARSE_ORD_NUM)
-		word = Words.addNewOrModify(NULL, sWord, 0, numeralOrdinalForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, numeralOrdinalForm, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_ADVERB_NUM)
 		word = Words.addNewOrModify(NULL, sWord, 0, adverbForm, 0, 0, sWord, sourceId, added);
 	else if (result == PARSE_DATE)
-		word = Words.addNewOrModify(NULL, sWord, 0, dateForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, dateForm, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_TIME)
-		word = Words.addNewOrModify(NULL, sWord, 0, timeForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, timeForm, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_TELEPHONE_NUMBER)
-		word = Words.addNewOrModify(NULL, sWord, 0, telephoneNumberForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, telephoneNumberForm, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_MONEY_NUM)
-		word = Words.addNewOrModify(NULL, sWord, 0, moneyForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, moneyForm, 0, 0, u"", sourceId, added);
 	else if (result == PARSE_WEB_ADDRESS)
-		word = Words.addNewOrModify(NULL, sWord, 0, webAddressForm, 0, 0, L"", sourceId, added);
+		word = Words.addNewOrModify(NULL, sWord, 0, webAddressForm, 0, 0, u"", sourceId, added);
 	else if (result < 0 && result != PARSE_END_SENTENCE)
 	{
-		lplog(LOG_ERROR, L"Word %s cannot be added - error %d.", temp.c_str(), result);
+		lplog(LOG_ERROR, u"Word %s cannot be added - error %d.", temp.c_str(), result);
 		return false;
 	}
 	else
 		if ((result = Words.parseWord(NULL, sWord, word, false, nounOwner, sourceId, false)) < 0)
 		{
 			string temp2;
-			lplog(LOG_ERROR, L"Word %S cannot be added at buffer location %d", wTM(temp, temp2, 65001), bufferScanLocation);
+			lplog(LOG_ERROR, u"Word %S cannot be added at buffer location %d", wTM(temp, temp2, 65001), bufferScanLocation);
 			return false;
 		}
 	return true;
 }
 
-// Unpacks the per-position trace flags from one __int64 in the cache buffer into this
+// Unpacks the per-position trace flags from one int64_t in the cache buffer into this
 // position's sTrace 't'.  'where' is advanced past the value; 'limit' is the buffer size.
 // The bit order here must be the exact reverse of writeFlags() - the writer shifts left
 // as it packs, this reader shifts right as it unpacks, so adding a flag to one without
@@ -837,7 +850,7 @@ bool cWordMatch::readWord(const wstring temp, int sourceType)
 // Returns false if the buffer is exhausted.
 bool cWordMatch::readFlags(char* buffer, int& where, int limit)
 {
-	__int64 tflags;
+	int64_t tflags;
 	if (!copy(tflags, buffer, where, limit)) return false;
 	t.collectPerSentenceStats = tflags & 1; tflags >>= 1;
 	t.traceTagSetCollection = tflags & 1; tflags >>= 1;
@@ -876,7 +889,7 @@ bool cWordMatch::readFlags(char* buffer, int& where, int limit)
 bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 {
 	DLFS
-	wstring temp;
+	lpwstring temp;
 	if (!copy(temp, buffer, where, limit)) return false;
 	if ((word = Words.query(temp)) == Words.end())
 	{
@@ -952,7 +965,7 @@ bool cWordMatch::read(char* buffer, int& where, int limit, int sourceType)
 	return true;
 }
 
-// Packs this position's trace flags into a single __int64 and appends it to the cache
+// Packs this position's trace flags into a single int64_t and appends it to the cache
 // buffer.  Must mirror readFlags() exactly (see the note there).
 // Careful: the last flag (collectPerSentenceStats) is OR-ed in without a following shift,
 // which is what makes the two routines line up; a new flag must be added at the top.
@@ -960,7 +973,7 @@ bool cWordMatch::writeFlags(void* buffer, int& where, int limit)
 {
 	// flags
 	// 110000000000
-	__int64 tflags = 0;
+	int64_t tflags = 0;
 	tflags |= (t.traceTime) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.traceTestSyntacticRelations) ? 1 : 0; tflags <<= 1;
 	tflags |= (t.traceTestSubjectVerbAgreement) ? 1 : 0; tflags <<= 1;
@@ -1062,7 +1075,7 @@ bool cWordMatch::writeRef(void* buffer, int& where, int limit)
 bool cWordMatch::updateMaxMatch(int len, int avgCost)
 {
 	LFS
-		maxMatch = max(len, maxMatch);
+		maxMatch = max((unsigned short)len, maxMatch); // batch B5: maxMatch is unsigned short
 	if (lowestAverageCost > avgCost)
 	{
 		maxLACMatch = len;
@@ -1145,7 +1158,7 @@ bool cSource::sumMaxLength(unsigned int begin, unsigned int end, unsigned int& m
 			return false;
 	}
 	//if ((t.traceMatchedSentences || t.traceUnmatchedSentences) && len)
-	//    lplog(L"Average pattern match length:%d (%d/%d)",matchedTripletSum/len,matchedTripletSum,len);
+	//    lplog(u"Average pattern match length:%d (%d/%d)",matchedTripletSum/len,matchedTripletSum,len);
 	return true;
 }
 
@@ -1162,24 +1175,24 @@ void cSource::setRelPrep(int where, int relPrep, int fromWhere, int setType, int
 		int original = m[where].relPrep;
 	m[where].relPrep = relPrep;
 	m[where].setRelVerb(whereVerb);
-	const wchar_t* setTypeStr;
-	wstring tmpstr;
+	const lpchar_t* setTypeStr;
+	lpwstring tmpstr;
 	switch (setType)
 	{
-	case PREP_PREP_SET: setTypeStr = L"PREP_SET"; break;
-	case PREP_OBJECT_SET: setTypeStr = L"OBJECT_SET"; break;
-	case PREP_VERB_SET: setTypeStr = L"VERB_SET"; break;
-	default: setTypeStr = L"NOT_SET"; break;
+	case PREP_PREP_SET: setTypeStr = u"PREP_SET"; break;
+	case PREP_OBJECT_SET: setTypeStr = u"OBJECT_SET"; break;
+	case PREP_VERB_SET: setTypeStr = u"VERB_SET"; break;
+	default: setTypeStr = u"NOT_SET"; break;
 	}
 	if (debugTrace.traceRelations)
-		lplog(LOG_RESOLUTION, L"%06d:%s:Prep loop putting %d (replacing %d) resulting in %s (%d) [%s].", where, sourcePath.c_str(), relPrep, original, loopString(relPrep, tmpstr), fromWhere, setTypeStr);
+		lplog(LOG_RESOLUTION, u"%06d:%s:Prep loop putting %d (replacing %d) resulting in %s (%d) [%s].", where, sourcePath.c_str(), relPrep, original, loopString(relPrep, tmpstr), fromWhere, setTypeStr);
 	int prepLoop = 0;
 	while (relPrep != -1)
 	{
 		relPrep = m[relPrep].relPrep;
 		if (prepLoop++ > 20)
 		{
-			lplog(LOG_ERROR, L"%06d:Prep loop putting %d (replacing %d) resulting in %s (%d).", where, relPrep, original, loopString(relPrep, tmpstr), fromWhere);
+			lplog(LOG_ERROR, u"%06d:Prep loop putting %d (replacing %d) resulting in %s (%d).", where, relPrep, original, loopString(relPrep, tmpstr), fromWhere);
 			m[where].relPrep = original;
 			break;
 		}
@@ -1195,7 +1208,7 @@ void cSource::setRelPrep(int where, int relPrep, int fromWhere, int setType, int
 // the "> 9 / > 99 / ..." ladders are just decimal-digit counts of those numbers.
 // The 28 added for traceIncludesPEMAIndex is the width of the four %06d indices plus
 // spaces that printSentence prepends in that mode.
-// Returns a width in wchar_t (no terminator or trailing separator included).
+// Returns a width in lpchar_t (no terminator or trailing separator included).
 unsigned int cSource::getMaxDisplaySize(vector <cWordMatch>::iterator& im, int numPosition)
 {
 	LFS
@@ -1203,7 +1216,7 @@ unsigned int cSource::getMaxDisplaySize(vector <cWordMatch>::iterator& im, int n
 	if (numPosition > 9) size++;
 	if (numPosition > 99) size++;
 	unsigned int len = im->getShortAllFormAndInflectionLen();
-	size = max(size, len);
+	size = max(size, (size_t)len); // batch B5: size is size_t
 	for (int nextPEMAPosition = im->beginPEMAPosition; nextPEMAPosition != -1; nextPEMAPosition = pema[nextPEMAPosition].nextByPosition)
 	{
 		cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + nextPEMAPosition;
@@ -1239,7 +1252,7 @@ unsigned int cSource::getMaxDisplaySize(vector <cWordMatch>::iterator& im, int n
 		if (cost > 9999) tmp++;
 		if (debugTrace.traceIncludesPEMAIndex)
 			tmp += 28;
-		size = max(size, tmp);
+		size = max(size, (size_t)tmp); // batch B5: size is size_t
 	}
 	return size;
 }
@@ -1263,20 +1276,20 @@ bool cSource::matchPattern(cPattern* p, int begin, int end, bool fill)
 	{
 #ifdef LOG_PATTERN_MATCHING
 		if (debugTrace.tracePatternMatching)
-			lplog(L"%d:pattern %s[%s]:---------------------", pos, p->name.c_str(), p->differentiator.c_str());
+			lplog(u"%d:pattern %s[%s]:---------------------", pos, p->name.c_str(), p->differentiator.c_str());
 #endif
 		// do not put pos==begin here because we don't know whether we have split the sentence correctly!
 		if (p->onlyBeginMatch && pos && (!m[pos - 1].word->second.isSeparator() || m[pos - 1].queryForm(relativizerForm) >= 0)) continue; //  || m[pos-1].queryForm(relativeForm)
 		if (p->strictNoMiddleMatch && pos && iswalpha(m[pos - 1].word->first[0])) continue;
 		// cannot come after a pronoun which would definitely be a subject (I, we, etc)
-		if (p->notAfterPronoun && pos && (m[pos - 1].queryForm(nomForm) >= 0 || (m[pos - 1].queryForm(personalPronounForm) >= 0 && m[pos - 1].word->first != L"you" && m[pos - 1].word->first != L"it"))) continue;
+		if (p->notAfterPronoun && pos && (m[pos - 1].queryForm(nomForm) >= 0 || (m[pos - 1].queryForm(personalPronounForm) >= 0 && m[pos - 1].word->first != u"you" && m[pos - 1].word->first != u"it"))) continue;
 		if (p->afterQuote && (pos < 2 ||
 			((m[pos - 1].word->second.query(quoteForm) < 0 || (m[pos - 1].word->second.inflectionFlags & CLOSE_INFLECTION) != CLOSE_INFLECTION)) &&
-			(m[pos - 2].word->second.query(quoteForm) < 0 || m[pos - 1].word->first == L","))) continue;
+			(m[pos - 2].word->second.query(quoteForm) < 0 || m[pos - 1].word->first == u","))) continue;
 		if (p->matchPatternPosition(*this, pos, fill, debugTrace))
 		{
 #ifdef QLOGPATTERN
-			if (pass > 0) lplog(L"Pattern %s matched against sentence position %d", p->name.c_str(), pos);
+			if (pass > 0) lplog(u"Pattern %s matched against sentence position %d", p->name.c_str(), pos);
 #endif
 			matchFound = true;
 		}
@@ -1302,21 +1315,23 @@ bool cSource::matchPatternAgainstSentence(cPattern* p, int s, bool fill)
 // blank the buffer.  A row that is all blanks is dropped silently.
 // The run-compression reinterprets the wide buffer as int and compares against
 // 0x20202020, i.e. it assumes four 8-bit spaces per int - which does not hold for
-// wchar_t (see the bug report); 'alignedLen' is len rounded down to a multiple of 4.
-// 'dest' is a fixed 2048-wchar_t stack buffer with no bound check against lineBufferLen.
-void cSource::logOptimizedString(wchar_t* line, unsigned int lineBufferLen, unsigned int& linepos)
+// lpchar_t (see the bug report); 'alignedLen' is len rounded down to a multiple of 4.
+// 'dest' is a fixed 2048-lpchar_t stack buffer with no bound check against lineBufferLen.
+void cSource::logOptimizedString(lpchar_t* line, unsigned int lineBufferLen, unsigned int& linepos)
 {
 	LFS
-		wchar_t dest[2048];
+		lpchar_t dest[2048];
 	if (!linepos)
 	{
-		lplog(L"");
-		//for (wchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
-		wmemset(line, L' ', lineBufferLen);
+		lplog(u"");
+		//for (lpchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+		// Batch B2: wmemset has no char16_t equivalent; inlined rather than adding a
+		// one-call lp_wmemset to lpchar.h (both wmemset call sites are in this one file).
+		for (unsigned int lp_wi = 0; lp_wi < lineBufferLen; lp_wi++) line[lp_wi] = u' ';
 		return;
 	}
 	int len = linepos;
-	while (len && line[len - 1] == L' ') len--;
+	while (len && line[len - 1] == u' ') len--;
 	if (!len)
 	{
 		linepos = 0;
@@ -1328,19 +1343,20 @@ void cSource::logOptimizedString(wchar_t* line, unsigned int lineBufferLen, unsi
 	for (I = 0; I < alignedLen; I += 4)
 	{
 		if (*((int*)(line + I)) == ((32 << 24) + (32 << 16) + (32 << 8) + 32))
-			dest[destI++] = L'\t';
+			dest[destI++] = u'\t';
 		else
 			for (int I2 = I; I2 < I + 4 && I2 < alignedLen; I2++, destI++)
 				dest[destI] = line[I2];
 	}
 	while (I < len)
 		dest[destI++] = line[I++];
-	dest[destI] = L'\n';
+	dest[destI] = u'\n';
 	dest[destI + 1] = 0;
 	logstring(LOG_INFO, dest);
 	linepos = 0;
-	//for (wchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
-	wmemset(line, L' ', lineBufferLen);
+	//for (lpchar_t *p=line,*pEnd=line+ lineBufferLen; p!=pEnd; p++) *p=' '; // cannot use _wcsnset_s!
+	// Batch B2: wmemset has no char16_t equivalent; inlined (see the other call site above).
+	for (unsigned int lp_wi = 0; lp_wi < lineBufferLen; lp_wi++) line[lp_wi] = u' ';
 }
 
 // Walks the by-position PEMA chain of source position 'position' and returns the index of
@@ -1353,9 +1369,9 @@ int cSource::getPEMAPosition(int position, int line)
 		int PEMAPosition, offset = line;
 	for (PEMAPosition = m[position].beginPEMAPosition; offset > 0 && PEMAPosition != -1; PEMAPosition = pema[PEMAPosition].nextByPosition, offset--);
 	if (PEMAPosition >= (signed)pema.count)
-		lplog(LOG_FATAL_ERROR, L"%d:Incorrect PEMA Position %d derived from line %d.", position, PEMAPosition, line);
+		lplog(LOG_FATAL_ERROR, u"%d:Incorrect PEMA Position %d derived from line %d.", position, PEMAPosition, line);
 	if (PEMAPosition < 0)
-		lplog(L"%d:Line %d not reachable", position, line);
+		lplog(u"%d:Line %d not reachable", position, line);
 	return PEMAPosition;
 }
 
@@ -1377,8 +1393,8 @@ int cSource::getPEMAPosition(int position, int line)
 int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned int end, bool containsNotMatched)
 {
 	LFS
-		wchar_t printLine[LINE_BUFFER_LEN];
-	wchar_t bufferZone[2048];
+		lpchar_t printLine[LINE_BUFFER_LEN];
+	lpchar_t bufferZone[2048];
 	unsigned int totalSize, I = begin, maxLines, startword = begin, maxPhraseMatches, linepos = 0;
 	printMaxSize.assign(end - begin, 0); // reserve() does not set size(); [fi] was out of range
 	bufferZone[0] = 0xFEFE;
@@ -1410,7 +1426,7 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 				{
 					if (I == startword)
 					{
-						lplog(LOG_INFO | LOG_ERROR, L"ERROR:sqlrow too large size to print - word at position %d=%d totalSize=%d > rowSize=%d ...", I - begin, printMaxSize[I - begin], totalSize, rowsize);
+						lplog(LOG_INFO | LOG_ERROR, u"ERROR:sqlrow too large size to print - word at position %d=%d totalSize=%d > rowSize=%d ...", I - begin, printMaxSize[I - begin], totalSize, rowsize);
 						return 0;
 					}
 					break;
@@ -1419,31 +1435,31 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 				{
 					size_t len = im->word->first.length();
 					if (im->flags & cWordMatch::flagNotMatched)
-						printLine[linepos++] = (im->maxMatch < 0) ? L'^' : L'-';
-					wcscpy(printLine + linepos, im->word->first.c_str());
+						printLine[linepos++] = (im->maxMatch < 0) ? u'^' : u'-';
+					lp_strcpy(printLine + linepos, im->word->first.c_str());
 					if (im->flags & (cWordMatch::flagAddProperNoun | cWordMatch::flagOnlyConsiderProperNounForms | cWordMatch::flagFirstLetterCapitalized))
 						printLine[linepos] = towupper(printLine[linepos]);
 					if (im->flags & (cWordMatch::flagNounOwner))
 					{
-						printLine[linepos + len++] = L'\'';
-						if (printLine[linepos + len - 2] != L's') printLine[linepos + len++] = L's';
+						printLine[linepos + len++] = u'\'';
+						if (printLine[linepos + len - 2] != u's') printLine[linepos + len++] = u's';
 					}
 					if (im->flags & cWordMatch::flagAllCaps)
-						for (wchar_t* ch = printLine + linepos; *ch && (ch - printLine) < 2047; ch++) *ch = towupper(*ch);
+						for (lpchar_t* ch = printLine + linepos; *ch && (ch - printLine) < 2047; ch++) *ch = towupper(*ch);
 					if (containsNotMatched)
 					{
 						printLine[linepos + len] = 0;
 						logstring(LOG_NOTMATCHED, printLine + linepos - ((im->flags & cWordMatch::flagNotMatched) ? 1 : 0));
-						logstring(LOG_NOTMATCHED, L" ");
+						logstring(LOG_NOTMATCHED, u" ");
 					}
-					wstring flags;
-					if (im->flags & cWordMatch::flagAddProperNoun) flags += L"[PN]";
-					if (im->flags & cWordMatch::flagOnlyConsiderProperNounForms) flags += L"[OPN]";
-					if (im->flags & cWordMatch::flagRefuseProperNoun) flags += L"[RPN]";
-					if (im->flags & cWordMatch::flagOnlyConsiderOtherNounForms) flags += L"[OON]";
+					lpwstring flags;
+					if (im->flags & cWordMatch::flagAddProperNoun) flags += u"[PN]";
+					if (im->flags & cWordMatch::flagOnlyConsiderProperNounForms) flags += u"[OPN]";
+					if (im->flags & cWordMatch::flagRefuseProperNoun) flags += u"[RPN]";
+					if (im->flags & cWordMatch::flagOnlyConsiderOtherNounForms) flags += u"[OON]";
 					if (flags.size())
-						len += wsprintf(printLine + linepos + len, L"%s", flags.c_str());
-					wsprintf(printLine + linepos + len, L"(%d)[%d]", I - printStart, im->lowestAverageCost);
+						len += lp_wsprintf_at(printLine, linepos + len, u"%s", flags.c_str());
+					lp_wsprintf_at(printLine, linepos + len, u"(%d)[%d]", I - printStart, im->lowestAverageCost);
 				}
 				else
 				{
@@ -1457,18 +1473,18 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 							cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + PEMAOffset;
 							if (debugTrace.traceIncludesPEMAIndex)
 							{
-								wsprintf(printLine + linepos, L"%06d %06d %06d %06d ",
+								lp_wsprintf_at(printLine, linepos, u"%06d %06d %06d %06d ",
 									pem - pema.begin(), pem->nextByPatternEnd, pem->nextByChildPatternEnd, pem->nextPatternElement);
 								linepos += 28;
 							}
 							if (pem->isChildPattern())
-								wsprintf(printLine + linepos, L"%s[%s](%d,%d)*%d %s[*](%d)%c",
+								lp_wsprintf_at(printLine, linepos, u"%s[%s](%d,%d)*%d %s[*](%d)%c",
 									patterns[pem->getParentPattern()]->name.c_str(), patterns[pem->getParentPattern()]->differentiator.c_str(), pem->begin - printStart + I, pem->end - printStart + I, pem->getOCost(),
 									patterns[pem->getChildPattern()]->name.c_str(),
 									pem->getChildLen() + I - printStart,
 									(pem->flagSet(cPatternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
 							else
-								wsprintf(printLine + linepos, L"%s[%s](%d,%d)*%d %s%c",
+								lp_wsprintf_at(printLine, linepos, u"%s[%s](%d,%d)*%d %s%c",
 									patterns[pem->getParentPattern()]->name.c_str(), patterns[pem->getParentPattern()]->differentiator.c_str(), pem->begin - printStart + I, pem->end - printStart + I, pem->getOCost(),
 									Forms[im->getFormNum(pem->getChildForm())]->shortName.c_str(),
 									(pem->flagSet(cPatternElementMatchArray::ELIMINATED)) ? 'E' : ' ');
@@ -1481,18 +1497,18 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 						if (im->isWinner(line - 1) &&
 							((im->word->second.formsSize() > line - 1 && im->forms.isSet(im->word->second.forms()[line - 1])) ||
 								(im->word->second.formsSize() == line - 1 && (im->flags & cWordMatch::flagAddProperNoun))))
-							im->getShortFormInflectionEntry(line - 1, printLine + linepos);
+							im->getShortFormInflectionEntry(line - 1, printLine + linepos, (linepos < LINE_BUFFER_LEN) ? LINE_BUFFER_LEN - linepos : 0);
 						else
 							printLine[linepos] = 0;
 					}
 				}
-				if (wcslen(printLine) < sizeof(printLine) - 1) printLine[wcslen(printLine)] = L' ';
+				if (lp_strlen(printLine) < sizeof(printLine) - 1) printLine[lp_strlen(printLine)] = u' ';
 				linepos += printMaxSize[I - begin];
 			}
 		}
 	}
 	if (containsNotMatched)
-		logstring(LOG_NOTMATCHED, L"\n");
+		logstring(LOG_NOTMATCHED, u"\n");
 	if (bufferZone[0] != 0xFEFE || bufferZone[1] != 0xCECE)
 		printf("STOP! BUFFER OVERRUN!");
 
@@ -1501,21 +1517,21 @@ int cSource::printSentence(unsigned int rowsize, unsigned int begin, unsigned in
 
 // Is the occurrence of 'pattern' at 'loc' the only thing on its line?  Used to tell a
 // real chapter/boilerplate heading from an incidental mention inside a paragraph.
-// buffer/bufferLen describe the whole wide-char text (bufferLen counts wchar_t, not bytes).
+// buffer/bufferLen describe the whole wide-char text (bufferLen counts lpchar_t, not bytes).
 // Out: startScanningPosition - the first non-blank character of the line, i.e. where the
 // caller should resume scanning.
 // checkOnlyBeginning == true skips the forward check, so only "nothing before it on the
 // line" is required.
 // Returns false when text precedes or follows the pattern on the same line.
 // Two subtleties: the backward walk dereferences *loc after decrementing, so it reads one
-// wchar_t before 'buffer' when the pattern starts at offset 0 or 1; and the newline flag
+// lpchar_t before 'buffer' when the pattern starts at offset 0 or 1; and the newline flag
 // is tested at the decremented position, which means a bare LF immediately before the
 // pattern is never recognized (only CRLF is) - see the bug report.
-bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*& startScanningPosition, __int64 bufferLen, bool checkOnlyBeginning = false)
+bool aloneOnLine(lpchar_t* buffer, lpchar_t* loc, const lpchar_t* pattern, lpchar_t*& startScanningPosition, int64_t bufferLen, bool checkOnlyBeginning = false)
 {
 	LFS
 		// is sequence alone on line?
-		wchar_t* after = loc + wcslen(pattern);
+		lpchar_t* after = loc + lp_strlen(pattern);
 	if (loc > buffer) loc--;
 	bool newline = false;
 	while (loc >= buffer && iswspace(*loc))
@@ -1526,7 +1542,7 @@ bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*
 	if (loc != buffer) loc++;
 	if (loc != buffer && !newline)
 	{
-		//lplog(L"Sequence %s found not alone on line (back space).",pattern);
+		//lplog(u"Sequence %s found not alone on line (back space).",pattern);
 		return false;
 	}
 	if (checkOnlyBeginning)
@@ -1538,7 +1554,7 @@ bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*
 	{
 		if (!iswspace(*after))
 		{
-			//lplog(L"Sequence %s found not alone on line (after space).",pattern);
+			//lplog(u"Sequence %s found not alone on line (after space).",pattern);
 			return false;
 		}
 		after++;
@@ -1552,32 +1568,32 @@ bool aloneOnLine(wchar_t* buffer, wchar_t* loc, const wchar_t* pattern, wchar_t*
 // 'repeat' counts only occurrences that pass aloneOnLine(), and is decremented in place.
 // If 'start' cannot be found, the search falls back to the "~~BEGIN" marker; if that is
 // missing too, -1 is returned (and the failure is logged/printed when printError).
-// Returns 0 on success (bufferScanLocation is then a wchar_t offset into bookBuffer, and
+// Returns 0 on success (bufferScanLocation is then a lpchar_t offset into bookBuffer, and
 // points at the first non-blank character of the matched line), -1 on failure.
 // A "~~BEGIN" search that finds nothing returns 0 without moving bufferScanLocation.
-int cSource::scanUntil(const wchar_t* start, int repeat, bool printError)
+int cSource::scanUntil(const lpchar_t* start, int repeat, bool printError)
 {
 	LFS
-		wchar_t* loc = bookBuffer - 1;
+		lpchar_t* loc = bookBuffer - 1;
 	while ((loc - bookBuffer) < bufferLen)
 	{
-		if (!(loc = wcsstr(loc + 1, start)))
+		if (!(loc = lp_strstr(loc + 1, start)))
 		{
-			if (!wcscmp(start, L"~~BEGIN"))
+			if (!lp_strcmp(start, u"~~BEGIN"))
 				return 0;
-			if (!(loc = wcsstr(bookBuffer, L"~~BEGIN")))
+			if (!(loc = lp_strstr(bookBuffer, u"~~BEGIN")))
 			{
 				if (printError)
 				{
-					lplog(LOG_ERROR, L"Unable to find start '%s'.", start);
-					wprintf(L"\nCould not find start '%s'.\n", start);
+					lplog(LOG_ERROR, u"Unable to find start '%s'.", start);
+					lp_wprintf(u"\nCould not find start '%s'.\n", start);
 				}
 				return -1;
 			}
 			else
-				start = L"~~BEGIN";
+				start = u"~~BEGIN";
 		}
-		wchar_t* startScanningPosition;
+		lpchar_t* startScanningPosition;
 		if (aloneOnLine(bookBuffer, loc, start, startScanningPosition, bufferLen) && --repeat == 0)
 		{
 			bufferScanLocation = startScanningPosition - bookBuffer;
@@ -1586,8 +1602,8 @@ int cSource::scanUntil(const wchar_t* start, int repeat, bool printError)
 	}
 	if (printError)
 	{
-		lplog(LOG_ERROR, L"Unable to find start '%s'.", start);
-		wprintf(L"\nCould not find start '%s'.\n", start);
+		lplog(LOG_ERROR, u"Unable to find start '%s'.", start);
+		lp_wprintf(u"\nCould not find start '%s'.\n", start);
 	}
 	return -1;
 }
@@ -1596,10 +1612,10 @@ int cSource::scanUntil(const wchar_t* start, int repeat, bool printError)
 // (optionally followed by ':' or '.'), i.e. the shape of a trailing "INDEX" / "CONTENTS"
 // / "FOOTNOTES" heading.
 // Reads up to m[I+3] without checking m.size(), so the caller must keep I+3 in range.
-bool checkIsolated(const wchar_t* word, vector <cWordMatch>& m, int I)
+bool checkIsolated(const lpchar_t* word, vector <cWordMatch>& m, int I)
 {
 	return m[I].word == Words.sectionWord && m[I + 1].word->first == word && (m[I + 1].flags & cWordMatch::flagAllCaps) &&
-		(m[I + 2].word == Words.sectionWord || (m[I + 2].word->first == L":" && m[I + 3].word == Words.sectionWord) || (m[I + 2].word->first == L"." && m[I + 3].word == Words.sectionWord));
+		(m[I + 2].word == Words.sectionWord || (m[I + 2].word->first == u":" && m[I + 3].word == Words.sectionWord) || (m[I + 2].word->first == u"." && m[I + 3].word == Words.sectionWord));
 }
 
 // gutenberg books end with:
@@ -1611,13 +1627,13 @@ bool checkIsolated(const wchar_t* word, vector <cWordMatch>& m, int I)
 // or THE END all in caps, on one line, alone
 // or FOOTNOTES all in caps, on one line, alone
 // or INDEX all in caps, on one line, alone
-bool cSource::analyzeEnd(const wstring path, int begin, int end, bool& multipleEnds)
+bool cSource::analyzeEnd(const lpwstring path, int begin, int end, bool& multipleEnds)
 {
 	LFS
 		int w = 0;
 	bool endFound;
 	for (w = begin; w < end; w++)
-		if (m[w].word->first == L"end") break;
+		if (m[w].word->first == u"end") break;
 	endFound = w != end;
 	if (w == end)
 		w = begin;
@@ -1626,52 +1642,52 @@ bool cSource::analyzeEnd(const wstring path, int begin, int end, bool& multipleE
 		// THE END
 		if (endFound && (m[w].flags & cWordMatch::flagAllCaps) && w > 3 &&
 			m[w - 2].word == Words.sectionWord &&
-			m[w - 1].word->first == L"the" && (m[w - 1].flags & cWordMatch::flagAllCaps) &&
-			(w + 1 >= m.size() || m[w + 1].word == Words.sectionWord || (w + 2 < m.size() && (m[w + 1].word->first == L"." && m[w + 2].word == Words.sectionWord))))
+			m[w - 1].word->first == u"the" && (m[w - 1].flags & cWordMatch::flagAllCaps) &&
+			(w + 1 >= m.size() || m[w + 1].word == Words.sectionWord || (w + 2 < m.size() && (m[w + 1].word->first == u"." && m[w + 2].word == Words.sectionWord))))
 		{
 			if (bookBuffer)
 			{
 				// if there is another THE END later, then forget it.
-				multipleEnds = (wcsstr(bookBuffer + bufferScanLocation, L"THE END") != NULL);
+				multipleEnds = (lp_strstr(bookBuffer + bufferScanLocation, u"THE END") != NULL);
 				// eliminate false ENDings by requiring a section beyond it
-				bool content = (wcsstr(bookBuffer + bufferScanLocation, L"CONTENTS") != NULL);
-				bool index = (wcsstr(bookBuffer + bufferScanLocation, L"INDEX") != NULL);
-				bool footnotes = (wcsstr(bookBuffer + bufferScanLocation, L"FOOTNOTES") != NULL);
-				bool catalogue = (wcsstr(bookBuffer + bufferScanLocation, L"Catalogue of ") != NULL); // specifically for Horatio books
-				bool transcriber = (wcsstr(bookBuffer + bufferScanLocation, L"Transcriber") != NULL);
+				bool content = (lp_strstr(bookBuffer + bufferScanLocation, u"CONTENTS") != NULL);
+				bool index = (lp_strstr(bookBuffer + bufferScanLocation, u"INDEX") != NULL);
+				bool footnotes = (lp_strstr(bookBuffer + bufferScanLocation, u"FOOTNOTES") != NULL);
+				bool catalogue = (lp_strstr(bookBuffer + bufferScanLocation, u"Catalogue of ") != NULL); // specifically for Horatio books
+				bool transcriber = (lp_strstr(bookBuffer + bufferScanLocation, u"Transcriber") != NULL);
 				return !multipleEnds && (content || index || footnotes || catalogue || transcriber);
 			}
 			else
 			{
 				for (int I = end; I < m.size() - 3; I++)
-					if (multipleEnds = m[I].word == Words.sectionWord && m[I + 1].word->first == L"the" && (m[I + 1].flags & cWordMatch::flagAllCaps) && m[I + 2].word->first == L"end" && (m[I + 2].flags & cWordMatch::flagAllCaps) &&
-						((m[I + 3].word == Words.sectionWord) || (m[I + 3].word->first == L"." && m[I + 4].word == Words.sectionWord)))
+					if (multipleEnds = m[I].word == Words.sectionWord && m[I + 1].word->first == u"the" && (m[I + 1].flags & cWordMatch::flagAllCaps) && m[I + 2].word->first == u"end" && (m[I + 2].flags & cWordMatch::flagAllCaps) &&
+						((m[I + 3].word == Words.sectionWord) || (m[I + 3].word->first == u"." && m[I + 4].word == Words.sectionWord)))
 						break;
 				bool content = false;
 				for (int I = end; I < m.size() - 2; I++)
-					if (content = checkIsolated(L"contents", m, I))
+					if (content = checkIsolated(u"contents", m, I))
 						break;
 				bool index = false;
 				for (int I = end; I < m.size() - 2; I++)
-					if (index = checkIsolated(L"index", m, I))
+					if (index = checkIsolated(u"index", m, I))
 						break;
 				bool footnotes = false;
 				for (int I = end; I < m.size() - 2; I++)
-					if (checkIsolated(L"footnotes", m, I))
+					if (checkIsolated(u"footnotes", m, I))
 						break;
 				return !multipleEnds && (content || index || footnotes);
 			}
 		}
 	}
-	for (; w < end; w++) if (m[w].word->first == L"project") break;
+	for (; w < end; w++) if (m[w].word->first == u"project") break;
 	if (w == end) return false;
 	for (; w < end; w++)
-		if (m[w].word->first == L"gutenberg")
+		if (m[w].word->first == u"gutenberg")
 		{
 			if (!endFound)
 			{
-				wstring logres;
-				lplog(LOG_ERROR, L"%s\n%s:%d:start of parse should be moved down!", phraseString(begin, end, logres, true).c_str(), path.c_str(), begin);
+				lpwstring logres;
+				lplog(LOG_ERROR, u"%s\n%s:%d:start of parse should be moved down!", phraseString(begin, end, logres, true).c_str(), path.c_str(), begin);
 				return false;
 			}
 			return true;
@@ -1682,24 +1698,24 @@ bool cSource::analyzeEnd(const wstring path, int begin, int end, bool& multipleE
 
 // if date of dictionary or date of cache is before date of source, return true
 // if date of dictionary > date of cache return true
-bool cSource::parseNecessary(wchar_t* path)
+bool cSource::parseNecessary(lpchar_t* path)
 {
 	LFS
 #ifdef ALWAYS_PARSE
 		return true;
 #endif
 	storageLocation = path;
-	struct _stat buffer;
-	wstring locationCache = storageLocation + L".cache";
-	int result = _wstat(locationCache.c_str(), &buffer);
+	struct stat buffer;
+	lpwstring locationCache = storageLocation + u".cache";
+	int result = lp_wstat(locationCache.c_str(), &buffer);
 	if (result < 0) return true;
-	__time64_t cacheLastModified = buffer.st_mtime;
-	result = _wstat(L"WordCacheFile", &buffer);
+	time_t cacheLastModified = buffer.st_mtime;
+	result = lp_wstat(u"WordCacheFile", &buffer);
 	if (result < 0) return true;
-	__time64_t dictionaryLastModified = buffer.st_mtime;
-	result = _wstat(storageLocation.c_str(), &buffer);
+	time_t dictionaryLastModified = buffer.st_mtime;
+	result = lp_wstat(storageLocation.c_str(), &buffer);
 	if (result < 0) return true;
-	__time64_t sourceLastModified = buffer.st_mtime;
+	time_t sourceLastModified = buffer.st_mtime;
 	return (//sourceLastModified>dictionaryLastModified ||
 		sourceLastModified > cacheLastModified ||
 		dictionaryLastModified > cacheLastModified);
@@ -1717,32 +1733,32 @@ bool cSource::isSectionHeader(unsigned int begin, unsigned int end, unsigned int
 	LFS
 		if (begin > 0 && m[begin - 1].word != Words.sectionWord) return false; // less than two lines before section header - reject
 	if (m[end].word != Words.sectionWord) return false; // less than two lines after section header - reject
-	if (m[begin].word->first == primaryQuoteType || m[begin].word->first == L"“") return false; // buffer begins with " or ' - probably a quote
+	if (m[begin].word->first == primaryQuoteType || m[begin].word->first == u"“") return false; // buffer begins with " or ' - probably a quote
 	if (end - begin > 10) return false; // too long
-	bool abbreviation = (m[end - 1].word->first == L"." && m[end - 2].beginPEMAPosition >= 0 &&
-		(m[end - 2].pma.queryPattern(L"_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_MEAS_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_STREET_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_BUS_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_TIME_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_DATE_ABB") != -1 ||
-			m[end - 2].pma.queryPattern(L"_HON_ABB") != -1));
+	bool abbreviation = (m[end - 1].word->first == u"." && m[end - 2].beginPEMAPosition >= 0 &&
+		(m[end - 2].pma.queryPattern(u"_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_MEAS_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_STREET_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_BUS_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_TIME_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_DATE_ABB") != -1 ||
+			m[end - 2].pma.queryPattern(u"_HON_ABB") != -1));
 	if (!abbreviation &&
 		(sections.size() < 2 || begin - sections[sections.size() - 1].endHeader >= 2 ||
 			sections[sections.size() - 1].subHeadings.size() >= sections[sections.size() - 2].subHeadings.size()))
 	{
-		wstring sWord = m[end - 1].word->first;
+		lpwstring sWord = m[end - 1].word->first;
 		if (sWord == primaryQuoteType || // buffer ends with " or ' - probably a quote
-			sWord == L":" ||              // buffer ends with : - probably the start of a list
-			sWord == L"," || sWord == L"-" || sWord == L"—" || sWord == L")" || sWord == L"!" ||
-			sWord == L"?" || sWord == L"." || sWord == L"--") return false; // buffer ends with , -, or ) probably not a title
+			sWord == u":" ||              // buffer ends with : - probably the start of a list
+			sWord == u"," || sWord == u"-" || sWord == u"—" || sWord == u")" || sWord == u"!" ||
+			sWord == u"?" || sWord == u"." || sWord == u"--") return false; // buffer ends with , -, or ) probably not a title
 	}
 	sectionEnd = end;
-	wstring sSection;
-	for (unsigned int I = begin; I < end; I++) sSection = sSection + m[I].word->first + L" ";
+	lpwstring sSection;
+	for (unsigned int I = begin; I < end; I++) sSection = sSection + m[I].word->first + u" ";
 	sSection.erase(sSection.length() - 1);
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:Section header '%s' encountered", begin, sSection.c_str());
+		lplog(LOG_RESOLUTION, u"%06d:Section header '%s' encountered", begin, sSection.c_str());
 	return true;
 }
 
@@ -1762,9 +1778,9 @@ int cSource::reportUnmatchedElements(int begin, int end, bool logElements)
 				if (debugTrace.traceUnmatchedSentences)
 				{
 					if (firstUnmatched != I - 1)
-						lplog(L"Unmatched position %d-%d.", firstUnmatched, I - 1);
+						lplog(u"Unmatched position %d-%d.", firstUnmatched, I - 1);
 					else
-						lplog(L"Unmatched position %d.", firstUnmatched);
+						lplog(u"Unmatched position %d.", firstUnmatched);
 				}
 				totalUnmatched += I - firstUnmatched;
 			}
@@ -1783,9 +1799,9 @@ int cSource::reportUnmatchedElements(int begin, int end, bool logElements)
 		if (debugTrace.traceUnmatchedSentences)
 		{
 			if (firstUnmatched != m.size() - 1)
-				lplog(L"Unmatched position %d-%d.", firstUnmatched, end - 1);
+				lplog(u"Unmatched position %d-%d.", firstUnmatched, end - 1);
 			else
-				lplog(L"Unmatched position %d.", firstUnmatched);
+				lplog(u"Unmatched position %d.", firstUnmatched);
 		}
 		totalUnmatched += end - firstUnmatched;
 	}
@@ -1803,7 +1819,7 @@ void cSource::consolidateWinners(int begin)
 		im->pma.consolidateWinners(lastPEMAConsolidationIndex, pema, wa, position, maxMatch, debugTrace); // bool consolidated=
 		int position2 = position;
 		for (vector <cWordMatch>::iterator im2 = im, im2End = im + maxMatch; im2 != im2End; im2++, position2++)
-			im2->maxMatch = max(im2->maxMatch, maxMatch);
+			im2->maxMatch = max(im2->maxMatch, (unsigned short)maxMatch); // batch B5
 		pema.getNextValidPosition(lastPEMAConsolidationIndex, wa, &im->beginPEMAPosition, cPatternElementMatchArray::BY_POSITION);
 		pema.translate(lastPEMAConsolidationIndex, wa, &im->beginPEMAPosition, cPatternElementMatchArray::BY_POSITION);
 		pema.getNextValidPosition(lastPEMAConsolidationIndex, wa, &im->endPEMAPosition, cPatternElementMatchArray::BY_POSITION);
@@ -1824,10 +1840,10 @@ void cSource::consolidateWinners(int begin)
 		{
 			im->flags &= ~cWordMatch::flagTopLevelPattern;
 			if (debugTrace.tracePatternElimination)
-				lplog(L"%d:lost all top-level patterns", position);
+				lplog(u"%d:lost all top-level patterns", position);
 		}
 	}
-	lastPEMAConsolidationIndex = max(pema.count, 1); // minimum PEMA offset is 1 - not 0
+	lastPEMAConsolidationIndex = max((int)pema.count, 1); // minimum PEMA offset is 1 - not 0 (batch B5: pema.count is unsigned)
 	lastSourcePositionSet = -1;
 }
 
@@ -1866,7 +1882,7 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 	{
 		if ((where = s * 100 / sentenceStarts.size()) > lastProgressPercent)
 		{
-			wprintf(L"PROGRESS: %d%% sentences printed with %04d seconds elapsed (%I64d bytes) \r", where, clocksec(), memoryAllocated);
+			lp_wprintf(u"PROGRESS: %d%% sentences printed with %04d seconds elapsed (%I64d bytes) \r", where, clocksec(), memoryAllocated);
 			lastProgressPercent = where;
 		}
 		unsigned int begin = sentenceStarts[s];
@@ -1910,7 +1926,7 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 		unsigned int unmatchedElements = reportUnmatchedElements(begin, end, true);
 		unsigned int ignoredPatternsTried = 0;
 		matchIgnoredPatternsAgainstSentence(s, ignoredPatternsTried, true);
-		lastPEMAConsolidationIndex = max(pema.count, 1); // minimum PEMA offset is 1 - not 0
+		lastPEMAConsolidationIndex = max((int)pema.count, 1); // minimum PEMA offset is 1 - not 0 (batch B5: pema.count is unsigned)
 		totalUnmatched += unmatchedElements;
 		if (sumMaxLength(begin, end, matchedTripletSumTotal, matchedSentences, containsUnmatchedElement))
 		{
@@ -1918,7 +1934,7 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 			{
 				if (containsUnmatchedElement && !printedHeader)
 				{
-					lplog(LOG_NOTMATCHED, L"\n%s\n", storageLocation.c_str());
+					lplog(LOG_NOTMATCHED, u"\n%s\n", storageLocation.c_str());
 					printedHeader = true;
 				}
 				if (debugTrace.traceMatchedSentences)
@@ -1952,15 +1968,15 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 	else if (sentenceStarts.size() > 1)
 		sections.push_back(cSection(sentenceStarts[0], sentenceStarts[sentenceStarts.size() - 1]));
 	if (100 > lastProgressPercent)
-		wprintf(L"PROGRESS: 100%% sentences printed with %04d seconds elapsed (%I64d bytes) \r", clocksec(), memoryAllocated);
+		lp_wprintf(u"PROGRESS: 100%% sentences printed with %04d seconds elapsed (%I64d bytes) \r", clocksec(), memoryAllocated);
 	// accumulate globals
 	globalOverMatchedPositionsTotal += overMatchedPositionsTotal;
 	if (debugTrace.collectPerSentenceStats)
 	{
-		lplog(L"CPSS SIZE MEMT    TIMET MEM  TIME %%");
+		lplog(u"CPSS SIZE MEMT    TIMET MEM  TIME %%");
 		for (unsigned I = 0; I < 256; I++)
 			if (sizePerSentenceBySize[I])
-				lplog(L"CPSS %03d: %07d %05d %04d %03d %02d%%", I, memoryPerSentenceBySize[I], timePerSentenceBySize[I] / CLOCKS_PER_SEC, memoryPerSentenceBySize[I] / sizePerSentenceBySize[I], timePerSentenceBySize[I] / sizePerSentenceBySize[I], sizePerSentenceBySize[I] * 100 / m.size());
+				lplog(u"CPSS %03d: %07d %05d %04d %03d %02d%%", I, memoryPerSentenceBySize[I], timePerSentenceBySize[I] / CLOCKS_PER_SEC, memoryPerSentenceBySize[I] / sizePerSentenceBySize[I], timePerSentenceBySize[I] / sizePerSentenceBySize[I], sizePerSentenceBySize[I] * 100 / m.size());
 	}
 	// [222 out of 2374:009%] 03333606 words Parsing A75...
 	if (updateStatistics)
@@ -1968,13 +1984,13 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 			totalUnmatched, overMatchedPositionsTotal, totalQuotations, quotationExceptions, clock() - beginClock, matchedTripletSumTotal);
 	extern int numSourceLimit;
 	if (m.size() && numSourceLimit == 0)
-		lplog(L"%-50.49s:Matched sentences=%06.2f%% Positions:(Total=%06d Unknown=%05d-%5.2f%% Unmatched=%04d-%5.2f%% Overmatched=%05d-%5.2f%%) Quotation exceptions=%03d-%5.2f%% MS/word=%05.3f Average pattern match:%02d ",
+		lplog(u"%-50.49s:Matched sentences=%06.2f%% Positions:(Total=%06d Unknown=%05d-%5.2f%% Unmatched=%04d-%5.2f%% Overmatched=%05d-%5.2f%%) Quotation exceptions=%03d-%5.2f%% MS/word=%05.3f Average pattern match:%02d ",
 			storageLocation.c_str(), (float)matchedSentences * 100 / (sentenceStarts.size() - 1), m.size(),
 			unknownCount, (float)unknownCount * 100 / m.size(), totalUnmatched, (float)totalUnmatched * 100.0 / m.size(), overMatchedPositionsTotal, (float)overMatchedPositionsTotal * 100 / m.size(),
 			quotationExceptions, (totalQuotations) ? (float)quotationExceptions * 100 / totalQuotations : 0,
 			(float)(clock() - beginClock) / ((float)CLOCKS_PER_SEC / 1000 * m.size()), matchedTripletSumTotal / m.size());
 #ifdef LOG_PATTERN_STATISTICS
-	lplog(L"Matched Patterns=%d Tried Patterns=%d.", patternsMatched, patternsTried);
+	lplog(u"Matched Patterns=%d Tried Patterns=%d.", patternsMatched, patternsTried);
 #endif
 	return totalUnmatched;
 }
@@ -1982,10 +1998,10 @@ int cSource::printSentences(bool updateStatistics, unsigned int unknownCount, un
 int cSource::printSentencesCheck(bool skipCheck)
 {
 	LFS
-		struct __stat64 buffer;
-	wchar_t logFilename[1024];
-	extern wstring logFileExtension;
-	wsprintf(logFilename, L"main%S.lplog", logFileExtension.c_str());
+		struct stat buffer; // batch B5: POSIX stat; st_mtime is time_t and 64-bit on macOS
+	lpchar_t logFilename[1024];
+	extern thread_local lpwstring logFileExtension; // batch B5: matches logging.h
+	lp_wsprintf(logFilename, u"main%S.lplog", logFileExtension.c_str());
 	vector <cWordMatch>::iterator im = m.begin(), mend = m.end();
 	for (unsigned int I = 0; im != mend; im++, I++)
 	{
@@ -1994,7 +2010,7 @@ int cSource::printSentencesCheck(bool skipCheck)
 			im->word->second.setProperNounUsageCost();
 		}
 	}
-	if (!skipCheck && _wstat64(logFilename, &buffer) >= 0 && buffer.st_size > 2 * 1024 * 1024) return 0;
+	if (!skipCheck && lp_wstat(logFilename, &buffer) >= 0 && buffer.st_size > 2 * 1024 * 1024) return 0;
 	if (sentenceStarts.size() == 0 || !(m[sentenceStarts[0]].t.traceMatchedSentences ^ (logMatchedSentences | logUnmatchedSentences))) return 0;
 	for (unsigned int s = 0; s + 1 < sentenceStarts.size() && !exitNow; s++)
 	{
@@ -2037,7 +2053,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 		if (!patterns[p]->ignore && matchPatternAgainstSentence('A', patterns[p], s))
 		{
 #ifdef LOG_IPATTERN
-			lplog(L"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'A', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
+			lplog(u"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'A', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
 #endif
 			match |= patterns[p]->isFutureReference;
 			patternsMatched++;
@@ -2055,7 +2071,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 				{
 					match = true;
 #ifdef LOG_IPATTERN
-					lplog(L"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'B', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
+					lplog(u"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'B', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
 #endif
 					patternsMatched++;
 				}
@@ -2069,7 +2085,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 					if (!patterns[p]->ignore && matchPatternAgainstSentence('C', patterns[p], s))
 					{
 #ifdef LOG_IPATTERN
-						lplog(L"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'C', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
+						lplog(u"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'C', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
 #endif
 						patternsMatched++;
 					}
@@ -2082,7 +2098,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 		if (!patterns[p]->ignore && matchPatternAgainstSentence('D', patterns[p], s))
 		{
 #ifdef LOG_IPATTERN
-			lplog(L"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'D', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
+			lplog(u"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'D', p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
 #endif
 			patternsMatched++;
 		}
@@ -2118,7 +2134,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 	{
 		patternsToTry = patternsToTryNext;
 #ifdef LOG_IPATTERN
-		wstring patternsString;
+		lpwstring patternsString;
 		int lastP = -1;
 		for (int p = patternsToTry.first(); p >= 0; lastP = p, p = patternsToTry.next())
 		{
@@ -2130,7 +2146,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 				patternsString += patterns[p]->name + "[" + patterns[p]->differentiator;
 			}
 		}
-		lplog(L"%c:Patterns %s matched against sentence %04d.", 'A' + pass, patternsString.c_str(), s);
+		lplog(u"%c:Patterns %s matched against sentence %04d.", 'A' + pass, patternsString.c_str(), s);
 #endif
 		patternsToTryNext.clear();
 		for (int p = patternsToTry.first(); p >= 0; p = patternsToTry.next())
@@ -2157,7 +2173,7 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 		if (!patterns[p]->ignoreFlag && matchPatternAgainstSentence(patterns[p], s, true))
 		{
 #ifdef LOG_IPATTERN
-			lplog(L"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'A' + pass, p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
+			lplog(u"%c:Pattern %03d %s[%s] matched against sentence %04d.", 'A' + pass, p, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), s);
 #endif
 			numPatternsMatched++;
 		}
@@ -2169,8 +2185,8 @@ int cSource::matchPatternsAgainstSentence(unsigned int s, unsigned int& patterns
 void cSource::setForms(void)
 {
 	LFS
-		m[0].forms.check(L"forms", Forms.size());
-	m[0].patterns.check(L"patterns", patterns.size());
+		m[0].forms.check(u"forms", Forms.size());
+	m[0].patterns.check(u"patterns", patterns.size());
 	for (vector <cWordMatch>::iterator I = m.begin(), IEnd = m.end(); I != IEnd; I++) I->setForm();
 }
 
@@ -2185,8 +2201,8 @@ void cSource::clearSource(void)
 	m.clear();
 	subNarratives.clear();
 	sentenceStarts.erase();
-	primaryQuoteType = L"\"";
-	secondaryQuoteType = L"\'";
+	primaryQuoteType = u"\"";
+	secondaryQuoteType = u"\'";
 	printMaxSize.clear();
 	whatMatched.clear();
 	objects.clear();
@@ -2237,18 +2253,18 @@ int read(string& str, IOHANDLE file)
 {
 	LFS
 		int size;
-	_read(file, &size, sizeof(size));
+	::read(file, &size, sizeof(size));
 	if (size < 1023)
 	{
 		char contents[1024];
-		_read(file, contents, size);
+		::read(file, contents, size);
 		contents[size] = 0;
 		if (size) str = contents;
 	}
 	else
 	{
 		char* contents = (char*)tmalloc(size + 4);
-		_read(file, contents, size);
+		::read(file, contents, size);
 		contents[size] = 0;
 		str = contents;
 		free(contents);
@@ -2268,37 +2284,46 @@ bool cSource::flush(int fd, void* buffer, int& where)
 	return true;
 }
 
-bool cSource::FlushFile(HANDLE fd, void* buffer, int& where)
+// Batch B5: the Win32 file layer (CreateFileW / WriteFile / ReadFile / GetFileSize /
+// GetFileAttributesW / CloseHandle, all on a HANDLE) is replaced throughout this file by
+// POSIX open/write/read/fstat/access/close on an int fd. A short write is now detected by
+// comparing ::write's own return against the requested length, which is exactly what the
+// WriteFile + bytesWritten pair was doing.
+bool cSource::FlushFile(int fd, void* buffer, int& where)
 {
 	LFS
 		if (where > MAX_BUF - 64 * 1024)
 		{
-			DWORD bytesWritten;
-			if (!WriteFile(fd, buffer, where, &bytesWritten, NULL) || bytesWritten != where)
+			if (::write(fd, buffer, where) != (ssize_t)where)
 				return false;
 			where = 0;
 		}
 	return true;
 }
 
-bool cSource::writeCheck(wstring path)
+bool cSource::writeCheck(lpwstring path)
 {
 	LFS
-		path += L".SourceCache";
-	//return _waccess(path.c_str(),0)==0; // long path limitation
-	return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+		path += u".SourceCache";
+	// Batch B5: access(F_OK). The "long path limitation" the old comment worked
+	// around is a Windows MAX_PATH problem that does not exist on macOS, so the
+	// straightforward call is also the correct one now.
+	return access(lp_utf16_to_utf8(path).c_str(), F_OK) == 0;
 }
 
-bool cSource::writePatternUsage(wstring path, bool zeroOutPatternUsage)
+bool cSource::writePatternUsage(lpwstring path, bool zeroOutPatternUsage)
 {
-	path += L".patternUsage";
-	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if (fd == INVALID_HANDLE_VALUE)
+	path += u".patternUsage";
+	int fd = ::open(lp_utf16_to_utf8(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0)
 	{
-		lplog(LOG_ERROR, L"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
+		lplog(LOG_ERROR, u"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
 		return false;
 	}
-	char buffer[MAX_BUF];
+	// Heap, not stack: MAX_BUF is 10 MiB here. cScopedFd also closes fd on the two
+	// early-return arms below, which used to leak it.
+	cScopedFd scopedFd(fd);
+	cTrackedBuffer buffer(MAX_BUF);
 	int where = 0;
 	for (auto p : patterns)
 	{
@@ -2309,45 +2334,45 @@ bool cSource::writePatternUsage(wstring path, bool zeroOutPatternUsage)
 	}
 	if (where)
 	{
-		DWORD dwBytesWritten;
-		if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+		if (::write(fd, buffer, where) != (ssize_t)where)
 			return false;
 		where = 0;
 	}
-	CloseHandle(fd);
 	return true;
 }
 
 // if returning false, the file will not be closed.
-bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstring specialExtension)
+bool cSource::write(lpwstring path, bool S2, bool makeCopyBeforeSourceWrite, lpwstring specialExtension)
 {
 	LFS
 		int sanityReturnCode = 0, generalizedIndex = 0;
 	if (sanityReturnCode = sanityCheck(generalizedIndex))
 	{
-		wprintf(L"PROGRESS: source sanity check fail (%d@%d) with %d seconds elapsed \n", sanityReturnCode, generalizedIndex, clocksec());
-		lplog(LOG_ERROR, L"Sanity check failed (%d@%d): source %s!", sanityReturnCode, generalizedIndex, sourcePath.c_str());
+		lp_wprintf(u"PROGRESS: source sanity check fail (%d@%d) with %d seconds elapsed \n", sanityReturnCode, generalizedIndex, clocksec());
+		lplog(LOG_ERROR, u"Sanity check failed (%d@%d): source %s!", sanityReturnCode, generalizedIndex, sourcePath.c_str());
 		return false;
 	}
-	path += L".SourceCache" + specialExtension;
-	// int fd=_wopen(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE); subject to short path restriction
+	path += u".SourceCache" + specialExtension;
+	// int fd=lp_wopen(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_BINARY,_S_IREAD | _S_IWRITE); subject to short path restriction
 	if (makeCopyBeforeSourceWrite)
 	{
-		wstring renamePath = path + L".old";
-		if (_wremove(renamePath.c_str()) < 0 && errno != ENOENT)
-			lplog(LOG_FATAL_ERROR, L"REMOVE %s - %S", renamePath.c_str(), sys_errlist[errno]);
-		else if (_wrename(path.c_str(), renamePath.c_str()) && errno != ENOENT)
-			lplog(LOG_ERROR, L"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);
+		lpwstring renamePath = path + u".old";
+		if (lp_wremove(renamePath.c_str()) < 0 && errno != ENOENT)
+			lplog(LOG_FATAL_ERROR, u"REMOVE %s - %S", renamePath.c_str(), sys_errlist[errno]);
+		else if (lp_wrename(path.c_str(), renamePath.c_str()) && errno != ENOENT)
+			lplog(LOG_ERROR, u"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);
 	}
-	HANDLE fd = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if (fd == INVALID_HANDLE_VALUE)
+	int fd = ::open(lp_utf16_to_utf8(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0)
 	{
-		lplog(LOG_ERROR, L"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
+		lplog(LOG_ERROR, u"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
 		return false;
 	}
-	char buffer[MAX_BUF];
+	// Heap, not stack: MAX_BUF is 10 MiB. This function has 26 return statements,
+	// which is exactly why the buffer owns itself rather than each path calling
+	// tfree (see cTrackedBuffer in general.h).
+	cTrackedBuffer buffer(MAX_BUF);
 	int where = 0;
-	DWORD dwBytesWritten;
 	int sourceVersion = SOURCE_VERSION;
 	if (!copy(buffer, sourceVersion, where, MAX_BUF)) return false;
 	if (!copy(buffer, storageLocation, where, MAX_BUF)) return false;
@@ -2362,7 +2387,7 @@ bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstri
 	}
 	if (where)
 	{
-		if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+		if (::write(fd, buffer, where) != (ssize_t)where)
 			return false;
 		where = 0;
 	}
@@ -2385,11 +2410,11 @@ bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstri
 	}
 	if (where)
 	{
-		if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+		if (::write(fd, buffer, where) != (ssize_t)where)
 			return false;
 		where = 0;
 	}
-	pema.WriteFile(fd);
+	pema.writeToFile(fd);
 	count = objects.size();
 	if (!copy((void*)buffer, count, where, MAX_BUF)) return false;
 	for (vector <cObject>::iterator o = objects.begin(), oEnd = objects.end(); o != oEnd; o++)
@@ -2399,7 +2424,7 @@ bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstri
 	}
 	if (where)
 	{
-		if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+		if (::write(fd, buffer, where) != (ssize_t)where)
 			return false;
 		where = 0;
 	}
@@ -2422,12 +2447,12 @@ bool cSource::write(wstring path, bool S2, bool makeCopyBeforeSourceWrite, wstri
 		}
 		if (where)
 		{
-			if (!WriteFile(fd, buffer, where, &dwBytesWritten, NULL) || where != dwBytesWritten)
+			if (::write(fd, buffer, where) != (ssize_t)where)
 				return false;
 			where = 0;
 		}
 	}
-	CloseHandle(fd);
+	::close(fd);
 	return true;
 }
 
@@ -2507,7 +2532,7 @@ int cSource::sanityCheckSourcePosition(cWordMatch &mi, int & generalizedIndex)
 	// enum eOBJECTS { UNKNOWN_OBJECT=-1,OBJECT_UNKNOWN_MALE=-2, OBJECT_UNKNOWN_FEMALE=-3, OBJECT_UNKNOWN_MALE_OR_FEMALE = -4, OBJECT_UNKNOWN_NEUTER = -5, OBJECT_UNKNOWN_PLURAL = -6, OBJECT_UNKNOWN_ALL = -7
 	if (mi.getObject() < cObject::eOBJECTS::OBJECT_UNKNOWN_ALL || mi.getObject() >= (int)objects.size())
 	{
-		lplog(LOG_ERROR, L"Sanity check failure for source position %d.  object=%d out of %d objects.", generalizedIndex, mi.getObject(), objects.size());
+		lplog(LOG_ERROR, u"Sanity check failure for source position %d.  object=%d out of %d objects.", generalizedIndex, mi.getObject(), objects.size());
 		return 7;
 	}
 	if (mi.principalWherePosition < -1 || mi.principalWherePosition >= (int)m.size()) return 8;
@@ -2590,14 +2615,14 @@ int cSource::sanityCheck(int& generalizedIndex)
 	return 0;
 }
 
-bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnly, bool printProgress, wstring specialExtension)
+bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnly, bool printProgress, lpwstring specialExtension)
 {
 	LFS
 		int sourceVersion;
 	if (!copy(sourceVersion, buffer, where, total)) return false;
 	if (sourceVersion != SOURCE_VERSION)
 	{
-		lplog(LOG_WHERE, L"%s rejected as old.  Reparsing.", sourcePath.c_str());
+		lplog(LOG_WHERE, u"%s rejected as old.  Reparsing.", sourcePath.c_str());
 		return false;
 	}
 	if (!copy(storageLocation, buffer, where, total)) return false;
@@ -2611,22 +2636,22 @@ bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnl
 	{
 		LFSL
 			if ((where * 100 / total) > lastProgressPercent && printProgress)
-				wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
+				lp_wprintf(u"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
 		m.emplace_back(buffer, where, total, sourceType, error);
 	}
 	if (error || where >= (signed)total)
 	{
-		lplog(LOG_ERROR, L"%s read error at position %d, read buffer location %d (out of %d) - error %d.", sourcePath.c_str(), m.size(), where, total, error);
+		lplog(LOG_ERROR, u"%s read error at position %d, read buffer location %d (out of %d) - error %d.", sourcePath.c_str(), m.size(), where, total, error);
 		return false;
 	}
 	sentenceStarts.read(buffer, where, total);
 	if ((where * 100 / total) > lastProgressPercent && printProgress)
-		wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
+		lp_wprintf(u"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
 	if (!copy(count, buffer, where, total)) return false;
 	for (unsigned int I = 0; I < count && !error; I++)
 		sections.push_back(cSection(buffer, where, total, error));
 	if ((where * 100 / total) > lastProgressPercent && printProgress)
-		wprintf(L"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
+		lp_wprintf(u"PROGRESS: %03d%% source read with %d seconds elapsed \r", lastProgressPercent = where * 100 / total, clocksec());
 	if (!copy(count, buffer, where, total)) return false;
 	for (unsigned int I = 0; I < count && !error; I++)
 		speakerGroups.push_back(cSpeakerGroup(buffer, where, total, error));
@@ -2635,7 +2660,7 @@ bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnl
 	{
 		parsedOnly = where == total;
 		if (printProgress)
-			wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
+			lp_wprintf(u"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
 		return true;
 	}
 	if (!copy(count, buffer, where, total)) return false;
@@ -2661,35 +2686,35 @@ bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnl
 				objects[omi->object].locations.push_back(cObject::cLocation(I));
 	}
 	if (printProgress)
-		wprintf(L"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
+		lp_wprintf(u"PROGRESS: 100%% source read with %d seconds elapsed \n", clocksec());
 	return !error;
 }
 
 // find the first title that is followed by two consecutive sentences in a paragraph.
 // *** END OF THE PROJECT 
-const wchar_t* ignoreWords[] = { L"GUTENBERG",L"COPYRIGHT",L"THIS HEADER SHOULD BE THE FIRST THING",L"THE WORLD OF FREE PLAIN VANILLA ELECTRONIC TEXTS",L"EBOOKS ",L"ETEXT",
-L"PLEASE TAKE A LOOK AT THE IMPORTANT INFORMATION IN THIS HEADER",
-L"WE ARE NOW TRYING TO RELEASE ALL OUR BOOKS",
-L"FOR THESE AND OTHER MATTERS, PLEASE MAIL TO",
-L"PLEASE DO NOT REMOVE THIS",
-L"THIS SHOULD BE THE FIRST THING SEEN",
-L"EBOOK",L"TITLE:",L"AUTHOR:",L"RELEASE DATE:",L"MOST RECENTLY UPDATED:",L"EDITION:",L"LANGUAGE:",
-L"CHARACTER SET ENCODING:",L"THIS FILE SHOULD BE NAMED",L"VERSIONS BASED ON SEPARATE SOURCES",L"WEB SITES",L"HTTP",
-L"FTP",L"NEWSLETTERS",L"HERE IS THE BRIEFEST RECORD OF OUR PROGRESS ",L"ANY MONTH",L"DONATIONS",L"DONATION",L"CONTRIBUTIONS",
-L"STATES",L"QUESTIONS",L"809 NORTH 1500 WEST",L"SALT LAKE CITY",L"CONTACT US IF YOU WANT TO ARRANGE",L"***",L"HART",
-L"EMAIL",L"**THE LEGAL SMALL PRINT**",L"(THREE PAGES)",L"LIMITED WARRANTY; DISCLAIMER OF DAMAGES",
-L"INDEMNITY",L"ILLUSTRATION:",
-L"ASCII CHARACTER SET",
-L"MAC USERS, DO NOT POINT AND CLICK",NULL };
+const lpchar_t* ignoreWords[] = { u"GUTENBERG",u"COPYRIGHT",u"THIS HEADER SHOULD BE THE FIRST THING",u"THE WORLD OF FREE PLAIN VANILLA ELECTRONIC TEXTS",u"EBOOKS ",u"ETEXT",
+u"PLEASE TAKE A LOOK AT THE IMPORTANT INFORMATION IN THIS HEADER",
+u"WE ARE NOW TRYING TO RELEASE ALL OUR BOOKS",
+u"FOR THESE AND OTHER MATTERS, PLEASE MAIL TO",
+u"PLEASE DO NOT REMOVE THIS",
+u"THIS SHOULD BE THE FIRST THING SEEN",
+u"EBOOK",u"TITLE:",u"AUTHOR:",u"RELEASE DATE:",u"MOST RECENTLY UPDATED:",u"EDITION:",u"LANGUAGE:",
+u"CHARACTER SET ENCODING:",u"THIS FILE SHOULD BE NAMED",u"VERSIONS BASED ON SEPARATE SOURCES",u"WEB SITES",u"HTTP",
+u"FTP",u"NEWSLETTERS",u"HERE IS THE BRIEFEST RECORD OF OUR PROGRESS ",u"ANY MONTH",u"DONATIONS",u"DONATION",u"CONTRIBUTIONS",
+u"STATES",u"QUESTIONS",u"809 NORTH 1500 WEST",u"SALT LAKE CITY",u"CONTACT US IF YOU WANT TO ARRANGE",u"***",u"HART",
+u"EMAIL",u"**THE LEGAL SMALL PRINT**",u"(THREE PAGES)",u"LIMITED WARRANTY; DISCLAIMER OF DAMAGES",
+u"INDEMNITY",u"ILLUSTRATION:",
+u"ASCII CHARACTER SET",
+u"MAC USERS, DO NOT POINT AND CLICK",NULL };
 
 //end of line is \r (13) then \n (10)
-bool getNextLine(int& where, wstring& buffer, wstring& line, bool& eofEncountered, int& firstNonBlank)
+bool getNextLine(int& where, lpwstring& buffer, lpwstring& line, bool& eofEncountered, int& firstNonBlank)
 {
 	LFS
-		size_t nextLineStart = buffer.find(L'\n', where);
-	if (nextLineStart == wstring::npos) eofEncountered = true;
+		size_t nextLineStart = buffer.find(u'\n', where);
+	if (nextLineStart == lpwstring::npos) eofEncountered = true;
 	nextLineStart++;
-	//if (buffer[nextLineStart]==L'\n') nextLineStart++;
+	//if (buffer[nextLineStart]==u'\n') nextLineStart++;
 	line = buffer.substr(where, nextLineStart - where);
 	where = nextLineStart;
 	firstNonBlank = 0;
@@ -2698,25 +2723,25 @@ bool getNextLine(int& where, wstring& buffer, wstring& line, bool& eofEncountere
 	return firstNonBlank < (signed)line.length();
 }
 
-bool containsSectionHeader(wstring& line, int firstNonBlank)
+bool containsSectionHeader(lpwstring& line, int firstNonBlank)
 {
 	LFS
 		bool csh = false;
 	if (line.length() > 0)
 	{
-		wstring upline = line;
-		wcsupr((wchar_t*)upline.c_str());
-		const wchar_t* sectionheader[] = { L"BOOK",L"CHAPTER",L"PART",L"PROLOGUE",L"EPILOGUE",L"VOLUME",L"STAVE",L"I.",NULL };
+		lpwstring upline = line;
+		lp_toupper_str((lpchar_t*)upline.c_str());
+		const lpchar_t* sectionheader[] = { u"BOOK",u"CHAPTER",u"PART",u"PROLOGUE",u"EPILOGUE",u"VOLUME",u"STAVE",u"I.",NULL };
 		for (int I = 0; sectionheader[I]; I++)
 		{
-			if (csh = (!wcsncmp(upline.c_str() + firstNonBlank, sectionheader[I], wcslen(sectionheader[I]))))
+			if (csh = (!lp_strncmp(upline.c_str() + firstNonBlank, sectionheader[I], lp_strlen(sectionheader[I]))))
 				break;
 		}
 	}
 	return csh;
 }
 
-bool containsSectionHeader(wstring& line)
+bool containsSectionHeader(lpwstring& line)
 {
 	LFS
 		int fnb = 0;
@@ -2725,33 +2750,33 @@ bool containsSectionHeader(wstring& line)
 	return containsSectionHeader(line, fnb);
 }
 
-bool containsAttribution(wstring& line, int firstNonBlank)
+bool containsAttribution(lpwstring& line, int firstNonBlank)
 {
 	LFS
 		bool ca = false;
 	if (line.length() > 0)
 	{
-		wstring upline = line;
-		wcsupr((wchar_t*)upline.c_str());
-		const wchar_t* attribution[] = { L"SCANNED BY",L"PRODUCED BY",L"WRITTEN BY",L"TRANSCRIBED BY",L"PRODUCED BY",L"PREFACE BY",
-			L"TRANSCRIBER'S NOTE",L"AUTHOR'S NOTE",L"WITH ILLUSTRATIONS BY",L"DEDICATION",L"AUTHOR'S INTRODUCTION",L"PREFATORY NOTE",L"TO MY READERS",
-			L"ADDRESSED TO THE READER",NULL };
+		lpwstring upline = line;
+		lp_toupper_str((lpchar_t*)upline.c_str());
+		const lpchar_t* attribution[] = { u"SCANNED BY",u"PRODUCED BY",u"WRITTEN BY",u"TRANSCRIBED BY",u"PRODUCED BY",u"PREFACE BY",
+			u"TRANSCRIBER'S NOTE",u"AUTHOR'S NOTE",u"WITH ILLUSTRATIONS BY",u"DEDICATION",u"AUTHOR'S INTRODUCTION",u"PREFATORY NOTE",u"TO MY READERS",
+			u"ADDRESSED TO THE READER",NULL };
 		for (int I = 0; attribution[I]; I++)
 		{
-			if (ca = (!wcsncmp(upline.c_str() + firstNonBlank, attribution[I], wcslen(attribution[I]))))
+			if (ca = (!lp_strncmp(upline.c_str() + firstNonBlank, attribution[I], lp_strlen(attribution[I]))))
 				break;
 		}
 	}
 	return ca;
 }
 
-bool isRomanNumeral(wstring line, int where)
+bool isRomanNumeral(lpwstring line, int where)
 {
 	LFS
 		bool matches = false;
-	extern const wchar_t* roman_numeral[];
-	wstring rn;
-	while (where < (signed)line.length() && line[where] != L'.' && !iswspace(line[where]))
+	extern const lpchar_t* roman_numeral[];
+	lpwstring rn;
+	while (where < (signed)line.length() && line[where] != u'.' && !iswspace(line[where]))
 		rn += towlower(line[where++]);
 	for (int I = 0; roman_numeral[I]; I++)
 		if (matches = rn == roman_numeral[I])
@@ -2759,39 +2784,39 @@ bool isRomanNumeral(wstring line, int where)
 	return matches;
 }
 
-bool getNextParagraph(int& where, wstring& buffer, bool& eofEncountered, int& firstNonBlank, wstring& paragraph, int& numLines, int& numIndentedLines, int& numHeaderLines, int& numStartLines, int& numShortLines)
+bool getNextParagraph(int& where, lpwstring& buffer, bool& eofEncountered, int& firstNonBlank, lpwstring& paragraph, int& numLines, int& numIndentedLines, int& numHeaderLines, int& numStartLines, int& numShortLines)
 {
 	LFS
 		int fnb = 0;
 	while (where < (signed)buffer.length() && iswspace(buffer[where]))
 		where++;
-	wstring line;
+	lpwstring line;
 	while (getNextLine(where, buffer, line, eofEncountered, fnb) && !eofEncountered)
 	{
 		if (numLines == 0) firstNonBlank = fnb;
 		if (fnb > 0) numIndentedLines++;
 		if (containsSectionHeader(line, fnb)) numHeaderLines++;
 		if (line.length() < 40) numShortLines++;
-		if (iswdigit(line[fnb]) || (isRomanNumeral(line, fnb) && wcsncmp(line.c_str() + fnb, L"I ", 2)))
+		if (iswdigit(line[fnb]) || (isRomanNumeral(line, fnb) && lp_strncmp(line.c_str() + fnb, u"I ", 2)))
 		{
 			numStartLines++;
-			if (_wtoi((wchar_t*)line.c_str()) == 1)
+			if (lp_wtoi((lpchar_t*)line.c_str()) == 1)
 			{
-				size_t whereSeparator = line.find(L'.');
-				if (whereSeparator == wstring::npos)
-					whereSeparator = line.find(L'-');
-				if (whereSeparator == wstring::npos)
-					whereSeparator = line.find(L'—');
-				if (whereSeparator != wstring::npos)
+				size_t whereSeparator = line.find(u'.');
+				if (whereSeparator == lpwstring::npos)
+					whereSeparator = line.find(u'-');
+				if (whereSeparator == lpwstring::npos)
+					whereSeparator = line.find(u'—');
+				if (whereSeparator != lpwstring::npos)
 				{
 					whereSeparator++;
 					while (whereSeparator < (int)line.length() && iswspace(line[whereSeparator]))
 						whereSeparator++;
-					wstring firstTitle = line.substr(whereSeparator, line.length());
-					if ((whereSeparator = buffer.find(firstTitle, where)) != wstring::npos && whereSeparator < (int)buffer.length() / 5)
+					lpwstring firstTitle = line.substr(whereSeparator, line.length());
+					if ((whereSeparator = buffer.find(firstTitle, where)) != lpwstring::npos && whereSeparator < (int)buffer.length() / 5)
 					{
 						// go to beginning of line
-						while (whereSeparator > 0 && buffer[whereSeparator - 1] != L'\n')
+						while (whereSeparator > 0 && buffer[whereSeparator - 1] != u'\n')
 							whereSeparator--;
 						if (whereSeparator > 0)
 						{
@@ -2810,18 +2835,18 @@ bool getNextParagraph(int& where, wstring& buffer, bool& eofEncountered, int& fi
 	return !paragraph.empty();
 }
 
-bool ci_equal(wchar_t ch1, wchar_t ch2)
+bool ci_equal(lpchar_t ch1, lpchar_t ch2)
 {
 	LFS
 		return towupper(ch1) == towupper(ch2);
 }
 
-size_t noCasefind(const wstring& str1, const wstring& str2, int position)
+size_t noCasefind(const lpwstring& str1, const lpwstring& str2, int position)
 {
 	LFS
-		wstring::const_iterator pos = search(str1.begin() + position, str1.end(), str2.begin(), str2.end(), ci_equal);
+		lpwstring::const_iterator pos = search(str1.begin() + position, str1.end(), str2.begin(), str2.end(), ci_equal);
 	if (pos == str1.end())
-		return wstring::npos;
+		return lpwstring::npos;
 	else
 		return pos - str1.begin();
 }
@@ -2830,10 +2855,10 @@ size_t noCasefind(const wstring& str1, const wstring& str2, int position)
 // if contains ignoreWord, set lastLine to '' and go to beginning
 // if there is no period, save in lastLine and goto beginning.
 // otherwise return true.
-bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& whereLastLine)
+bool findNextParagraph(int& where, lpwstring& buffer, lpwstring& lastLine, int& whereLastLine)
 {
 	LFS
-		wstring paragraph;
+		lpwstring paragraph;
 	bool alreadySkipped = false;
 	int lastNumLines = 0, lastShortLines = 0;
 	while (true)
@@ -2846,18 +2871,18 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 		if (eofEncountered) return false;
 		if (paragraph.empty()) continue;
 		if (indentedLines > 1 || headerLines > 1 || numStartLines > 1) continue; // index or contents
-		wstring saveParagraph = paragraph;
-		wcsupr((wchar_t*)paragraph.c_str());
+		lpwstring saveParagraph = paragraph;
+		lp_toupper_str((lpchar_t*)paragraph.c_str());
 		bool containsIgnoreSequence = false;
 		for (int I = 0; ignoreWords[I]; I++)
 		{
-			if (containsIgnoreSequence = (paragraph.find(ignoreWords[I]) != wstring::npos))
+			if (containsIgnoreSequence = (paragraph.find(ignoreWords[I]) != lpwstring::npos))
 				break;
 		}
 		if (containsIgnoreSequence) continue;
-		if (!wcsncmp(paragraph.c_str() + firstNonBlank, L"AUTHOR OF", wcslen(L"AUTHOR OF")))
+		if (!lp_strncmp(paragraph.c_str() + firstNonBlank, u"AUTHOR OF", lp_strlen(u"AUTHOR OF")))
 			continue;
-		if (!wcsncmp(paragraph.c_str() + firstNonBlank, L"AUTHORS OF", wcslen(L"AUTHORS OF")))
+		if (!lp_strncmp(paragraph.c_str() + firstNonBlank, u"AUTHORS OF", lp_strlen(u"AUTHORS OF")))
 			continue;
 		while (iswspace(saveParagraph[saveParagraph.length() - 1]))
 			saveParagraph.erase(saveParagraph.length() - 1);
@@ -2865,12 +2890,12 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 		int numPeriods = 0;
 		for (int p = 3; p < (signed)saveParagraph.length(); p++)
 		{
-			if (saveParagraph[p] == L'.' && saveParagraph[p - 2] != L'.' && saveParagraph[p - 3] != L'.' && (!iswspace(saveParagraph[p - 2]) || iswspace(saveParagraph[p + 1])))
+			if (saveParagraph[p] == u'.' && saveParagraph[p - 2] != u'.' && saveParagraph[p - 3] != u'.' && (!iswspace(saveParagraph[p - 2]) || iswspace(saveParagraph[p + 1])))
 				numPeriods++;
-			if (saveParagraph[p] == L'?' || saveParagraph[p] == L'!')
+			if (saveParagraph[p] == u'?' || saveParagraph[p] == u'!')
 				numPeriods++;
 		}
-		bool endsWithEOS = saveParagraph[saveParagraph.length() - 1] == L'.' || saveParagraph[saveParagraph.length() - 1] == L'?' || saveParagraph[saveParagraph.length() - 1] == L'!' ||
+		bool endsWithEOS = saveParagraph[saveParagraph.length() - 1] == u'.' || saveParagraph[saveParagraph.length() - 1] == u'?' || saveParagraph[saveParagraph.length() - 1] == u'!' ||
 			cWord::isSingleQuote(saveParagraph[saveParagraph.length() - 1]) || cWord::isDoubleQuote(saveParagraph[saveParagraph.length() - 1]) ||
 			cWord::isDash(saveParagraph[saveParagraph.length() - 1]);
 		bool ccsh = containsSectionHeader(paragraph);
@@ -2904,7 +2929,7 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 			bool csh = containsSectionHeader(paragraph, firstNonBlank);
 			bool ld = !csh && iswdigit(paragraph[firstNonBlank]);
 			bool rn = !csh && isRomanNumeral(paragraph, firstNonBlank);
-			if (rn && paragraph[0] == L'I' && paragraph[1] == L' ' && iswalpha(paragraph[2]))
+			if (rn && paragraph[0] == u'I' && paragraph[1] == u' ' && iswalpha(paragraph[2]))
 				rn = false;
 			indentedLines = numLines = headerLines = numStartLines = numShortLines = firstNonBlank = 0;
 			bool contents = false;
@@ -2912,7 +2937,7 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 			while (getNextParagraph(w2, buffer, eofEncountered, firstNonBlank, paragraph, numLines, indentedLines, headerLines, numStartLines, numShortLines) &&
 				((csh && containsSectionHeader(paragraph, firstNonBlank)) || (ld && iswdigit(paragraph[firstNonBlank])) || (rn && isRomanNumeral(paragraph, firstNonBlank))))
 			{
-				if (paragraph.find(L"CHAPTER I.") != wstring::npos || paragraph.find(saveParagraph) != wstring::npos) break;
+				if (paragraph.find(u"CHAPTER I.") != lpwstring::npos || paragraph.find(saveParagraph) != lpwstring::npos) break;
 				paragraph.clear();
 				lastLine.clear();
 				indentedLines = numLines = headerLines = numStartLines = numShortLines = firstNonBlank = 0;
@@ -2929,17 +2954,17 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 		}
 		if (lastNumLines > 2 && lastShortLines <= 1)
 		{
-			lplog(LOG_INFO, L"Rejecting %s.", lastLine.c_str());
+			lplog(LOG_INFO, u"Rejecting %s.", lastLine.c_str());
 			continue;
 		}
 		if (containsAttribution(lastLine, firstNonBlank)) continue;
 		if (lastLine.length() > 255) continue;
-		if (noCasefind(lastLine, L"preface", 0) != wstring::npos)
+		if (noCasefind(lastLine, u"preface", 0) != lpwstring::npos)
 		{
 			size_t w3;
-			wchar_t* startScanningPosition;
-			if ((w3 = noCasefind(buffer, L"contents", where)) != wstring::npos &&
-				aloneOnLine((wchar_t*)buffer.c_str(), (wchar_t*)buffer.c_str() + w3, L"contents", startScanningPosition, buffer.length()) &&
+			lpchar_t* startScanningPosition;
+			if ((w3 = noCasefind(buffer, u"contents", where)) != lpwstring::npos &&
+				aloneOnLine((lpchar_t*)buffer.c_str(), (lpchar_t*)buffer.c_str() + w3, u"contents", startScanningPosition, buffer.length()) &&
 				w3 < (int)buffer.length() / 10)
 			{
 				where = w3;
@@ -2952,13 +2977,13 @@ bool findNextParagraph(int& where, wstring& buffer, wstring& lastLine, int& wher
 }
 
 // You can use the predicate version of std::search
-bool testStart(wstring& buffer, const wchar_t* str, int& where, bool checkAlone = true)
+bool testStart(lpwstring& buffer, const lpchar_t* str, int& where, bool checkAlone = true)
 {
 	LFS
 		int wt;
-	wchar_t* startScanningPosition;
-	if (((wt = buffer.find(str, where)) != wstring::npos) && wt < 20000 &&
-		aloneOnLine((wchar_t*)buffer.c_str(), (wchar_t*)buffer.c_str() + wt, str, startScanningPosition, buffer.length(), !checkAlone))
+	lpchar_t* startScanningPosition;
+	if (((wt = buffer.find(str, where)) != lpwstring::npos) && wt < 20000 &&
+		aloneOnLine((lpchar_t*)buffer.c_str(), (lpchar_t*)buffer.c_str() + wt, str, startScanningPosition, buffer.length(), !checkAlone))
 	{
 		where = wt;
 		return true;
@@ -2966,34 +2991,34 @@ bool testStart(wstring& buffer, const wchar_t* str, int& where, bool checkAlone 
 	return false;
 }
 
-bool cSource::findStart(wstring& buffer, wstring& start, int& repeatStart, wstring& title)
+bool cSource::findStart(lpwstring& buffer, lpwstring& start, int& repeatStart, lpwstring& title)
 {
 	LFS
 		// go to the first paragraph without any ignoreWords, with at least two consecutive sentences (periods).
 		// then go to the previous title, if it doesn't have any ignoreWords.  If the start occurs before, count repeatStart.
 		int where = 0, whereLastLine = -1, wt = 0;
 	bufferLen = buffer.length();
-	testStart(buffer, L"*END THE SMALL PRINT", where, false);
-	testStart(buffer, L"*END*THE SMALL PRINT", where, false);
-	testStart(buffer, L"START OF THE PROJECT GUTENBERG EBOOK", where, false);
-	testStart(buffer, L"START OF THIS PROJECT GUTENBERG EBOOK", where, false);
-	testStart(buffer, L"CONTENTS", where, false);
-	if (!testStart(buffer, L"PROLOGUE", where) &&
-		!testStart(buffer, L"CHAPTER 1", where) &&
-		!testStart(buffer, L"CHAPTER I", where) && // to prevent CHAPTER IV to be found after CHAPTER 1
-		!testStart(buffer, L"CHAPTER I-", where, false) &&
-		!testStart(buffer, L"CHAPTER I.", where, false) &&
-		!testStart(buffer, L"CHAPTER I:", where, false) &&
-		!testStart(buffer, L"CHAPTER ONE", where))
-		testStart(buffer, L"CHAPTER ONE.", where, false);
-	wchar_t* startScanningPosition;
-	while (((wt = noCasefind(buffer, title, wt + 1)) != wstring::npos) && wt < (int)buffer.length() / 10 &&
-		aloneOnLine((wchar_t*)buffer.c_str(), (wchar_t*)buffer.c_str() + wt, title.c_str(), startScanningPosition, bufferLen))
+	testStart(buffer, u"*END THE SMALL PRINT", where, false);
+	testStart(buffer, u"*END*THE SMALL PRINT", where, false);
+	testStart(buffer, u"START OF THE PROJECT GUTENBERG EBOOK", where, false);
+	testStart(buffer, u"START OF THIS PROJECT GUTENBERG EBOOK", where, false);
+	testStart(buffer, u"CONTENTS", where, false);
+	if (!testStart(buffer, u"PROLOGUE", where) &&
+		!testStart(buffer, u"CHAPTER 1", where) &&
+		!testStart(buffer, u"CHAPTER I", where) && // to prevent CHAPTER IV to be found after CHAPTER 1
+		!testStart(buffer, u"CHAPTER I-", where, false) &&
+		!testStart(buffer, u"CHAPTER I.", where, false) &&
+		!testStart(buffer, u"CHAPTER I:", where, false) &&
+		!testStart(buffer, u"CHAPTER ONE", where))
+		testStart(buffer, u"CHAPTER ONE.", where, false);
+	lpchar_t* startScanningPosition;
+	while (((wt = noCasefind(buffer, title, wt + 1)) != lpwstring::npos) && wt < (int)buffer.length() / 10 &&
+		aloneOnLine((lpchar_t*)buffer.c_str(), (lpchar_t*)buffer.c_str() + wt, title.c_str(), startScanningPosition, bufferLen))
 		where = wt;
-	wstring lastLine;
+	lpwstring lastLine;
 	if (!findNextParagraph(where, buffer, lastLine, whereLastLine))
 	{
-		start = L"**START NOT FOUND**";
+		start = u"**START NOT FOUND**";
 		return false;
 	}
 	// previous non-blank line is lastLine.
@@ -3003,21 +3028,21 @@ bool cSource::findStart(wstring& buffer, wstring& start, int& repeatStart, wstri
 	{
 		wll = buffer.find(lastLine, wll + 1);
 		if (wll < 0 || (wll > where && (wll * 100 / bufferLen) > 10)) break;
-		if (aloneOnLine((wchar_t*)buffer.c_str(), (wchar_t*)buffer.c_str() + wll, lastLine.c_str(), startScanningPosition, bufferLen))
+		if (aloneOnLine((lpchar_t*)buffer.c_str(), (lpchar_t*)buffer.c_str() + wll, lastLine.c_str(), startScanningPosition, bufferLen))
 			repeatStart++;
 	}
 	start = lastLine;
 	return true;
 }
 
-bool readWikiPage(wstring webAddress, wstring& buffer)
+bool readWikiPage(lpwstring webAddress, lpwstring& buffer)
 {
 	LFS
 		int ret;
 	if (ret = cInternet::readPage(webAddress.c_str(), buffer)) return false;
-	if (buffer.find(L"Sorry, but the page or book you tried to access is unavailable") != wstring::npos ||
-		buffer.find(L"<title>403 Forbidden</title>") != wstring::npos ||
-		buffer.find(L"<h1>404 Not Found</h1>") != wstring::npos ||
+	if (buffer.find(u"Sorry, but the page or book you tried to access is unavailable") != lpwstring::npos ||
+		buffer.find(u"<title>403 Forbidden</title>") != lpwstring::npos ||
+		buffer.find(u"<h1>404 Not Found</h1>") != lpwstring::npos ||
 		buffer.empty())
 	{
 		buffer.clear();
@@ -3026,10 +3051,10 @@ bool readWikiPage(wstring webAddress, wstring& buffer)
 	return true;
 }
 
-void unescapeStr(wstring& str)
+void unescapeStr(lpwstring& str)
 {
 	LFS
-		wstring ess;
+		lpwstring ess;
 	for (unsigned int I = 0; I < str.length(); I++)
 	{
 		if (str[I] == '\\' && (str[I + 1] == '\'' || str[I + 1] == '\\')) I++;
@@ -3038,56 +3063,54 @@ void unescapeStr(wstring& str)
 	str = ess;
 }
 
-bool cSource::readSource(wstring& path, bool checkOnly, bool& parsedOnly, bool printProgress, wstring specialExtension)
+bool cSource::readSource(lpwstring& path, bool checkOnly, bool& parsedOnly, bool printProgress, lpwstring specialExtension)
 {
 	LFS
 		//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
-		wstring locationCache = path + L".SourceCache" + specialExtension;
+		lpwstring locationCache = path + u".SourceCache" + specialExtension;
 	if (checkOnly)
-		//return _waccess(locationCache.c_str(),0)==0; // long path limitation
-		return GetFileAttributesW(locationCache.c_str()) != INVALID_FILE_ATTRIBUTES;
-	//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path.c_str(), __FUNCTIONW__);
-	// IOHANDLE fd = _wopen(locationCache.c_str(), O_RDWR | O_BINARY);   // MAX_PATH limitation
-	HANDLE fd = CreateFile(locationCache.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-	///if (fd<0) return false;
-	if (fd == INVALID_HANDLE_VALUE)
+		return access(lp_utf16_to_utf8(locationCache).c_str(), F_OK) == 0; // batch B5
+	//lplog(LOG_WHERE, u"TRACEOPEN %s %s", path.c_str(), LP_TEXT(__func__).c_str());
+	// IOHANDLE fd = lp_wopen(locationCache.c_str(), O_RDWR | O_BINARY);   // MAX_PATH limitation
+	int fd = ::open(lp_utf16_to_utf8(locationCache).c_str(), O_RDONLY);
+	if (fd < 0)
 	{
-		lplog(LOG_ERROR, L"Unable to open source %s - %s", locationCache.c_str(), lastErrorMsg().c_str());
-		CloseHandle(fd);
+		// Batch B5: no ::close() here any more -- the Windows version closed the
+		// handle it had just failed to open, which on POSIX would be close(-1).
+		lplog(LOG_ERROR, u"Unable to open source %s - %s", locationCache.c_str(), lastErrorMsg().c_str());
 		return false;
 	}
 	void* buffer;
-	//int bufferlen=filelength(fd);
-	DWORD bufferlen;
-	if ((bufferlen = GetFileSize(fd, NULL)) == INVALID_FILE_SIZE)
+	// Batch B5: fstat replaces GetFileSize.
+	struct stat fileStatus;
+	if (fstat(fd, &fileStatus) < 0)
 	{
-		lplog(LOG_ERROR, L"Could not get length of file %s.", path.c_str());
-		CloseHandle(fd);
+		lplog(LOG_ERROR, u"Could not get length of file %s.", path.c_str());
+		::close(fd);
 		return false;
 	}
+	size_t bufferlen = (size_t)fileStatus.st_size;
 	// if unable to parse previously, the source is saved as an empty file.
 	if (!bufferlen)
 	{
-		lplog(LOG_INFO, L"empty file %s - previous attempt at parsing failed so not retrying.", path.c_str());
-		CloseHandle(fd);
+		lplog(LOG_INFO, u"empty file %s - previous attempt at parsing failed so not retrying.", path.c_str());
+		::close(fd);
 		return true;
 	}
 	buffer = (void*)tmalloc(bufferlen + 10);
-	//::read(fd,buffer,bufferlen);
-	DWORD NumberOfBytesRead;
-	if (!ReadFile(fd, buffer, bufferlen, &NumberOfBytesRead, 0) || bufferlen != NumberOfBytesRead)
+	if (::read(fd, buffer, bufferlen) != (ssize_t)bufferlen)
 	{
-		lplog(LOG_ERROR, L"Could not get read file %s.", path.c_str());
-		CloseHandle(fd);
+		lplog(LOG_ERROR, u"Could not get read file %s.", path.c_str());
+		::close(fd);
 		return false;
 	}
 	//close(fd);
-	CloseHandle(fd);
+	::close(fd);
 	int where = 0;
 	sourcePath = path;
 	bool success = read((char*)buffer, where, bufferlen, parsedOnly, printProgress, specialExtension);
 	if (!success)
-		lplog(LOG_ERROR, L"Error while reading file %s at position %d.", path.c_str(), m.size());
+		lplog(LOG_ERROR, u"Error while reading file %s at position %d.", path.c_str(), m.size());
 	tfree(bufferlen, buffer);
 	if (!success)
 	{
@@ -3110,11 +3133,11 @@ int cSource::updatePEMACosts(int PEMAPosition, int pattern, int begin, int end, 
 	for (cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + scanPP;
 		scanPP >= 0; scanPP = pem->nextByPatternEnd, pem = pema.begin() + scanPP)
 		if (pem->isChildPattern())
-			lplog(L"%d:RP PEMA SCAN %s[%s](%d,%d) child %s[*](%d,%d)",
+			lplog(u"%d:RP PEMA SCAN %s[%s](%d,%d) child %s[*](%d,%d)",
 				position, patterns[pem->getPattern()]->name.c_str(), patterns[pem->getPattern()]->differentiator.c_str(), position + pem->begin, position + pem->end,
 				patterns[pem->getChildPattern()]->name.c_str(), position, position + pem->getChildLen());
 		else
-			lplog(L"%d:RP PEMA %s[%s](%d,%d) child form %s",
+			lplog(u"%d:RP PEMA %s[%s](%d,%d) child form %s",
 				position, patterns[pem->getPattern()]->name.c_str(), patterns[pem->getPattern()]->differentiator.c_str(), position + pem->begin, position + pem->end,
 				Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str());
 #endif
@@ -3133,13 +3156,13 @@ int cSource::updatePEMACosts(int PEMAPosition, int pattern, int begin, int end, 
 			{
 				int childEnd = pem->getChildLen();
 #ifdef LOG_PATTERN_COST_CHECK
-				lplog(L"%d:RP PEMA %06d %s[%s](%d,%d) child %s[*](%d,%d) element #%d resulted in a minCost of %d.",
+				lplog(u"%d:RP PEMA %06d %s[%s](%d,%d) child %s[*](%d,%d) element #%d resulted in a minCost of %d.",
 					position, PEMAPosition, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
 					patterns[pem->getChildPattern()]->name.c_str(), position, position + childEnd, pem->getElement(), pem->iCost);
 #endif
 				cost = pem->getIncrementalCost();
 				if (nextPEMAPosition >= 0 && !patterns[pattern]->nextPossibleElementRange(pem->getElement()))
-					lplog(LOG_FATAL_ERROR, L"Inconsistency!");
+					lplog(LOG_FATAL_ERROR, u"Inconsistency!");
 				if (nextPEMAPosition >= 0)
 					cost += updatePEMACosts(nextPEMAPosition, pattern, begin, end, position + childEnd, tpema);
 			}
@@ -3150,12 +3173,12 @@ int cSource::updatePEMACosts(int PEMAPosition, int pattern, int begin, int end, 
 				if (im->costable())
 					cost += im->word->second.getUsageCost(pem->getChildForm());
 #ifdef LOG_PATTERN_COST_CHECK
-				lplog(L"%d:RP PEMA %06d %s[%s](%d,%d) child form %s element #%d resulted in a minCost of %d.",
+				lplog(u"%d:RP PEMA %06d %s[%s](%d,%d) child form %s element #%d resulted in a minCost of %d.",
 					position, PEMAPosition, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end,
 					Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str(), pem->getElement(), cost);
 #endif
 				if (nextPEMAPosition >= 0 && !patterns[pattern]->nextPossibleElementRange(pem->getElement()))
-					lplog(LOG_FATAL_ERROR, L"Inconsistency!");
+					lplog(LOG_FATAL_ERROR, u"Inconsistency!");
 				if (nextPEMAPosition >= 0)
 					cost += updatePEMACosts(nextPEMAPosition, pattern, begin, end, position + 1, tpema);
 			}
@@ -3168,7 +3191,7 @@ int cSource::updatePEMACosts(int PEMAPosition, int pattern, int begin, int end, 
 		}
 #ifdef LOG_PATTERN_COST_CHECK
 		else
-			lplog(L"%d:RP PEMA %s[%s](%d,%d) child %s[*](%d,%d) element #%d NO MATCH",
+			lplog(u"%d:RP PEMA %s[%s](%d,%d) child %s[*](%d,%d) element #%d NO MATCH",
 				position, patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), position + pem->begin, position + pem->end,
 				patterns[pem->getChildPattern()]->name.c_str(), position, position + pem->getChildLen(), pem->getElement());
 #endif
@@ -3176,24 +3199,24 @@ int cSource::updatePEMACosts(int PEMAPosition, int pattern, int begin, int end, 
 	{
 		if (!m[position].word->second.isIgnore())
 		{
-			lplog(L"%d:Update PEMA ERROR with pattern %s[%s](%d,%d) [out of %d total positions]!", position,
+			lplog(u"%d:Update PEMA ERROR with pattern %s[%s](%d,%d) [out of %d total positions]!", position,
 				patterns[pattern]->name.c_str(), patterns[pattern]->differentiator.c_str(), begin, end, m.size());
 			int scanPP = PEMAPosition;
 			for (cPatternElementMatchArray::tPatternElementMatch* pem = pema.begin() + scanPP;
 				scanPP >= 0; scanPP = pem->nextByPatternEnd, pem = pema.begin() + scanPP)
 				if (pem->isChildPattern())
-					lplog(L"%d:RP PEMA SCAN %s[%s](%d,%d) child %s[*](%d,%d)",
+					lplog(u"%d:RP PEMA SCAN %s[%s](%d,%d) child %s[*](%d,%d)",
 						position, patterns[pem->getParentPattern()]->name.c_str(), patterns[pem->getParentPattern()]->differentiator.c_str(), position + pem->begin, position + pem->end,
 						patterns[pem->getChildPattern()]->name.c_str(), position, position + pem->getChildLen());
 				else
-					lplog(L"%d:RP PEMA %s[%s](%d,%d) child form %s",
+					lplog(u"%d:RP PEMA %s[%s](%d,%d) child form %s",
 						position, patterns[pem->getParentPattern()]->name.c_str(), patterns[pem->getParentPattern()]->differentiator.c_str(), position + pem->begin, position + pem->end,
 						Forms[m[position].getFormNum(pem->getChildForm())]->shortName.c_str());
 			lplog();
 			return minCost;
 		}
 #ifdef LOG_PATTERN_COST_CHECK
-		lplog(L"%d: IGNORED", position);
+		lplog(u"%d: IGNORED", position);
 #endif
 		return updatePEMACosts(PEMAPosition, pattern, begin, end, position + 1, ppema);
 	}
@@ -3221,15 +3244,15 @@ void cSource::reduceParent(int position, unsigned int PMAOffset, int reducedCost
 	LFS // DLFS
 		cPatternMatchArray::tPatternMatch* pm = m[position].pma.content;
 	if (PMAOffset >= m[position].pma.count)
-		lplog(LOG_FATAL_ERROR, L"    %d:RP PMA pattern offset %d is >= %d - ILLEGAL", position, PMAOffset, m[position].pma.count);
+		lplog(LOG_FATAL_ERROR, u"    %d:RP PMA pattern offset %d is >= %d - ILLEGAL", position, PMAOffset, m[position].pma.count);
 	unsigned int childPattern = pm[PMAOffset].getPattern();;
 	int childLen = pm[PMAOffset].len, originalCost = pm[PMAOffset].getCost();
 	if (childPattern >= patterns.size())
-		lplog(LOG_FATAL_ERROR, L"    %d:RP PMA pattern %d ILLEGAL", position, childPattern);
+		lplog(LOG_FATAL_ERROR, u"    %d:RP PMA pattern %d ILLEGAL", position, childPattern);
 	if (originalCost > reducedCost)
 	{
 #ifdef LOG_PATTERN_COST_CHECK
-		lplog(L"%d:RP PMA pattern %s[%s](%d,%d) reducing cost from %d to %d (offset=%d).", position,
+		lplog(u"%d:RP PMA pattern %s[%s](%d,%d) reducing cost from %d to %d (offset=%d).", position,
 			patterns[childPattern]->name.c_str(), patterns[childPattern]->differentiator.c_str(),
 			position, position + childLen, originalCost, reducedCost, PMAOffset);
 #endif
@@ -3238,7 +3261,7 @@ void cSource::reduceParent(int position, unsigned int PMAOffset, int reducedCost
 	else
 	{
 #ifdef LOG_PATTERN_COST_CHECK
-		lplog(L"%d:RP PMA pattern %s[%s](%d,%d) cost reduction REJECTED (pm[PMAOffset=%d].getCost() %d<=reducedCost %d).", position,
+		lplog(u"%d:RP PMA pattern %s[%s](%d,%d) cost reduction REJECTED (pm[PMAOffset=%d].getCost() %d<=reducedCost %d).", position,
 			patterns[childPattern]->name.c_str(), patterns[childPattern]->differentiator.c_str(),
 			position, position + childLen, PMAOffset, originalCost, reducedCost);
 #endif
@@ -3263,9 +3286,9 @@ void cSource::reduceParent(int position, unsigned int PMAOffset, int reducedCost
 			{
 #ifdef LOG_PATTERN_COST_CHECK
 				char temp[1024];
-				lplog(L"    %d:RP PMA pattern %s[%s](%d,%d) reducing cost (%d->%d) up into parent %s", position,
+				lplog(u"    %d:RP PMA pattern %s[%s](%d,%d) reducing cost (%d->%d) up into parent %s", position,
 					patterns[childPattern]->name.c_str(), patterns[childPattern]->differentiator.c_str(),
-					position, position + childLen, pem->iCost, incrementalCost, pem->toText(position + pem->begin, temp, m));
+					position, position + childLen, pem->iCost, incrementalCost, pem->toText(position + pem->begin, temp, 1024, m));
 #endif
 				pem->setIncrementalCost(incrementalCost);
 				int finalCost = 0;
@@ -3277,12 +3300,12 @@ void cSource::reduceParent(int position, unsigned int PMAOffset, int reducedCost
 				{
 #ifdef LOG_PATTERN_COST_CHECK
 					if ((*ipem)->isChildPattern())
-						lplog(L"    %d:pattern %s[%s](%d,%d)*%d child %s[%s](%d,%d) reduced to cost %d.", position,
+						lplog(u"    %d:pattern %s[%s](%d,%d)*%d child %s[%s](%d,%d) reduced to cost %d.", position,
 							patterns[(*ipem)->getPattern()]->name.c_str(), patterns[(*ipem)->getPattern()]->differentiator.c_str(), position + (*ipem)->begin, position + (*ipem)->end, (*ipem)->getOCost(),
 							patterns[(*ipem)->getChildPattern()]->name.c_str(), patterns[(*ipem)->getChildPattern()]->differentiator.c_str(), position, position + (*ipem)->getChildLen(),
 							finalCost);
 					else
-						lplog(L"    %d:pattern %s[%s](%d,%d)*%d child %d form reduced to cost %d.", position,
+						lplog(u"    %d:pattern %s[%s](%d,%d)*%d child %d form reduced to cost %d.", position,
 							patterns[(*ipem)->getPattern()]->name.c_str(), patterns[(*ipem)->getPattern()]->differentiator.c_str(), position + (*ipem)->begin, position + (*ipem)->end, (*ipem)->getOCost(),
 							(*ipem)->getChildForm(), finalCost);
 #endif
@@ -3323,16 +3346,16 @@ void cSource::reduceParents(int position, vector <unsigned int>& insertionPoints
 void cSource::logPatternChain(int sourcePosition, int insertionPoint, enum cPatternElementMatchArray::chainType patternChainType)
 {
 	LFS
-		const wchar_t* chPT = L"";
+		const lpchar_t* chPT = u"";
 	int chain = -1, originPattern = 0, originEnd = 0;
 	switch (patternChainType)
 	{
 	case cPatternElementMatchArray::BY_PATTERN_END:
-		chPT = L"PE";
+		chPT = u"PE";
 		chain = m[sourcePosition].pma[insertionPoint].pemaByPatternEnd;
 		originPattern = m[sourcePosition].pma[insertionPoint].getPattern();
 		originEnd = m[sourcePosition].pma[insertionPoint].len;
-		::lplog(L"%d:%s CHAIN (%03d,%02d) PMA %d %s[%s]*%d(%d,%d)", sourcePosition, chPT,
+		::lplog(u"%d:%s CHAIN (%03d,%02d) PMA %d %s[%s]*%d(%d,%d)", sourcePosition, chPT,
 			originPattern, originEnd, insertionPoint,
 			patterns[m[sourcePosition].pma[insertionPoint].getPattern()]->name.c_str(),
 			patterns[m[sourcePosition].pma[insertionPoint].getPattern()]->differentiator.c_str(),
@@ -3341,13 +3364,13 @@ void cSource::logPatternChain(int sourcePosition, int insertionPoint, enum cPatt
 			sourcePosition + m[sourcePosition].pma[insertionPoint].len);
 		break;
 	case cPatternElementMatchArray::BY_POSITION:
-		chPT = L"PO";
+		chPT = u"PO";
 		chain = insertionPoint;
 		originPattern = pema[insertionPoint].getParentPattern();
 		originEnd = pema[insertionPoint].end;
 		break;
 	case cPatternElementMatchArray::BY_CHILD_PATTERN_END:
-		chPT = L"PA";
+		chPT = u"PA";
 		chain = insertionPoint;
 		originPattern = pema[insertionPoint].getParentPattern();
 		originEnd = pema[insertionPoint].end;
@@ -3356,7 +3379,7 @@ void cSource::logPatternChain(int sourcePosition, int insertionPoint, enum cPatt
 	while (chain >= 0)
 	{
 		if (pema[chain].isChildPattern())
-			::lplog(L"%d:%s CHAIN (%03d,%02d) %d:%s[%s]*%d(%d,%d) child %s[%s](%d,%d)", sourcePosition, chPT,
+			::lplog(u"%d:%s CHAIN (%03d,%02d) %d:%s[%s]*%d(%d,%d) child %s[%s](%d,%d)", sourcePosition, chPT,
 				originPattern, originEnd, chain,
 				patterns[pema[chain].getParentPattern()]->name.c_str(),
 				patterns[pema[chain].getParentPattern()]->differentiator.c_str(),
@@ -3368,7 +3391,7 @@ void cSource::logPatternChain(int sourcePosition, int insertionPoint, enum cPatt
 				sourcePosition,
 				sourcePosition + pema[chain].getChildLen());
 		else
-			::lplog(L"%d:%s CHAIN (%03d,%02d) %d:%s[%s]*%d(%d,%d) child form %s", sourcePosition, chPT,
+			::lplog(u"%d:%s CHAIN (%03d,%02d) %d:%s[%s]*%d(%d,%d) child form %s", sourcePosition, chPT,
 				originPattern, originEnd, chain,
 				patterns[pema[chain].getParentPattern()]->name.c_str(),
 				patterns[pema[chain].getParentPattern()]->differentiator.c_str(),
@@ -3385,12 +3408,12 @@ void cSource::logPatternChain(int sourcePosition, int insertionPoint, enum cPatt
 	}
 }
 
-cSource::cSource(const wchar_t* databaseServer, int _sourceType, bool generateFormStatistics, bool skipWordInitialization, bool printProgress)
+cSource::cSource(const lpchar_t* databaseServer, int _sourceType, bool generateFormStatistics, bool skipWordInitialization, bool printProgress)
 {
 	LFS
 		sourceType = _sourceType;
-	primaryQuoteType = L"\"";
-	secondaryQuoteType = L"\'";
+	primaryQuoteType = u"\"";
+	secondaryQuoteType = u"\'";
 	bookBuffer = NULL;
 	lastPEMAConsolidationIndex = 1; // minimum PEMA offset is 1 - not 0
 	lastSourcePositionSet = -1;
@@ -3448,7 +3471,7 @@ cSource::cSource(const wchar_t* databaseServer, int _sourceType, bool generateFo
 	{
 		// only read words if it hasn't already been done (lastReadfromDBTime).  This will have to change if we want to read words that have been changed during program execution.
 		if (Words.lastReadfromDBTime < 0 && Words.readWordsFromDB(mysql, generateFormStatistics, printProgress, skipWordInitialization))
-			lplog(LOG_FATAL_ERROR, L"Cannot read database.");
+			lplog(LOG_FATAL_ERROR, u"Cannot read database.");
 	}
 	unlockTables(mysql);
 #ifdef CHECK_WORD_CACHE
@@ -3480,8 +3503,8 @@ cSource::cSource(MYSQL* parentMysql, int _sourceType, int _sourceConfidence)
 	LFS
 	sourceType = _sourceType;
 	sourceConfidence = _sourceConfidence;
-	primaryQuoteType = L"\"";
-	secondaryQuoteType = L"\'";
+	primaryQuoteType = u"\"";
+	secondaryQuoteType = u"\'";
 	bookBuffer = NULL;
 	lastPEMAConsolidationIndex = 1; // minimum PEMA offset is 1 - not 0
 	lastSourcePositionSet = -1;
@@ -3542,20 +3565,20 @@ cSource::cSource(MYSQL* parentMysql, int _sourceType, int _sourceConfidence)
 	sourceInPast = false;
 }
 
-void cSource::writeWords(wstring oPath, wstring specialExtension)
+void cSource::writeWords(lpwstring oPath, lpwstring specialExtension)
 {
 	LFS
-		wchar_t path[1024];
-	wsprintf(path, L"%s.wordCacheFile", oPath.c_str());
-	int fd = _wopen(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
+		lpchar_t path[1024];
+	lp_wsprintf(path, u"%s.wordCacheFile", oPath.c_str());
+	int fd = lp_wopen(path, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (fd < 0)
 	{
-		lplog(L"Cannot open wordCacheFile - %S.", _sys_errlist[errno]);
+		lplog(u"Cannot open wordCacheFile - %S.", strerror(errno));
 		return;
 	}
 	Words.writeFormsCache(fd);
-	unordered_set<wstring> sourceWords;
-	char buffer[MAX_BUF];
+	unordered_set<lpwstring> sourceWords;
+	cTrackedBuffer buffer(MAX_BUF); // heap, not stack: MAX_BUF is 10 MiB
 	int where = 0, numWordInSource = 0;
 	for (cWordMatch im : m)
 	{
@@ -3595,10 +3618,10 @@ bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource* childSo
 	LFS
 		if (parentWord == Words.end())
 		{
-			lplog(LOG_ERROR, L"parent word is not in dictionary!");
+			lplog(LOG_ERROR, u"parent word is not in dictionary!");
 			return false;
 		}
-	unordered_set <wstring> childSynonyms, parentSynonyms;
+	unordered_set <lpwstring> childSynonyms, parentSynonyms;
 	getSynonyms(parentWord->first, parentSynonyms, NOUN);
 	tIWMM parentME = parentWord->second.mainEntry;
 	if (parentME == wNULL)
@@ -3607,43 +3630,43 @@ bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource* childSo
 	{
 		if (childSource->m[childWhere].endObjectPosition >= 0)
 			childWhere = childSource->m[childWhere].endObjectPosition - 1;
-		wstring childWord = childSource->m[childWhere].getMainEntry()->first;
-		if (childWord.find('%') != wstring::npos)
+		lpwstring childWord = childSource->m[childWhere].getMainEntry()->first;
+		if (childWord.find('%') != lpwstring::npos)
 			return false;
-		wstring tmpstr;
+		lpwstring tmpstr;
 		if (parentWord->first == childWord || parentME->first == childWord)
 		{
 			if (logSynonymDetail && childSource->debugTrace.traceWhere)
-				lplog(LOG_WHERE, L"TSYM [1] comparing PARENT %s[%s] against CHILD [%s]", parentWord->first.c_str(), parentME->first.c_str(), childWord.c_str());
+				lplog(LOG_WHERE, u"TSYM [1] comparing PARENT %s[%s] against CHILD [%s]", parentWord->first.c_str(), parentME->first.c_str(), childWord.c_str());
 			return true;
 		}
 		if (logSynonymDetail && childSource->debugTrace.traceWhere)
-			lplog(LOG_WHERE, L"TSYM [1] comparing CHILD %s against synonyms [%s]%s", childWord.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str());
+			lplog(LOG_WHERE, u"TSYM [1] comparing CHILD %s against synonyms [%s]%s", childWord.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, u"|").c_str());
 		if (parentSynonyms.find(childWord) != parentSynonyms.end())
 			return true;
 		getSynonyms(childWord, childSynonyms, NOUN);
 		if (logSynonymDetail && childSource->debugTrace.traceWhere)
-			lplog(LOG_WHERE, L"TSYM [1] comparing PARENT %s against synonyms [%s]%s", parentME->first.c_str(), childWord.c_str(), setString(childSynonyms, tmpstr, L"|").c_str());
+			lplog(LOG_WHERE, u"TSYM [1] comparing PARENT %s against synonyms [%s]%s", parentME->first.c_str(), childWord.c_str(), setString(childSynonyms, tmpstr, u"|").c_str());
 		if (childSynonyms.find(parentME->first) != childSynonyms.end())
 			return true;
 	}
 	for (unsigned int mo = 0; mo < childSource->m[childWhere].objectMatches.size(); mo++)
 	{
 		int cw, ownerWhere;
-		if ((cw = childSource->objects[childSource->m[childWhere].objectMatches[mo].object].originalLocation) >= 0 && !childSource->isDefiniteObject(cw, L"CHILD MATCHED", ownerWhere, false))
+		if ((cw = childSource->objects[childSource->m[childWhere].objectMatches[mo].object].originalLocation) >= 0 && !childSource->isDefiniteObject(cw, u"CHILD MATCHED", ownerWhere, false))
 		{
 			if (childSource->m[cw].endObjectPosition >= 0)
 				cw = childSource->m[cw].endObjectPosition - 1;
-			wstring tmpstr;
+			lpwstring tmpstr;
 			getSynonyms(childSource->m[cw].word->first, childSynonyms, NOUN);
 			bool childFound = childSynonyms.find(parentWord->first) != childSynonyms.end();
 			if (logSynonymDetail && childSource->debugTrace.traceWhere)
-				lplog(LOG_WHERE, L"TSYM [2CHILD] comparing %s against synonyms [%s]%s (%s)", parentWord->first.c_str(), childSource->m[cw].word->first.c_str(), setString(childSynonyms, tmpstr, L"|").c_str(), (childFound) ? L"true" : L"false");
+				lplog(LOG_WHERE, u"TSYM [2CHILD] comparing %s against synonyms [%s]%s (%s)", parentWord->first.c_str(), childSource->m[cw].word->first.c_str(), setString(childSynonyms, tmpstr, u"|").c_str(), (childFound) ? u"true" : u"false");
 			if (childFound)
 				return true;
 			bool parentFound = parentSynonyms.find(childSource->m[cw].word->first) != parentSynonyms.end();
 			if (logSynonymDetail && childSource->debugTrace.traceWhere)
-				lplog(LOG_WHERE, L"TSYM [2PARENT] comparing %s against synonyms [%s]%s (%s)", childSource->m[cw].word->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str(), (parentFound) ? L"true" : L"false");
+				lplog(LOG_WHERE, u"TSYM [2PARENT] comparing %s against synonyms [%s]%s (%s)", childSource->m[cw].word->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, u"|").c_str(), (parentFound) ? u"true" : u"false");
 			if (parentFound)
 				return true;
 		}
@@ -3654,12 +3677,12 @@ bool cSource::matchChildSourcePositionSynonym(tIWMM parentWord, cSource* childSo
 // does this represent a definite noun, like Sting or MIT?  If so, disallow synonyms (or perhaps use another kind of synonym which is not yet supported)
 // also people are not allowed
 // also include subjects which follow immediately after relativizers which have resolved to an object.
-bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int& ownerWhere, bool recursed)
+bool cSource::isDefiniteObject(int where, const lpchar_t* definiteObjectType, int& ownerWhere, bool recursed)
 {
 	LFS
 		int object = m[where].getObject();
 	if (object < 0) return false;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	int bp = m[where].beginObjectPosition;
 	switch (objects[object].objectClass)
 	{
@@ -3667,24 +3690,24 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 		if (m[bp].queryWinnerForm(indefinitePronounForm) >= 0)
 		{
 			if (logSynonymDetail)
-				lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byIndefiniteClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), L"NOT ");
+				lplog(LOG_WHERE, u"%06d:TSYM %s %s is %sa definite object [byIndefiniteClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), u"NOT ");
 			return false;
 		}
 	case REFLEXIVE_PRONOUN_OBJECT_CLASS:
 	case RECIPROCAL_PRONOUN_OBJECT_CLASS:
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byClassGender].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (objects[object].neuter && !objects[object].male && !objects[object].female) ? L"NOT " : L"");
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is %sa definite object [byClassGender].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (objects[object].neuter && !objects[object].male && !objects[object].female) ? u"NOT " : u"");
 		return !objects[object].neuter || objects[object].male || objects[object].female;
 	case GENDERED_DEMONYM_OBJECT_CLASS: // the Italians
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is %sa definite object [byDemonym].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (m[bp].word->first == L"a" || m[bp].word->first == L"an") ? L"" : L"NOT ");
-		return (m[bp].word->first == L"a" || m[bp].word->first == L"an");
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is %sa definite object [byDemonym].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (m[bp].word->first == u"a" || m[bp].word->first == u"an") ? u"" : u"NOT ");
+		return (m[bp].word->first == u"a" || m[bp].word->first == u"an");
 	case PLEONASTIC_OBJECT_CLASS: // it, which is not matched and so is meaningless
 		return false;
 	case NON_GENDERED_BUSINESS_OBJECT_CLASS: // G.M.
 	case GENDERED_RELATIVE_OBJECT_CLASS: // sister ; brother / these have different kinds of synonyms which are more like isKindOf
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		return true;
 	case VERB_OBJECT_CLASS: // the news I brought / running -- objects that contain verbs
 	case GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS: // occupation=plumber;role=leader;activity=runner
@@ -3705,15 +3728,15 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 					(m[m[where].endObjectPosition - 2].flags & cWordMatch::flagNounOwner))))
 		{
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+				lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 			return true;
 		}
 		if (bp > 0 && m[bp - 1].queryWinnerForm(relativizerForm) != -1 && m[bp - 1].objectMatches.size() > 0)
 		{
 			ownerWhere = bp - 1;
-			wstring tmpstr2;
+			lpwstring tmpstr2;
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byRelativizer - %s].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), objectString(m[bp - 1].objectMatches[0].object, tmpstr2, false).c_str());
+				lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byRelativizer - %s].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), objectString(m[bp - 1].objectMatches[0].object, tmpstr2, false).c_str());
 			return true;
 		}
 		ownerWhere = -1;
@@ -3731,9 +3754,9 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 			if (logSynonymDetail)
 			{
 				if (omsize > 0)
-					lplog(LOG_WHERE, L"%06d:TSYM %s %s is%s a definite object [byClass (2)].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (accumulatedDefiniteObject) ? L"" : L" NOT");
+					lplog(LOG_WHERE, u"%06d:TSYM %s %s is%s a definite object [byClass (2)].", where, definiteObjectType, objectString(object, tmpstr, false).c_str(), (accumulatedDefiniteObject) ? u"" : u" NOT");
 				else
-					lplog(LOG_WHERE, L"%06d:TSYM %s %s is NOT a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+					lplog(LOG_WHERE, u"%06d:TSYM %s %s is NOT a definite object [byClass].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 			}
 			if (omsize && accumulatedDefiniteObject)
 				return true;
@@ -3748,13 +3771,13 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 	if (objects[object].isWikiBusiness || objects[object].isWikiPerson || objects[object].isWikiPlace || objects[object].isWikiWork)
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byWiki].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byWiki].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		return true;
 	}
 	if (objects[object].name.hon != wNULL)
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byHonorific].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byHonorific].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		return true;
 	}
 	switch (objects[object].getSubType())
@@ -3771,7 +3794,7 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 	case US_STATE_TERRITORY_REGION:
 	case WORLD_CITY_TOWN_VILLAGE:
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [bySubType].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [bySubType].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		return true;
 	}
 	if (m[where].endObjectPosition - m[where].beginObjectPosition > 1 &&
@@ -3780,19 +3803,19 @@ bool cSource::isDefiniteObject(int where, const wchar_t* definiteObjectType, int
 			(m[m[where].beginObjectPosition].flags & cWordMatch::flagNounOwner)))
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byOwner].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		ownerWhere = m[where].beginObjectPosition;
 		return true;
 	}
 	// the Nobel Prize
-	if (m[m[where].beginObjectPosition].word->first == L"the")
+	if (m[m[where].beginObjectPosition].word->first == u"the")
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%06d:TSYM %s %s is a definite object [byThe].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_WHERE, u"%06d:TSYM %s %s is a definite object [byThe].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 		return true;
 	}
 	if (logSynonymDetail)
-		lplog(LOG_WHERE, L"%06d:TSYM %s %s is NOT a definite object [default].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
+		lplog(LOG_WHERE, u"%06d:TSYM %s %s is NOT a definite object [default].", where, definiteObjectType, objectString(object, tmpstr, false).c_str());
 	return false;
 }
 
@@ -3811,11 +3834,11 @@ int cSource::determineKindBitField(cSource* source, int where, int& wikiBitField
 	LFS
 		if (source->m[where].getObject() < 0 && source->m[where].objectMatches.size() == 0)
 		{
-			if (matchChildSourcePositionSynonym(Words.query(L"business"), source, where) || source->m[where].getMainEntry()->first == L"business")
+			if (matchChildSourcePositionSynonym(Words.query(u"business"), source, where) || source->m[where].getMainEntry()->first == u"business")
 				return wikiBitField |= 1;
-			if (matchChildSourcePositionSynonym(Words.query(L"person"), source, where) || source->m[where].getMainEntry()->first == L"person")
+			if (matchChildSourcePositionSynonym(Words.query(u"person"), source, where) || source->m[where].getMainEntry()->first == u"person")
 				return wikiBitField |= 2;
-			if (matchChildSourcePositionSynonym(Words.query(L"place"), source, where) || source->m[where].getMainEntry()->first == L"place")
+			if (matchChildSourcePositionSynonym(Words.query(u"place"), source, where) || source->m[where].getMainEntry()->first == u"place")
 				return wikiBitField |= 4;
 			return -1;
 		}
@@ -3831,22 +3854,22 @@ int cSource::determineKindBitField(cSource* source, int where, int& wikiBitField
 			(source->m[where].endObjectPosition - source->m[where].beginObjectPosition == 1 ||
 				(source->m[where].endObjectPosition - source->m[where].beginObjectPosition == 2 && source->m[source->m[where].beginObjectPosition].queryForm(determinerForm) != -1)))
 		{
-			if (matchChildSourcePositionSynonym(Words.query(L"business"), source, where) || source->m[where].getMainEntry()->first == L"business")
+			if (matchChildSourcePositionSynonym(Words.query(u"business"), source, where) || source->m[where].getMainEntry()->first == u"business")
 				return wikiBitField |= 1;
-			if (matchChildSourcePositionSynonym(Words.query(L"person"), source, where) || source->m[where].getMainEntry()->first == L"person")
+			if (matchChildSourcePositionSynonym(Words.query(u"person"), source, where) || source->m[where].getMainEntry()->first == u"person")
 				return wikiBitField |= 2;
-			if (matchChildSourcePositionSynonym(Words.query(L"place"), source, where) || source->m[where].getMainEntry()->first == L"place")
+			if (matchChildSourcePositionSynonym(Words.query(u"place"), source, where) || source->m[where].getMainEntry()->first == u"place")
 				return wikiBitField |= 4;
 		}
 	}
 	return 0;
 }
 
-void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool& synonym, unordered_set <wstring>& parentSynonyms, wstring pw, wstring pwme, int& lowestConfidence, unordered_map <wstring, int >::iterator ami)
+void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool& synonym, unordered_set <lpwstring>& parentSynonyms, lpwstring pw, lpwstring pwme, int& lowestConfidence, unordered_map <lpwstring, int >::iterator ami)
 {
 	LFS // DLFS
  //if (logQuestionDetail)
- //	lplog(logType,L"checkParticularPartSemanticMatchWord child=%s",ami->first.c_str());	
+ //	lplog(logType,u"checkParticularPartSemanticMatchWord child=%s",ami->first.c_str());	
 		bool rememberSynonym = false;
 	if (ami->first == pw || ami->first == pwme || (rememberSynonym = parentSynonyms.find(ami->first) != parentSynonyms.end()))
 	{
@@ -3856,8 +3879,8 @@ void cSource::checkParticularPartSemanticMatchWord(int logType, int parentWhere,
 			synonym = rememberSynonym;
 			if (logQuestionDetail)
 			{
-				wstring tmpstr;
-				lplog(logType, L"object %s:(primary match:%s[%s]) MATCH %s%s", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), ami->first.c_str(), (synonym) ? L" SYNONYM" : L"");
+				lpwstring tmpstr;
+				lplog(logType, u"object %s:(primary match:%s[%s]) MATCH %s%s", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), ami->first.c_str(), (synonym) ? u" SYNONYM" : u"");
 			}
 		}
 	}
@@ -3874,52 +3897,52 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 	if (childObject < 0)
 		return CONFIDENCE_NOMATCH;
 	if (childSource->objects[childObject].originalLocation < 0 || childSource->m[childSource->objects[childObject].originalLocation].beginObjectPosition < 0 || childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition < 0)
-		lplog(LOG_FATAL_ERROR, L"Incorrect object information detected.");
-	unordered_map <wstring, int > associationMap;
-	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__), fileCaching);
-	wstring tmpstr, tmpstr2, pw = m[parentWhere].word->first;
+		lplog(LOG_FATAL_ERROR, u"Incorrect object information detected.");
+	unordered_map <lpwstring, int > associationMap;
+	childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, LP_TEXT(__func__), fileCaching);
+	lpwstring tmpstr, tmpstr2, pw = m[parentWhere].word->first;
 	transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
-	wstring pwme = m[parentWhere].getMainEntry()->first;
-	unordered_set <wstring> parentSynonyms;
+	lpwstring pwme = m[parentWhere].getMainEntry()->first;
+	unordered_set <lpwstring> parentSynonyms;
 	getSynonyms(pw, parentSynonyms, NOUN);
 	getSynonyms(pwme, parentSynonyms, NOUN);
 	int lowestConfidence = CONFIDENCE_NOMATCH;
-	setString(parentSynonyms, tmpstr2, L"|");
+	setString(parentSynonyms, tmpstr2, u"|");
 	tmpstr.clear();
-	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
-		tmpstr += ami->first + L"|";
+	for (unordered_map <lpwstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
+		tmpstr += ami->first + u"|";
 	if (logSynonymDetail)
 	{
-		wstring parentObject, childObjectStr, childObjectOriginalLocation;
+		lpwstring parentObject, childObjectStr, childObjectOriginalLocation;
 		whereString(parentWhere, parentObject, false);
 		childSource->whereString(childWhere, childObjectStr, false);
 		childSource->whereString(childSource->objects[childObject].originalLocation, childObjectOriginalLocation, false);
-		lplog(logType, L"%d:Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.", parentWhere,
+		lplog(logType, u"%d:Comparing [%d, %d] %s and %s(%s)\nassociationMap for %s: %s\nparentSynonyms for %s: %s.", parentWhere,
 			parentWhere, childWhere, parentObject.c_str(), childObjectStr.c_str(), childObjectOriginalLocation.c_str(),
 			childObjectStr.c_str(), tmpstr.c_str(), pw.c_str(), tmpstr2.c_str());
 	}
-	for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd && lowestConfidence > 1; ami++)
+	for (unordered_map <lpwstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd && lowestConfidence > 1; ami++)
 		checkParticularPartSemanticMatchWord(logType, parentWhere, synonym, parentSynonyms, pw, pwme, lowestConfidence, ami);
 	if (lowestConfidence == CONFIDENCE_NOMATCH)
 	{
 		int lastChildWhere = childSource->objects[childObject].originalLocation;
 		if (childSource->objects[childObject].objectClass == NAME_OBJECT_CLASS || childSource->objects[childObject].objectClass == NON_GENDERED_NAME_OBJECT_CLASS)
 			lastChildWhere = childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition - 1;
-		wstring cw = childSource->m[lastChildWhere].word->first;
+		lpwstring cw = childSource->m[lastChildWhere].word->first;
 		transform(cw.begin(), cw.end(), cw.begin(), (int(*)(int)) tolower);
-		wstring cwme = childSource->m[lastChildWhere].getMainEntry()->first;
+		lpwstring cwme = childSource->m[lastChildWhere].getMainEntry()->first;
 		if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-			lplog(logType, L"checkParticularPartSemanticMatch child alternate=%s[%s]", cw.c_str(), cwme.c_str());
+			lplog(logType, u"checkParticularPartSemanticMatch child alternate=%s[%s]", cw.c_str(), cwme.c_str());
 		if (pw == cw || pwme == cwme)
 		{
 			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-				lplog(logType, L"parent word %s:(primary match:%s[%s]) MATCH %s[%s]", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), cw.c_str(), cwme.c_str());
+				lplog(logType, u"parent word %s:(primary match:%s[%s]) MATCH %s[%s]", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), cw.c_str(), cwme.c_str());
 			lowestConfidence = CONFIDENCE_NOMATCH / 4;
 		}
 		if (synonym = lowestConfidence == CONFIDENCE_NOMATCH && (parentSynonyms.find(cw) != parentSynonyms.end() || parentSynonyms.find(cwme) != parentSynonyms.end()))
 		{
 			if (logSynonymDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-				lplog(logType, L"word %s MATCH %s[%s] SYNONYM", whereString(parentWhere, tmpstr, false).c_str(), cw.c_str(), cwme.c_str());
+				lplog(logType, u"word %s MATCH %s[%s] SYNONYM", whereString(parentWhere, tmpstr, false).c_str(), cw.c_str(), cwme.c_str());
 			lowestConfidence = CONFIDENCE_NOMATCH / 2;
 		}
 	}
@@ -3932,10 +3955,10 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 		{
 			semanticMismatch = 10;
 			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-				lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] BitField mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+				lplog(logType, u"object parent [%s]:(primary match:%s[%s]) child [%s] BitField mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
 		}
 		// profession
-		const wchar_t* professionLimitedSynonyms[] = { L"avocation", L"calling", L"career", L"employment", L"occupation", L"vocation", L"job", L"livelihood", L"profession", L"work", NULL };
+		const lpchar_t* professionLimitedSynonyms[] = { u"avocation", u"calling", u"career", u"employment", u"occupation", u"vocation", u"job", u"livelihood", u"profession", u"work", NULL };
 		bool parentIsProfession = false;
 		for (int I = 0; professionLimitedSynonyms[I] && !parentIsProfession; I++)
 			parentIsProfession |= m[parentWhere].word->first == professionLimitedSynonyms[I];
@@ -3943,13 +3966,13 @@ int cSource::checkParticularPartSemanticMatch(int logType, int parentWhere, cSou
 		{
 			semanticMismatch = 11;
 			if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-				lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] profession mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+				lplog(logType, u"object parent [%s]:(primary match:%s[%s]) child [%s] profession mismatch", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
 		}
 		if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-			lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] NO MATCH", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
+			lplog(logType, u"object parent [%s]:(primary match:%s[%s]) child [%s] NO MATCH", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), parentWikiBitField, childWikiBitField);
 	}
 	else if (logQuestionDetail && ((logType == LOG_WHERE && debugTrace.traceWhere) || (logType == LOG_RESOLUTION && debugTrace.traceSpeakerResolution)))
-		lplog(logType, L"object parent [%s]:(primary match:%s[%s]) child [%s] lowest confidence %d", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), lowestConfidence);
+		lplog(logType, u"object parent [%s]:(primary match:%s[%s]) child [%s] lowest confidence %d", whereString(parentWhere, tmpstr, false).c_str(), pw.c_str(), pwme.c_str(), childSource->objectString(childObject, tmpstr2, false).c_str(), lowestConfidence);
 	return lowestConfidence;
 }
 
@@ -4050,7 +4073,7 @@ int cSource::copyDirectlyAttachedPrepositionalPhrases(int whereParentObject, cSo
 	return m.size() - m[whereParentObject].relPrep;
 }
 
-void cWordMatch::adjustValue(int& val, wstring valString, unordered_map <int, int>& sourceIndexMap)
+void cWordMatch::adjustValue(int& val, lpwstring valString, unordered_map <int, int>& sourceIndexMap)
 {
 	if (val < 0)
 		return;
@@ -4058,7 +4081,7 @@ void cWordMatch::adjustValue(int& val, wstring valString, unordered_map <int, in
 		val = sourceIndexMap[val];
 	else
 	{
-		lplog(LOG_WHERE, L"Unable to adjust index %s of %d. Setting to -1.", valString.c_str(), val);
+		lplog(LOG_WHERE, u"Unable to adjust index %s of %d. Setting to -1.", valString.c_str(), val);
 		val = -1;
 	}
 }
@@ -4067,25 +4090,25 @@ void cWordMatch::adjustReferences(int index, bool keepObjects, unordered_map <in
 {
 	LFS
 		if (beginObjectPosition >= 0 && sourceIndexMap.find(beginObjectPosition) == sourceIndexMap.end())
-			lplog(LOG_FATAL_ERROR, L"beginObjectPosition has illegal value of %d!", beginObjectPosition);
-	adjustValue(beginObjectPosition, L"beginObjectPosition", sourceIndexMap);
+			lplog(LOG_FATAL_ERROR, u"beginObjectPosition has illegal value of %d!", beginObjectPosition);
+	adjustValue(beginObjectPosition, u"beginObjectPosition", sourceIndexMap);
 	if (endObjectPosition >= 0)
 	{
 		if (sourceIndexMap.find(endObjectPosition - 1) == sourceIndexMap.end())
-			lplog(LOG_FATAL_ERROR, L"endObjectPosition has illegal value of %d!", endObjectPosition);
+			lplog(LOG_FATAL_ERROR, u"endObjectPosition has illegal value of %d!", endObjectPosition);
 		endObjectPosition = sourceIndexMap[endObjectPosition - 1] + 1;
 	}
-	adjustValue(relPrep, L"relPrep", sourceIndexMap);
-	adjustValue(relObject, L"relObject", sourceIndexMap);
-	adjustValue(relSubject, L"relSubject", sourceIndexMap);
-	adjustValue(relVerb, L"relVerb", sourceIndexMap);
-	adjustValue(nextQuote, L"nextQuote", sourceIndexMap);
-	adjustValue(principalWherePosition, L"principalWherePosition", sourceIndexMap);
+	adjustValue(relPrep, u"relPrep", sourceIndexMap);
+	adjustValue(relObject, u"relObject", sourceIndexMap);
+	adjustValue(relSubject, u"relSubject", sourceIndexMap);
+	adjustValue(relVerb, u"relVerb", sourceIndexMap);
+	adjustValue(nextQuote, u"nextQuote", sourceIndexMap);
+	adjustValue(principalWherePosition, u"principalWherePosition", sourceIndexMap);
 	beginPEMAPosition = -1;
 	endPEMAPosition = -1;
 	keepObjects = false;
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
+		lplog(LOG_WHERE, u"%d:COPY CHILD->PARENT %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d",
 			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relSubject, relVerb, relPrep, getRelObject(), nextQuote, principalWherePosition);
 }
 
@@ -4112,7 +4135,7 @@ void cWordMatch::adjustReferences(int index, int offset)
 	endPEMAPosition = -1;
 	if (logQuestionDetail)
 	{
-		lplog(LOG_WHERE, L"parentWhere %d:COPY SELF %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d offset=%d",
+		lplog(LOG_WHERE, u"parentWhere %d:COPY SELF %s beginObjectPosition=%d endObjectPosition=%d relSubject=%d relVerb=%d relPrep=%d relObject=%d nextQuote=%d principalWherePosition=%d offset=%d",
 			index, word->first.c_str(), beginObjectPosition, endObjectPosition, relSubject, relVerb, relPrep, getRelObject(), nextQuote, principalWherePosition, offset);
 	}
 }
@@ -4127,8 +4150,8 @@ vector <int> cSource::copyChildrenIntoParent(cSource* childSource, int whereChil
 		sourceIndexMap[whereChild] = m.size();
 		m.push_back(childSource->m[whereChild]);
 		parentLocations.push_back(m.size() - 1);
-		wstring tmpstr, tmpstr2;
-		lplog(LOG_WHERE, L"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), m.size() - 1, whereString(m.size() - 1, tmpstr2, true).c_str());
+		lpwstring tmpstr, tmpstr2;
+		lplog(LOG_WHERE, u"Transferred %d:%s to %d:%s", whereChild, childSource->whereString(whereChild, tmpstr, true).c_str(), m.size() - 1, whereString(m.size() - 1, tmpstr2, true).c_str());
 	}
 	else
 	{
@@ -4188,8 +4211,8 @@ vector <int> cSource::copyChildrenIntoParent(cSource* childSource, int whereChil
 			}
 			if (skipObject)
 			{
-				wstring tmpstr, tmpstr2;
-				lplog(LOG_WHERE, L"Did NOT transfer %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str());
+				lpwstring tmpstr, tmpstr2;
+				lplog(LOG_WHERE, u"Did NOT transfer %d:%s", whereObject, childSource->objectString(co, tmpstr, true).c_str());
 				continue;
 			}
 			lowestBeginPosition = min(lowestBeginPosition, childSource->m[whereObject].beginObjectPosition);
@@ -4203,7 +4226,7 @@ vector <int> cSource::copyChildrenIntoParent(cSource* childSource, int whereChil
 			if (sourceIndexMap.find(whereObject) == sourceIndexMap.end())
 			{
 				if (makeCopy)
-					lplog(LOG_FATAL_ERROR, L"whereObject not found when making copy of object.");
+					lplog(LOG_FATAL_ERROR, u"whereObject not found when making copy of object.");
 				else
 					whereParentObject = sourceIndexMap[whereObject - 1] + 1; // if not making copy, and whereObject not found, then case 0 must apply (see above)
 			}
@@ -4235,10 +4258,10 @@ vector <int> cSource::copyChildrenIntoParent(cSource* childSource, int whereChil
 			objects[parentObject].eliminated = false;
 			if (makeCopy)
 				copyDirectlyAttachedPrepositionalPhrases(whereParentObject, childSource, whereObject, sourceIndexMap, false);
-			wstring tmpstr, tmpstr2;
-			lplog(LOG_WHERE, L"Transferred %d:%s (and associated objects) to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(), (makeCopy) ? L"copy made" : L"no copy made");
+			lpwstring tmpstr, tmpstr2;
+			lplog(LOG_WHERE, u"Transferred %d:%s (and associated objects) to %d:%s [%s]", whereObject, childSource->objectString(co, tmpstr, true).c_str(), whereParentObject, whereString(whereParentObject, tmpstr2, true).c_str(), (makeCopy) ? u"copy made" : u"no copy made");
 			// negative objects allowed in some cases, so make it REALLY negative (past wordOrderWords and eOBJECTS)
-			lplog(LOG_WHERE, L"Setting negative object - %d object %d->%d!", whereParentObject, parentObject, -parentObject - 1000);
+			lplog(LOG_WHERE, u"Setting negative object - %d object %d->%d!", whereParentObject, parentObject, -parentObject - 1000);
 			m[whereParentObject].setObject(-parentObject - 1000); // set to negative - will be reversed by scan which must always be called after this when clear is false - negative objects are allowed in some cases SON[setObjectNegative]
 		}
 	}
@@ -4249,7 +4272,7 @@ int cSource::detectAttachedPhrase(cSyntacticRelationGroup* srg, int& relVerb)
 {
 	LFS
 		int collectionWhere = srg->whereQuestionTypeObject;
-	if (m[collectionWhere].beginObjectPosition >= 0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"F") != -1 && (relVerb = m[collectionWhere].getRelVerb()) >= 0 && m[relVerb].relSubject == collectionWhere)
+	if (m[collectionWhere].beginObjectPosition >= 0 && m[m[collectionWhere].beginObjectPosition].pma.queryPatternDiff(u"__NOUN", u"F") != -1 && (relVerb = m[collectionWhere].getRelVerb()) >= 0 && m[relVerb].relSubject == collectionWhere)
 		return 0;
 	return -1;
 }
@@ -4257,7 +4280,7 @@ int cSource::detectAttachedPhrase(cSyntacticRelationGroup* srg, int& relVerb)
 bool cSource::compareObjectString(int whereObject1, int whereObject2)
 {
 	LFS
-		wstring whereObject1Str, whereObject2Str;
+		lpwstring whereObject1Str, whereObject2Str;
 	whereString(whereObject1, whereObject1Str, true);
 	whereString(whereObject2, whereObject2Str, true);
 	return whereObject1Str == whereObject2Str;
@@ -4290,34 +4313,34 @@ int cSource::ruleCorrectLPClassAdjectiveToAdverb(int wordSourceIndex)
 	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
 	int nounPlusOneFormOffset = m[wordSourceIndex + 1].word->second.query(nounForm);
-	if (m[wordSourceIndex].word->first != L"that" && // 'that' is very ambiguous
+	if (m[wordSourceIndex].word->first != u"that" && // 'that' is very ambiguous
 		m[wordSourceIndex].isOnlyWinner(adjectiveForm) &&
-		m[wordSourceIndex + 1].queryWinnerForm(L"noun") < 0 &&
-		m[wordSourceIndex + 1].queryWinnerForm(L"Proper Noun") < 0 &&
-		m[wordSourceIndex + 1].queryWinnerForm(L"indefinite_pronoun") < 0 &&
-		m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0 &&
-		m[wordSourceIndex + 1].queryWinnerForm(L"adjective") < 0 && // only an adjective, not before a noun
+		m[wordSourceIndex + 1].queryWinnerForm(u"noun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(u"Proper Noun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(u"indefinite_pronoun") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(u"numeral_cardinal") < 0 &&
+		m[wordSourceIndex + 1].queryWinnerForm(u"adjective") < 0 && // only an adjective, not before a noun
 		(nounPlusOneFormOffset < 0 || m[wordSourceIndex + 1].word->second.getUsageCost(nounPlusOneFormOffset) == 4) &&
-		(adverbFormOffset = m[wordSourceIndex].queryForm(L"adverb")) >= 0 && m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) < 2 &&
-		m[wordSourceIndex].queryForm(L"interjection") < 0 && // interjection acts similarly to adverb
+		(adverbFormOffset = m[wordSourceIndex].queryForm(u"adverb")) >= 0 && m[wordSourceIndex].word->second.getUsageCost(adverbFormOffset) < 2 &&
+		m[wordSourceIndex].queryForm(u"interjection") < 0 && // interjection acts similarly to adverb
 		(iswalpha(m[wordSourceIndex + 1].word->first[0]) || wordSourceIndex == 0 || iswalpha(m[wordSourceIndex - 1].word->first[0])) && // not alone in the sentence
-		(wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") < 0 && m[wordSourceIndex - 1].word->first != L"be" && m[wordSourceIndex - 1].word->first != L"being")) && // is/ishas before means it really is an adjective!
-		(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") < 0 && m[wordSourceIndex - 2].word->first != L"be" && m[wordSourceIndex - 2].word->first != L"being")) && // is/ishas before means it really is an adjective!
-		(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") < 0 && m[wordSourceIndex - 3].word->first != L"be" && m[wordSourceIndex - 3].word->first != L"being")) && // is/ishas before means it really is an adjective!
-		(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") < 0 && m[wordSourceIndex - 4].word->first != L"be" && m[wordSourceIndex - 4].word->first != L"being")) && // is/ishas before means it really is an adjective!
-		(wordSourceIndex < m.size() - 1 || (m[wordSourceIndex + 1].queryForm(L"is") < 0 && m[wordSourceIndex + 1].word->first != L"be")) && // is/ishas before means it really is an adjective!
-		(m[wordSourceIndex].queryForm(L"preposition") < 0) && (m[wordSourceIndex].queryForm(L"relativizer") < 0)) // || m[wordSourceIndex + 1].queryWinnerForm(L"numeral_cardinal") < 0)) // before one o'clock
+		(wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(u"is") < 0 && m[wordSourceIndex - 1].word->first != u"be" && m[wordSourceIndex - 1].word->first != u"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(u"is") < 0 && m[wordSourceIndex - 2].word->first != u"be" && m[wordSourceIndex - 2].word->first != u"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(u"is") < 0 && m[wordSourceIndex - 3].word->first != u"be" && m[wordSourceIndex - 3].word->first != u"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(u"is") < 0 && m[wordSourceIndex - 4].word->first != u"be" && m[wordSourceIndex - 4].word->first != u"being")) && // is/ishas before means it really is an adjective!
+		(wordSourceIndex < m.size() - 1 || (m[wordSourceIndex + 1].queryForm(u"is") < 0 && m[wordSourceIndex + 1].word->first != u"be")) && // is/ishas before means it really is an adjective!
+		(m[wordSourceIndex].queryForm(u"preposition") < 0) && (m[wordSourceIndex].queryForm(u"relativizer") < 0)) // || m[wordSourceIndex + 1].queryWinnerForm(u"numeral_cardinal") < 0)) // before one o'clock
 	{
 		bool isDeterminer = false;
 		if (wordSourceIndex > 0)
 		{
-			vector<wstring> determinerTypes = { L"determiner",L"demonstrative_determiner",L"possessive_determiner",L"interrogative_determiner", L"quantifier", L"numeral_cardinal" };
-			for (wstring dt : determinerTypes)
+			vector<lpwstring> determinerTypes = { u"determiner",u"demonstrative_determiner",u"possessive_determiner",u"interrogative_determiner", u"quantifier", u"numeral_cardinal" };
+			for (lpwstring dt : determinerTypes)
 				if (isDeterminer = m[wordSourceIndex - 1].queryWinnerForm(dt) >= 0)
 					break;
 		}
 		// The door that faced her stood *open*
-		if (!isDeterminer && !m[wordSourceIndex].forms.isSet(PROPER_NOUN_FORM_NUM) && wordSourceIndex > 0 && m[wordSourceIndex - 1].queryWinnerForm(L"verb") >= 0 && adverbFormOffset >= 0 && adjectiveFormOffset >= 0) // Proper Noun is already well controlled
+		if (!isDeterminer && !m[wordSourceIndex].forms.isSet(PROPER_NOUN_FORM_NUM) && wordSourceIndex > 0 && m[wordSourceIndex - 1].queryWinnerForm(u"verb") >= 0 && adverbFormOffset >= 0 && adjectiveFormOffset >= 0) // Proper Noun is already well controlled
 		{
 			m[wordSourceIndex].setWinner(adverbFormOffset);
 			m[wordSourceIndex].unsetWinner(adjectiveFormOffset);
@@ -4341,7 +4364,7 @@ int cSource::ruleCorrectLPClassAdverbToAdjective(int wordSourceIndex)
 	}
 	// cannot be preposition, conjunction, verb, determiner, particle
 	if (m[wordSourceIndex].isOnlyWinner(adverbForm) && adjectiveFormOffset >= 0 &&
-		(m[wordSourceIndex + 1].queryWinnerForm(nounForm) >= 0 || m[wordSourceIndex + 1].queryWinnerForm(L"dayUnit") >= 0) &&
+		(m[wordSourceIndex + 1].queryWinnerForm(nounForm) >= 0 || m[wordSourceIndex + 1].queryWinnerForm(u"dayUnit") >= 0) &&
 		m[wordSourceIndex + 1].queryWinnerForm(adjectiveForm) < 0 &&
 		wordSourceIndex > 0 &&
 		m[wordSourceIndex - 1].queryWinnerForm(verbForm) < 0 &&
@@ -4350,8 +4373,8 @@ int cSource::ruleCorrectLPClassAdverbToAdjective(int wordSourceIndex)
 		m[wordSourceIndex].queryForm(verbForm) < 0 &&
 		m[wordSourceIndex].queryForm(determinerForm) < 0 &&
 		m[wordSourceIndex].queryForm(particleForm) < 0 &&
-		m[wordSourceIndex + 2].word->first != L"-" && // There is no getting in or out of them without the greatest difficulty , and a patient , slow navigation , which is *very* heart - rending .
-		queryPattern(wordSourceIndex, L"_TIME") == -1) // An hour *later* supper was served . 
+		m[wordSourceIndex + 2].word->first != u"-" && // There is no getting in or out of them without the greatest difficulty , and a patient , slow navigation , which is *very* heart - rending .
+		queryPattern(wordSourceIndex, u"_TIME") == -1) // An hour *later* supper was served . 
 	{
 		// LP correct - 1039
 		// ST correct - 19 < 2%
@@ -4367,7 +4390,7 @@ int cSource::ruleCorrectLPClassOnly(int wordSourceIndex, int startOfSentence)
 	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
 	int conjunctionFormOffset = m[wordSourceIndex].word->second.query(conjunctionForm);
-	if (m[wordSourceIndex + 1].pma.queryPattern(L"__S1") != -1)
+	if (m[wordSourceIndex + 1].pma.queryPattern(u"__S1") != -1)
 	{
 		if (wordSourceIndex == startOfSentence || wordSourceIndex == startOfSentence + 1)
 		{
@@ -4383,7 +4406,7 @@ int cSource::ruleCorrectLPClassOnly(int wordSourceIndex, int startOfSentence)
 
 		}
 	}
-	else if (m[wordSourceIndex + 1].pma.queryPattern(L"__INFP") != -1)
+	else if (m[wordSourceIndex + 1].pma.queryPattern(u"__INFP") != -1)
 	{
 		m[wordSourceIndex].setWinner(adverbFormOffset);
 		m[wordSourceIndex].unsetAllFormWinners();
@@ -4403,17 +4426,17 @@ int cSource::ruleCorrectLPClassBetterFurther(int wordSourceIndex)
 	int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 	int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
 	bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
-		((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-			(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-			(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-			(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
-	if (m[wordSourceIndex].word->first == L"better" && sentenceOfBeing && m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
+		((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(u"is") >= 0 || m[wordSourceIndex - 1].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(u"is") >= 0 || m[wordSourceIndex - 2].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(u"is") >= 0 || m[wordSourceIndex - 3].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+			(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(u"is") >= 0 || m[wordSourceIndex - 4].queryForm(u"be") >= 0))); // is/ishas before means it really is an adjective!
+	if (m[wordSourceIndex].word->first == u"better" && sentenceOfBeing && m[wordSourceIndex + 1].queryWinnerForm(verbForm) == -1)
 	{
 		m[wordSourceIndex].setWinner(adjectiveFormOffset);
 		m[wordSourceIndex].unsetAllFormWinners();
 		return -1;
 	}
-	else if (m[wordSourceIndex].word->first == L"better" && m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
+	else if (m[wordSourceIndex].word->first == u"better" && m[wordSourceIndex + 1].queryWinnerForm(nounForm) == -1 && m[wordSourceIndex + 1].queryWinnerForm(determinerForm) == -1)
 	{
 		m[wordSourceIndex].setWinner(adverbFormOffset);
 		m[wordSourceIndex].unsetAllFormWinners();
@@ -4431,17 +4454,17 @@ int cSource::ruleCorrectLPClassPrepositionAtEndOfSentence(int wordSourceIndex)
 		int particleFormOffset = m[wordSourceIndex].word->second.query(particleForm);
 		int relVerb = m[wordSourceIndex].getRelVerb();
 		bool sentenceOfBeing =				// 4 words or less before the word must be an 'is' verb
-			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(L"is") >= 0 || m[wordSourceIndex - 2].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(L"is") >= 0 || m[wordSourceIndex - 3].queryForm(L"be") >= 0)) || // is/ishas before means it really is an adjective!
-				(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(L"is") >= 0 || m[wordSourceIndex - 4].queryForm(L"be") >= 0))); // is/ishas before means it really is an adjective!
+			((wordSourceIndex <= 0 || (m[wordSourceIndex - 1].queryForm(u"is") >= 0 || m[wordSourceIndex - 1].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 1 || (m[wordSourceIndex - 2].queryForm(u"is") >= 0 || m[wordSourceIndex - 2].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 2 || (m[wordSourceIndex - 3].queryForm(u"is") >= 0 || m[wordSourceIndex - 3].queryForm(u"be") >= 0)) || // is/ishas before means it really is an adjective!
+				(wordSourceIndex <= 3 || (m[wordSourceIndex - 4].queryForm(u"is") >= 0 || m[wordSourceIndex - 4].queryForm(u"be") >= 0))); // is/ishas before means it really is an adjective!
 		if (adverbFormOffset < 0)
 		{
-			if (!(cWord::isSingleQuote(m[wordSourceIndex + 1].word->first[0]) || cWord::isDoubleQuote(m[wordSourceIndex + 1].word->first[0])) && m[wordSourceIndex].word->first == L"to")
+			if (!(cWord::isSingleQuote(m[wordSourceIndex + 1].word->first[0]) || cWord::isDoubleQuote(m[wordSourceIndex + 1].word->first[0])) && m[wordSourceIndex].word->first == u"to")
 			{
 				return -1;
 			}
-			if (m[wordSourceIndex].word->first == L"like" && sentenceOfBeing &&
+			if (m[wordSourceIndex].word->first == u"like" && sentenceOfBeing &&
 				// the word before must NOT be a dash
 				(wordSourceIndex <= 0 || !cWord::isDash((m[wordSourceIndex - 1].word->first[0]))))
 			{
@@ -4454,10 +4477,10 @@ int cSource::ruleCorrectLPClassPrepositionAtEndOfSentence(int wordSourceIndex)
 		}
 		else
 		{
-			wstring nextWord = m[wordSourceIndex + 1].word->first;
-			if (nextWord == L"." || nextWord == L"," || nextWord == L";" || nextWord == L"--")
+			lpwstring nextWord = m[wordSourceIndex + 1].word->first;
+			if (nextWord == u"." || nextWord == u"," || nextWord == u";" || nextWord == u"--")
 			{
-				if (relVerb >= 0 && (m[relVerb].queryForm(L"is") >= 0 || m[relVerb].queryForm(L"be") >= 0))
+				if (relVerb >= 0 && (m[relVerb].queryForm(u"is") >= 0 || m[relVerb].queryForm(u"be") >= 0))
 				{
 					if (adjectiveFormOffset < 0)
 					{
@@ -4505,10 +4528,10 @@ int cSource::ruleCorrectLPClassPrepositionAtEndOfSentence(int wordSourceIndex)
 
 void cSource::ruleCorrectLPClassPreferPronounOverDemonstrativeDeterminer(int wordSourceIndex, int startOfSentence)
 {
-	if (m[wordSourceIndex].word->first == L"that" && (((m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 &&
-		wordSourceIndex > 0 && (m[wordSourceIndex - 1].queryForm(L"is") >= 0 || m[wordSourceIndex - 1].queryForm(L"is_negation") >= 0) &&
+	if (m[wordSourceIndex].word->first == u"that" && (((m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 &&
+		wordSourceIndex > 0 && (m[wordSourceIndex - 1].queryForm(u"is") >= 0 || m[wordSourceIndex - 1].queryForm(u"is_negation") >= 0) &&
 		m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && m[wordSourceIndex + 1].queryWinnerForm(nounForm) < 0) ||
-		(m[wordSourceIndex].word->first == L"that" && !(m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (m[wordSourceIndex + 1].queryForm(L"is") >= 0 || m[wordSourceIndex + 1].queryForm(L"is_negation") >= 0) &&
+		(m[wordSourceIndex].word->first == u"that" && !(m[wordSourceIndex].flags & cWordMatch::flagInQuestion) && wordSourceIndex > 0 && (m[wordSourceIndex + 1].queryForm(u"is") >= 0 || m[wordSourceIndex + 1].queryForm(u"is_negation") >= 0) &&
 			(!iswalpha(m[wordSourceIndex - 1].word->first[0]) || wordSourceIndex == startOfSentence)) ||
 		(m[wordSourceIndex].queryWinnerForm(demonstrativeDeterminerForm) >= 0 && !iswalpha(m[wordSourceIndex + 1].word->first[0]))))
 	{
@@ -4519,10 +4542,10 @@ void cSource::ruleCorrectLPClassPreferPronounOverDemonstrativeDeterminer(int wor
 
 int cSource::ruleCorrectLPClassMost(int wordSourceIndex)
 {
-	if (wordSourceIndex < m.size() - 3 && m[wordSourceIndex].word->first == L"most" &&
+	if (wordSourceIndex < m.size() - 3 && m[wordSourceIndex].word->first == u"most" &&
 		(m[wordSourceIndex + 1].hasWinnerNounForm() ||
-			(m[wordSourceIndex + 1].word->first == L"of" &&
-				(m[wordSourceIndex + 2].word->first == L"the" || m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
+			(m[wordSourceIndex + 1].word->first == u"of" &&
+				(m[wordSourceIndex + 2].word->first == u"the" || m[wordSourceIndex + 2].queryWinnerForm(demonstrativeDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(possessiveDeterminerForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(interrogativeDeterminerForm) != -1))
 			))
 	{
 		int adjectiveFormOffset = m[wordSourceIndex].word->second.query(adjectiveForm);
@@ -4535,14 +4558,14 @@ int cSource::ruleCorrectLPClassMost(int wordSourceIndex)
 
 int cSource::ruleCorrectLPClassPreferPrepositionOverAdverb(int wordSourceIndex)
 {
-	int primaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"__ALLOBJECTS_1");
-	int secondaryPMAOffset = m[wordSourceIndex].pma.queryPattern(L"_ADVERB");
+	int primaryPMAOffset = m[wordSourceIndex].pma.queryPattern(u"__ALLOBJECTS_1");
+	int secondaryPMAOffset = m[wordSourceIndex].pma.queryPattern(u"_ADVERB");
 	if (primaryPMAOffset != -1 && secondaryPMAOffset != -1)
 	{
 		primaryPMAOffset = primaryPMAOffset & ~cMatchElement::patternFlag;
 		secondaryPMAOffset = secondaryPMAOffset & ~cMatchElement::patternFlag;
-		set <wstring> particles = { L"down",L"out",L"off",L"up" };
-		if (particles.find(m[wordSourceIndex].word->first) == particles.end() && m[wordSourceIndex].word->second.getUsageCost(m[wordSourceIndex].queryForm(prepositionForm)) < 4 && m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && queryPattern(wordSourceIndex + 1, L"__NOUN") != -1 && m[wordSourceIndex].queryForm(prepositionForm) != -1)
+		set <lpwstring> particles = { u"down",u"out",u"off",u"up" };
+		if (particles.find(m[wordSourceIndex].word->first) == particles.end() && m[wordSourceIndex].word->second.getUsageCost(m[wordSourceIndex].queryForm(prepositionForm)) < 4 && m[wordSourceIndex].pma[secondaryPMAOffset].len == 1 && queryPattern(wordSourceIndex + 1, u"__NOUN") != -1 && m[wordSourceIndex].queryForm(prepositionForm) != -1)
 		{
 			int adverbFormOffset = m[wordSourceIndex].word->second.query(adverbForm);
 			m[wordSourceIndex].setWinner(m[wordSourceIndex].queryForm(prepositionForm));
@@ -4573,9 +4596,9 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 		return -1;
 	if (ruleCorrectLPClassMost(wordSourceIndex) < 0)
 		return -1;
-	if (m[wordSourceIndex].word->first == L"only")
+	if (m[wordSourceIndex].word->first == u"only")
 		return ruleCorrectLPClassOnly(wordSourceIndex, startOfSentence);
-	if (m[wordSourceIndex].word->first == L"better" || m[wordSourceIndex].word->first == L"further")
+	if (m[wordSourceIndex].word->first == u"better" || m[wordSourceIndex].word->first == u"further")
 	{
 		if (ruleCorrectLPClassBetterFurther(wordSourceIndex) < 0)
 			return -1;
@@ -4593,9 +4616,9 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 	}
 	if (ruleCorrectLPClassPreferPrepositionOverAdverb(wordSourceIndex) == 0)
 		return 0;
-	set <wstring> notObjects = { L"we",L"i",L"he",L"they" };
+	set <lpwstring> notObjects = { u"we",u"i",u"he",u"they" };
 	if (wordSourceIndex < m.size() - 2 && m[wordSourceIndex + 1].hasWinnerNounForm() && m[wordSourceIndex].isOnlyWinner(adverbForm) &&
-		m[wordSourceIndex].queryForm(prepositionForm) != -1 && m[wordSourceIndex].word->first != L"as" && m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)
+		m[wordSourceIndex].queryForm(prepositionForm) != -1 && m[wordSourceIndex].word->first != u"as" && m[wordSourceIndex + 1].queryWinnerForm(PROPER_NOUN_FORM) == -1)
 	{
 		if (notObjects.find(m[wordSourceIndex + 1].word->first) == notObjects.end() &&
 			(!iswalpha(m[wordSourceIndex + 2].word->first[0]) || m[wordSourceIndex + 2].queryWinnerForm(coordinatorForm) != -1 || m[wordSourceIndex + 2].queryWinnerForm(determinerForm) != -1))
@@ -4612,8 +4635,8 @@ int cSource::ruleCorrectLPClass(int wordSourceIndex, int startOfSentence)
 		}
 	}
 	int nounPMAIndex = -1;
-	if (adverbFormOffset >= 0 && wordSourceIndex > 0 && (nounPMAIndex = m[wordSourceIndex - 1].pma.queryPatternDiff(L"__NOUN", L"2")) != -1 && m[wordSourceIndex - 1].word->first == L"the" && m[wordSourceIndex - 1].pma[nounPMAIndex & ~cMatchElement::patternFlag].len == 3 &&
-		m[wordSourceIndex + 1].pma.queryPattern(L"_ADJECTIVE_AFTER") != -1)
+	if (adverbFormOffset >= 0 && wordSourceIndex > 0 && (nounPMAIndex = m[wordSourceIndex - 1].pma.queryPatternDiff(u"__NOUN", u"2")) != -1 && m[wordSourceIndex - 1].word->first == u"the" && m[wordSourceIndex - 1].pma[nounPMAIndex & ~cMatchElement::patternFlag].len == 3 &&
+		m[wordSourceIndex + 1].pma.queryPattern(u"_ADJECTIVE_AFTER") != -1)
 	{
 		m[wordSourceIndex].unsetAllFormWinners();
 		m[wordSourceIndex].setWinner(adverbFormOffset);

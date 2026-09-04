@@ -34,6 +34,11 @@
 		- Assignment in `if (error = !copy(...))` is intentional.
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 enum eCapacity {
 	cMillenium, cCentury, cDecade, cYear, cSemester, cSeason, cQuarter, cMonth, cWeek, cDay,
 	cHour, cMinute, cSecond, cMoment,
@@ -60,16 +65,16 @@ enum eTimeWordFlags {
 	T_VAGUE = 128, T_LENGTH = 256, T_CARDTIME = 512,
 	T_UNSPECIFIED = -1
 };
-int whichCapacity(wstring w);
-int whichMonth(wstring w);
-int whichSeason(wstring w);
-int whichDayOfWeek(wstring w);
-int whichHoliday(wstring w);
-int whichRecurrence(wstring w);
-wstring capacityString(int capacityFlags);
-wstring timeString(int timeWordFlags, wstring& s);
-wstring senseString(wstring& s, int verbSense);
-wstring holidayString(int holiday);
+int whichCapacity(lpwstring w);
+int whichMonth(lpwstring w);
+int whichSeason(lpwstring w);
+int whichDayOfWeek(lpwstring w);
+int whichHoliday(lpwstring w);
+int whichRecurrence(lpwstring w);
+lpwstring capacityString(int capacityFlags);
+lpwstring timeString(int timeWordFlags, lpwstring& s);
+lpwstring senseString(lpwstring& s, int verbSense);
+lpwstring holidayString(int holiday);
 // TENSE (vB, vC etc) from Quirk
 // Tense flags from Reichenbach
 
@@ -146,8 +151,8 @@ enum verbDimensions {
 
 typedef struct
 {
-	const wchar_t* prep;
-	const wchar_t* equivalent;
+	const lpchar_t* prep;
+	const lpchar_t* equivalent;
 } tPrepEquivalent;
 
 extern tPrepEquivalent prepEquivalents[];
@@ -156,7 +161,7 @@ enum ePrepRel { tprNEAR, tprX, tprIN, tprAT, tprY, tprSPAT, tprZ, tprMATH, tprLO
 
 typedef struct
 {
-	const wchar_t* prep;
+	const lpchar_t* prep;
 	int prepRelationType;
 } tPrepRelation;
 
@@ -380,10 +385,10 @@ public:
 	}
 	// Append "name<field> " when field != -1 (debug / toString helper).
 	// only if not -1
-	void af(const wchar_t* name, int field, wstring& appendStr)
+	void af(const lpchar_t* name, int field, lpwstring& appendStr)
 	{
 		if (field != -1)
-			itos(name, field, appendStr, L" ");
+			itos(name, field, appendStr, u" ");
 	}
-	wstring toString(vector <cWordMatch>& m, wstring& tmpstr);
+	lpwstring toString(vector <cWordMatch>& m, lpwstring& tmpstr);
 };

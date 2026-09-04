@@ -52,6 +52,11 @@
 		  (getGoogleCSEKey() / getGoogleCSEContext() / getBingSubscriptionKey()).
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 class cQuestionAnswering
 {
 public:
@@ -62,11 +67,11 @@ public:
 	{
 	public:
 		// ao indexes questionSource->objects. ln is the linkPatterns index (-1 if none).
-		cTrackDescendantAnswers(int ao,wstring aa,int ln,bool da):inputAnswerObject(ao), ancestorAnswersTrackingString(aa), link(ln), destinationAnswer(da)
+		cTrackDescendantAnswers(int ao,lpwstring aa,int ln,bool da):inputAnswerObject(ao), ancestorAnswersTrackingString(aa), link(ln), destinationAnswer(da)
 		{
 		}
 		int inputAnswerObject; // this is an object relative to the questionSource
-		wstring ancestorAnswersTrackingString;
+		lpwstring ancestorAnswersTrackingString;
 		int link;
 		bool destinationAnswer;
 		set <int> wherePossibleAnswers; // only filled if this made it to the destination pattern.  This is filled with source positions, relative to the questionSource
@@ -81,8 +86,8 @@ public:
 		bool skipFullPath; // skip full path if snippet has good answer
 		bool hasCorrespondingSnippet; // is a full article with a corresponding snippet in dbPedia
 		int fullPathIndex; // location of corresponding fullPath
-		wstring fullWebPath;
-		wstring pathInCache;
+		lpwstring fullWebPath;
+		lpwstring pathInCache;
 	};
 
 	// One scored candidate answer. matchSum is the SRG-alignment score (higher is
@@ -93,12 +98,12 @@ public:
 	class cAS
 	{
 	public:
-		wstring sourceType;
-		wstring rejectAnswer;
+		lpwstring sourceType;
+		lpwstring rejectAnswer;
 		int confidence;
 		int matchSum;
 		int matchSumWithConfidenceAndNumIdenticalAnswersScored;
-		wstring matchInfo;
+		lpwstring matchInfo;
 		cSource* source;
 		cSyntacticRelationGroup* srg;
 		int equivalenceClass;
@@ -110,8 +115,8 @@ public:
 		int numIdenticalAnswers;
 		bool fromTable;
 		bool fromWikipediaInfoBox;
-		wstring tableNum;
-		wstring tableName;
+		lpwstring tableNum;
+		lpwstring tableName;
 		int columnIndex;
 		int rowIndex;
 		int entryIndex;
@@ -119,7 +124,7 @@ public:
 		cColumn::cEntry entry;
 		// _sri may be NULL for table / info-box answers. _entry is copied if non-NULL.
 		// finalAnswer / numIdenticalAnswers / whereChildCandidateAnswer are filled later.
-		cAS(wstring _sourceType, cSource* _source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry* _entry)
+		cAS(lpwstring _sourceType, cSource* _source, int _confidence, int _matchSum, lpwstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromWikipediaInfoBox, bool _fromTable, lpwstring _tableNum, lpwstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry* _entry)
 		{
 			sourceType = _sourceType;
 			source = _source;
@@ -160,23 +165,23 @@ public:
 	int getProximateObjectsMatchingOwnedItemType(cSource* questionSource, int si, cSyntacticRelationGroup*& ssrg, set <int>& proximityOwnedObjects);
 	void answerQuestionInSourceWebWikiSearch(cSource* questionSource, 
 		const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool &webSearchOrWikipediaTableSuccess, const bool disableWebSearch, bool& lastGoogleResultPage,
-		cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
-		int& numFinalAnswers, int& maxAnswer, vector <wstring> &webSearchQueryStrings);
+		cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, lpchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
+		int& numFinalAnswers, int& maxAnswer, vector <lpwstring> &webSearchQueryStrings);
 	void answerQuestionInSourceOwnershipRetryQuery(cSource* questionSource,
 		const bool parseOnly, const bool useParallelQuery, bool& webSearchOrWikipediaTableSuccess, const bool disableWebSearch,
 		cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers,
 		vector < cAS >& answerSRGs);
 	void answerQuestionInSourceProximityMapWebSearch(cSource* questionSource,
 		const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool& webSearchOrWikipediaTableSuccess, bool& lastGoogleResultPage,
-		cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
-		int& numFinalAnswers, int& maxAnswer, vector <wstring>& webSearchQueryStrings);
-	int answerQuestionInSourceInitialize(cSource* questionSource, const bool parseOnly, const bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, const bool disableWebSearch, wstring& ps, wstring& parentNum);
+		cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, lpchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
+		int& numFinalAnswers, int& maxAnswer, vector <lpwstring>& webSearchQueryStrings);
+	int answerQuestionInSourceInitialize(cSource* questionSource, const bool parseOnly, const bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, vector < cTrackDescendantAnswers>& descendantAnswers, const bool disableWebSearch, lpwstring& ps, lpwstring& parentNum);
 	int answerQuestionInSource(cSource* questionSource, bool parseOnly, bool useParallelQuery, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssri, vector < cTrackDescendantAnswers>& descendantAnswers, bool disableWebSearch);
 	int answerAllQuestionsInSource(cSource *questionSource, bool parseOnly, bool useParallelQuery);
-	int processPath(cSource *parentSource, const wchar_t *path, cSource *&source, cSource::sourceTypeEnum st, int sourceConfidence, bool parseOnly);
+	int processPath(cSource *parentSource, const lpchar_t *path, cSource *&source, cSource::sourceTypeEnum st, int sourceConfidence, bool parseOnly);
 	bool matchAllSourcePositions(cSource* parentSource, int parentWhere, cSource* childSource, int childWhere, bool& namedNoMatch, bool& synonym, bool parentInQuestionObject, int& semanticMismatch, int& adjectivalMatch, sTrace& debugTrace);
 	bool matchSourcePositions(cSource* parentSource, int parentWhere, cSource* childSource, int childWhere, bool& namedNoMatch, bool& synonym, bool parentInQuestionObject, int& semanticMismatch, int& adjectivalMatch, sTrace& debugTrace);
-	int checkParticularPartQuestionTypeCheck(cSource* questionSource, __int64 questionType, int childWhere, int childObject, int& semanticMismatch);
+	int checkParticularPartQuestionTypeCheck(cSource* questionSource, int64_t questionType, int childWhere, int childObject, int& semanticMismatch);
 
 	private:
 		// Cached subquery result for one child-candidate string (childCandidateAnswerMap).
@@ -210,12 +215,12 @@ public:
 		};
 		void eraseSourcesMap();
 	bool isQuestionPassive(cSource *questionSource, cSyntacticRelationGroup *srg, cSyntacticRelationGroup * &ssri);
-	bool processTransformQuestionPattern(cSource* questionSource, wstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* linkPattern, cSyntacticRelationGroup* linkSyntacticRelationGroup, unordered_map <wstring, wstring>& parseVariables);
-	bool followQuestionLink(int startLinkOffset, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <wstring, wstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers);
+	bool processTransformQuestionPattern(cSource* questionSource, lpwstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* linkPattern, cSyntacticRelationGroup* linkSyntacticRelationGroup, unordered_map <lpwstring, lpwstring>& parseVariables);
+	bool followQuestionLink(int startLinkOffset, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <lpwstring, lpwstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers);
 	int findMetanamePatterns(cSource* questionSource, cSyntacticRelationGroup* srg);
 	int transformQuestion(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssri, vector < cTrackDescendantAnswers>& descendantAnswers, bool parseOnly, bool useParallelQuery, bool disableWebSearch);
-	void initializeTransformations(cSource *questionSource, unordered_map <wstring, wstring> &parseVariables);
-	bool processPathToPattern(cSource *questionSource, const wchar_t *path, cSource *&source);
+	void initializeTransformations(cSource *questionSource, unordered_map <lpwstring, lpwstring> &parseVariables);
+	bool processPathToPattern(cSource *questionSource, const lpchar_t *path, cSource *&source);
 	// One questionTransforms.txt group: SOURCE patterns that match the user's
 	// question, an optional chain of LINK questions, and the DESTINATION SRG/pattern
 	// that is actually answered (e.g. "how old is X" -> "when was X born").
@@ -241,36 +246,36 @@ public:
 	};
 	map <vector <cSyntacticRelationGroup>::iterator, cTransformPatterns > transformationPatternMap;
 	cSource *transformSource;
-	unordered_map <wstring, cSource *> sourcesMap;
-	unordered_map <wstring, cAnswerConfidence> childCandidateAnswerMap;
-	void copySource(cSource *toSource, cSyntacticRelationGroup *constantQuestionSRI, cPattern *originalQuestionPattern, cPattern *constantQuestionPattern, unordered_map <int, int> &sourceMap, unordered_map <wstring, wstring> &parseVariables);
+	unordered_map <lpwstring, cSource *> sourcesMap;
+	unordered_map <lpwstring, cAnswerConfidence> childCandidateAnswerMap;
+	void copySource(cSource *toSource, cSyntacticRelationGroup *constantQuestionSRI, cPattern *originalQuestionPattern, cPattern *constantQuestionPattern, unordered_map <int, int> &sourceMap, unordered_map <lpwstring, lpwstring> &parseVariables);
 	int getWhereQuestionTypeObject(cSource *questionSource, cSyntacticRelationGroup* srg);
-	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const lpwstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
 		const bool questionTypeSubject, const bool questionTypePrepObject,
-		const bool subjectMatch, const int verbMatch, const wstring matchInfoDetailVerb,
-		wstring &matchInfoDetail, const int objectMatch, const int relativizerAsPrepMatch, const int secondaryObjectMatch, const int secondaryVerbMatch, set<int>& whereAnswerMatchSubquery);
-	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		const bool subjectMatch, const int verbMatch, const lpwstring matchInfoDetailVerb,
+		lpwstring &matchInfoDetail, const int objectMatch, const int relativizerAsPrepMatch, const int secondaryObjectMatch, const int secondaryVerbMatch, set<int>& whereAnswerMatchSubquery);
+	void analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const lpwstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
 		const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject,
-		const bool subjectMatch, int &verbMatch, const wstring matchInfoDetailVerb);
-	int analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+		const bool subjectMatch, int &verbMatch, const lpwstring matchInfoDetailVerb);
+	int analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject,
+		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const lpwstring matchInfoDetailSubject, const int matchSumSubject,
 		const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject);
-	int analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+	int analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
 		vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject);
-	void analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, wstring childSourceType, cSource* childSource,
+	void analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, lpwstring childSourceType, cSource* childSource,
 		cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, 
 		vector <cSyntacticRelationGroup>::iterator childSRG, bool questionTypeSubject, bool questionTypeObject, bool questionTypePrepObject);
-	int analyzeQuestionFromSource(cSource *questionSource, wchar_t *derivation, wstring childSourceType, cSource *childSource, cSyntacticRelationGroup * parentSRG, vector < cAS > &answerSRGs, int &maxAnswer, bool eraseIfNoAnswers);
-	int questionTypeCheck(cSource *questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck);
+	int analyzeQuestionFromSource(cSource *questionSource, lpchar_t *derivation, lpwstring childSourceType, cSource *childSource, cSyntacticRelationGroup * parentSRG, vector < cAS > &answerSRGs, int &maxAnswer, bool eraseIfNoAnswers);
+	int questionTypeCheck(cSource *questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cAS &childCAS, int &semanticMismatch, bool &unableToDoquestionTypeCheck);
 	int verbTenseMatch(cSource *questionSource, cSyntacticRelationGroup* parentSRG, cAS &childCAS);
-	int semanticMatch(cSource *questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS &childCAS, int &semanticMismatch);
-	int semanticMatchSingle(cSource *questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cSource *childSource, int whereChild, int childObject, int &semanticMismatch, bool &subQueryNoMatch,
+	int semanticMatch(cSource *questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cAS &childCAS, int &semanticMismatch);
+	int semanticMatchSingle(cSource *questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cSource *childSource, int whereChild, int childObject, int &semanticMismatch, bool &subQueryNoMatch,
 		vector <cSyntacticRelationGroup> &subQueries, int numConsideredParentAnswer, bool useParallelQuery);
 	bool checkIdentical(cSource *questionSource, cSyntacticRelationGroup* srg, cAS &cas1, cAS &cas2);
 	void setWhereChildCandidateAnswer(cSource *questionSource, cAS &childCAS, cSyntacticRelationGroup* parentSRG);
@@ -278,57 +283,57 @@ public:
 	int  determineBestAnswers(cSource *questionSource, cSyntacticRelationGroup*  srg,vector < cAS > &answerSRGs,int maxAnswer,vector <cSyntacticRelationGroup> &subQueries,bool useParallelQuery);
 	bool isModifiedGeneric(cAS &srg);
 	int printAnswers(cSyntacticRelationGroup*  srg, vector < cAS > &answerSRGs);
-	int searchWebSearchQueries(cSource *questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* ssri,vector <cSyntacticRelationGroup> &subQueries,
-		vector < cAS > &answerSRGs, vector <wstring> &webSearchQueryStrings,
+	int searchWebSearchQueries(cSource *questionSource, lpchar_t derivation[1024], cSyntacticRelationGroup* ssri,vector <cSyntacticRelationGroup> &subQueries,
+		vector < cAS > &answerSRGs, vector <lpwstring> &webSearchQueryStrings,
 		bool parseOnly, int &finalAnswer, int &maxAnswer, bool useParallelQuery, int &trySearchIndex, bool useGoogleSearch,bool &lastResultPage);
 	int matchAnswersOfPreviousQuestion(cSource *questionSource, cSyntacticRelationGroup *ssri, set <int> &wherePossibleAnswers);
 	int findConstrainedAnswers(cSource *questionSource, vector < cAS > &answerSRGs, vector < cTrackDescendantAnswers> &descendantAnswers);
 	int processMetanameTagset(vector <cTagLocation>& tagSet, int whereMNE, int element, cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion);
 	int metaPatternMatch(cSource *questionSource, cSource *childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion);
-	int	searchTableForAnswer(cSource *questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* srg, unordered_map <int, cWikipediaTableCandidateAnswers * > &wikiTableMap, vector <cSyntacticRelationGroup> &subQueries, vector < cAS > &answerSRGs, int &maxAnswer, bool useParallelQuery);
+	int	searchTableForAnswer(cSource *questionSource, lpchar_t derivation[1024], cSyntacticRelationGroup* srg, unordered_map <int, cWikipediaTableCandidateAnswers * > &wikiTableMap, vector <cSyntacticRelationGroup> &subQueries, vector < cAS > &answerSRGs, int &maxAnswer, bool useParallelQuery);
 	void addTables(cSource *questionSource, int whereQuestionType, cSource *wikipediaSource, vector < cSourceTable > &wikiTables);
-	void analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource, wchar_t *derivation, int whereQuestionContextSuggestion, cSyntacticRelationGroup * parentSRG, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers *> &wikiTableMap, set <wstring> &wikipediaLinksAlreadyScanned);
-	void enhanceWebSearchQueries(vector <wstring> &webSearchQueryStrings, wstring semanticSuggestion);
-	void getWebSearchQueries(cSource *questionSource, cSyntacticRelationGroup* parentSRG, vector <wstring> &objects);
+	void analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource *questionSource, lpchar_t *derivation, int whereQuestionContextSuggestion, cSyntacticRelationGroup * parentSRG, cTreeCat *rdfType, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers *> &wikiTableMap, set <lpwstring> &wikipediaLinksAlreadyScanned);
+	void enhanceWebSearchQueries(vector <lpwstring> &webSearchQueryStrings, lpwstring semanticSuggestion);
+	void getWebSearchQueries(cSource *questionSource, cSyntacticRelationGroup* parentSRG, vector <lpwstring> &objects);
 	void accumulateProximityMaps(cSource *questionSource,cSyntacticRelationGroup* parentSRG, cSource *childSource, bool confidence);
-	bool processChildObjectIntoString(cSource *childSource, int childObject, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings, wstring &childObjectString);
+	bool processChildObjectIntoString(cSource *childSource, int childObject, unordered_set <lpwstring> & whereQuestionInformationSourceObjectsStrings, lpwstring &childObjectString);
 	void recordDistanceIntoProximityMap(cSource *childSource, unsigned int childSourceIndex, set <cObject::cLocation> &questionObjectMatchInChildSourceLocations,
-		set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator);
-	void accumulateProximityEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSyntacticRelationGroup* parentSRG, cProximityMap *semanticMap, unordered_set <wstring> & whereQuestionInformationSourceObjectsStrings);
-	bool analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring birthDate);
-	bool analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring occupation);
-	bool analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup *sqi, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool rejectEmptyObjects);
-	int	matchSubQueries(cSource *questionSource, wstring derivation, cSource *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSyntacticRelationGroup> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, bool useParallelQuery);
+		set <cObject::cLocation>::iterator &questionObjectMatchIndex, bool confidence, unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator);
+	void accumulateProximityEntry(cSource *questionSource, unsigned int where, set <cObject::cLocation> &principalObjectLocations, set <cObject::cLocation>::iterator &polIndex, bool confidence, cSyntacticRelationGroup* parentSRG, cProximityMap *semanticMap, unordered_set <lpwstring> & whereQuestionInformationSourceObjectsStrings);
+	bool analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, lpwstring birthDate);
+	bool analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, lpwstring occupation);
+	bool analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup *sqi, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool rejectEmptyObjects);
+	int	matchSubQueries(cSource *questionSource, lpwstring derivation, cSource *childSource, int &semanticMismatch, bool &subQueryNoMatch, vector <cSyntacticRelationGroup> &subQueries, int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, bool useParallelQuery);
 	bool checkObjectIdentical(cSource *source1, cSource *source2, int object1, int object2);
 	bool checkParticularPartIdentical(cSource *source1, cSource *source2, int where1, int where2);
-	unordered_map<wstring, cSemanticMatchInfo> questionGroupMap;
+	unordered_map<lpwstring, cSemanticMatchInfo> questionGroupMap;
 	int checkParentGroup(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch);
 	int spinParses(MYSQL &mysql, vector <cSearchSource> &accumulatedParseRequests);
-	int accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <wstring> &webSearchQueryStrings, int &offset, vector <cSearchSource> &accumulatedParseRequests);
-	int analyzeAccumulatedRequests(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup *parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, vector <cSearchSource> &accumulatedParseRequests);
-	int webSearchForQueryParallel(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
-		vector <wstring> &webSearchQueryStrings,int &offset);
-	int webSearchForQuerySerial(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
-		vector <wstring> &webSearchQueryStrings,int &offset);
-	bool dbSearchMusicBrainzSearchType(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs,
-		int firstWhere, wstring firstMatchListType, int secondWhere, wstring secondMatchListType, set <wstring> &matchVerbsList);
-	bool dbSearchMusicBrainz(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs);
-	bool dbSearchForQuery(cSource *questionSource, wchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs);
-	bool matchOwnershipDbMusicBrainzObject(cSource *questionSource, wchar_t *derivation, int whereObject, vector <mbInfoReleaseType> &mbs);
-	bool matchOwnershipDbQuery(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup* parentSRG);
-	bool matchOwnershipDbMusicBrainz(cSource *questionSource,wchar_t *derivation, cSyntacticRelationGroup* parentSRG);
-	int processSnippet(cSource *questionSource, wstring snippet, wstring object, cSource *&source, bool parseOnly);
+	int accumulateParseRequests(cSyntacticRelationGroup* parentSRG, int webSitesAskedFor, int index, bool googleSearch, vector <lpwstring> &webSearchQueryStrings, int &offset, vector <cSearchSource> &accumulatedParseRequests);
+	int analyzeAccumulatedRequests(cSource *questionSource,lpchar_t *derivation, cSyntacticRelationGroup *parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, vector <cSearchSource> &accumulatedParseRequests);
+	int webSearchForQueryParallel(cSource *questionSource, lpchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+		vector <lpwstring> &webSearchQueryStrings,int &offset);
+	int webSearchForQuerySerial(cSource *questionSource, lpchar_t *derivation, cSyntacticRelationGroup* parentSRG, bool parseOnly, vector < cAS > &answerSRGs, int &maxAnswer, int webSitesAskedFor, int index, bool googleSearch,
+		vector <lpwstring> &webSearchQueryStrings,int &offset);
+	bool dbSearchMusicBrainzSearchType(cSource *questionSource, lpchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs,
+		int firstWhere, lpwstring firstMatchListType, int secondWhere, lpwstring secondMatchListType, set <lpwstring> &matchVerbsList);
+	bool dbSearchMusicBrainz(cSource *questionSource, lpchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs);
+	bool dbSearchForQuery(cSource *questionSource, lpchar_t *derivation, cSyntacticRelationGroup* parentSRG, vector < cAS > &answerSRGs);
+	bool matchOwnershipDbMusicBrainzObject(cSource *questionSource, lpchar_t *derivation, int whereObject, vector <mbInfoReleaseType> &mbs);
+	bool matchOwnershipDbQuery(cSource *questionSource,lpchar_t *derivation, cSyntacticRelationGroup* parentSRG);
+	bool matchOwnershipDbMusicBrainz(cSource *questionSource,lpchar_t *derivation, cSyntacticRelationGroup* parentSRG);
+	int processSnippet(cSource *questionSource, lpwstring snippet, lpwstring object, cSource *&source, bool parseOnly);
 	int processAbstract(cSource *questionSource, cTreeCat *rdfType, cSource *&source, bool parseOnly);
-	int processWikipedia(cSource *questionSource, int principalWhere, cSource *&source, vector <wstring> &wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring> &wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns);
+	int processWikipedia(cSource *questionSource, int principalWhere, cSource *&source, vector <lpwstring> &wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <lpwstring> &wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns);
 	static bool matchObjectsByName(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, vector <cObject>::iterator childObject, bool &namedNoMatch, sTrace debugTrace);
 	static bool matchChildSourcePositionByName(cSource *parentSource, vector <cObject>::iterator parentObject, cSource *childSource, int childWhere, bool &namedNoMatch, sTrace &debugTrace);
 	static bool matchTimeObjects(cSource *parentSource, int parentWhere, cSource *childSource, int childWhere);
 	int sriPrepMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, int cost);
-	int sriVerbMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, wstring &matchInfoDetailVerb, wstring verbTypeMatch,int cost);
-	int srgMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool &totalMatch, wstring &matchInfoDetail, int cost, bool subQuery);
+	int sriVerbMatch(cSource *parentSource, cSource *childSource, int parentWhere, int childWhere, lpwstring &matchInfoDetailVerb, lpwstring verbTypeMatch,int cost);
+	int srgMatch(cSource *questionSource, cSource *childSource, int parentWhere, int childWhere, int whereQuestionType, int64_t questionType, bool &totalMatch, lpwstring &matchInfoDetail, int cost, bool subQuery);
 	int equivalenceClassCheck(cSource *questionSource, cSource *childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cSyntacticRelationGroup* parentSRG, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
 	int equivalenceClassCheck2(cSource *questionSource, cSource *childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cSyntacticRelationGroup* parentSRG, int whereChildSpecificObject, int &equivalenceClass, int matchSum);
-	bool rejectPath(const wchar_t *path);
+	bool rejectPath(const lpchar_t *path);
 	bool matchParticularAnswer(cSource *questionSource, cSyntacticRelationGroup *ssri, int whereMatch, int wherePossibleAnswer, set <int> &addWhereQuestionInformationSourceObjects);
 	void detectSubQueries(cSource *questionSource, cSyntacticRelationGroup *srg, vector <cSyntacticRelationGroup> &subQueries);
 	bool matchAnswerSourceMatch(cSource *questionSource,cSyntacticRelationGroup *ssri, int whereMatch, int wherePossibleAnswer, set <int> &addWhereQuestionInformationSourceObjects);
@@ -338,7 +343,7 @@ public:
 	// survives any rehash). Does not reset transformationPatternMap / transformSource.
 	void clear()
 	{
-		for (unordered_map <wstring, cSource *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)
+		for (unordered_map <lpwstring, cSource *>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end();)
 		{
 			cSource *source = smi->second;
 			source->clearSource();

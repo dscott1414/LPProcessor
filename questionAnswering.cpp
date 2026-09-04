@@ -53,6 +53,14 @@
 		  (it is still 0 = narrator).
 */
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -61,18 +69,12 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include <winsock.h>
-#include "Winhttp.h"
 using namespace std;
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
@@ -81,28 +83,27 @@ using namespace std;
 #include "vcXML.h"
 #include <wn.h>
 #include "profile.h"
-#include "strsafe.h"
 #include "source.h"
 #include "QuestionAnswering.h"
 
 int questionProgress = -1; // shared but update is not important
-bool isBookTitle(MYSQL& mysql, wstring proposedTitle);
+bool isBookTitle(MYSQL& mysql, lpwstring proposedTitle);
 
-// Write buffer as UTF-16LE (BOM 0xFEFF) to 'path'. Returns -1 if _wopen fails.
-int flushString(wstring& buffer, wchar_t* path)
+// Write buffer as UTF-16LE (BOM 0xFEFF) to 'path'. Returns -1 if lp_wopen fails.
+int flushString(lpwstring& buffer, lpchar_t* path)
 {
 	LFS
-		//lplog(LOG_WHERE, L"TRACEOPEN %s %s", path, __FUNCTIONW__);
-		int fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
+		//lplog(LOG_WHERE, u"TRACEOPEN %s %s", path, LP_TEXT(__func__).c_str());
+		int fd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (fd < 0)
 	{
-		lplog(LOG_ERROR, L"ERROR:Cannot create path %s - %S (9).", path, sys_errlist[errno]);
+		lplog(LOG_ERROR, u"ERROR:Cannot create path %s - %S (9).", path, sys_errlist[errno]);
 		return -1;
 	}
-	wchar_t ch = 0xFEFF;
-	_write(fd, &ch, sizeof(ch));
-	_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
-	_close(fd);
+	lpchar_t ch = 0xFEFF;
+	::write(fd, &ch, sizeof(ch));
+	::write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
+	::close(fd);
 	return 0;
 }
 
@@ -110,7 +111,7 @@ int flushString(wstring& buffer, wchar_t* path)
 // so a DBpedia/Freebase URI can be used as a cache-file stem. Mutates and
 // returns 'name'.
 // <http://rdf.freebase.com/ns/m.0zcqcv2>
-wstring stripWeb(wstring& name)
+lpwstring stripWeb(lpwstring& name)
 {
 	if (name.empty()) return name;
 	if (name[0] == '<')
@@ -118,14 +119,14 @@ wstring stripWeb(wstring& name)
 	// name can become empty here if the input was just "<"; re-check before name[length-1].
 	if (!name.empty() && name[name.length() - 1] == '>')
 		name = name.substr(0, name.length() - 1);
-	int hcut = name.find(L"://");
-	if (hcut != wstring::npos)
+	int hcut = name.find(u"://");
+	if (hcut != lpwstring::npos)
 		name = name.substr(hcut + 3, name.length() - hcut - 3);
-	int rdfcut = name.find(L"rdf.freebase.com/");
-	if (rdfcut != wstring::npos)
+	int rdfcut = name.find(u"rdf.freebase.com/");
+	if (rdfcut != lpwstring::npos)
 		name = name.substr(rdfcut + 17, name.length() - rdfcut - 17);
-	int nscut = name.find(L"ns/");
-	if (nscut != wstring::npos)
+	int nscut = name.find(u"ns/");
+	if (nscut != lpwstring::npos)
 		name = name.substr(nscut + 3, name.length() - nscut - 3);
 	return name;
 }
@@ -141,17 +142,17 @@ wstring stripWeb(wstring& name)
 int cQuestionAnswering::processAbstract(cSource* questionSource, cTreeCat* rdfType, cSource*& source, bool parseOnly)
 {
 	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\dbPediaCache", getCacheDir().c_str()) + 1;
-	if (_wmkdir(path) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-	wstring typeObject(stripWeb(rdfType->typeObject));
-	_snwprintf(path, MAX_LEN, L"%s\\dbPediaCache\\_%s.abstract.txt", getCacheDir().c_str(), typeObject.c_str());
+		lpchar_t path[MAX_LEN];
+	int pathlen = lp_snprintf(path, MAX_LEN, u"%s\\dbPediaCache", getCacheDir().c_str()) + 1;
+	if (lp_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
+	lpwstring typeObject(stripWeb(rdfType->typeObject));
+	lp_snprintf(path, MAX_LEN, u"%s\\dbPediaCache\\_%s.abstract.txt", getCacheDir().c_str(), typeObject.c_str());
 	convertIllegalChars(path + pathlen);
 	distributeToSubDirectories(path, pathlen, true);
 	if (logTraceOpen)
-		lplog(LOG_WHERE, L"TRACEOPEN %s %S", path, __FUNCTION__);
-	if (_waccess(path, 0) && flushString(rdfType->abstract, path) < 0)
+		lplog(LOG_WHERE, u"TRACEOPEN %s %S", path, __FUNCTION__);
+	if (lp_waccess(path, 0) && flushString(rdfType->abstract, path) < 0)
 		return -1;
 	return processPath(questionSource, path, source, cSource::WEB_SEARCH_SOURCE_TYPE, 1, parseOnly);
 }
@@ -160,23 +161,23 @@ int cQuestionAnswering::processAbstract(cSource* questionSource, cTreeCat* rdfTy
 // getWebSearchCacheDir()\webSearchCache\_<object>.snippet.txt. Truncates the stem
 // at MAX_PATH-28 before appending the extension. Confidence 50 (snippets are
 // noisier than abstracts).
-int cQuestionAnswering::processSnippet(cSource* questionSource, wstring snippet, wstring object, cSource*& source, bool parseOnly)
+int cQuestionAnswering::processSnippet(cSource* questionSource, lpwstring snippet, lpwstring object, cSource*& source, bool parseOnly)
 {
 	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\webSearchCache", getWebSearchCacheDir().c_str()) + 1;
-	if (_wmkdir(path) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-	_snwprintf(path, MAX_LEN, L"%s\\webSearchCache\\_%s", getWebSearchCacheDir().c_str(), object.c_str());
+		lpchar_t path[MAX_LEN];
+	int pathlen = lp_snprintf(path, MAX_LEN, u"%s\\webSearchCache", getWebSearchCacheDir().c_str()) + 1;
+	if (lp_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
+	lp_snprintf(path, MAX_LEN, u"%s\\webSearchCache\\_%s", getWebSearchCacheDir().c_str(), object.c_str());
 	convertIllegalChars(path + pathlen);
 	distributeToSubDirectories(path, pathlen, true);
 	// MAX_PATH is 260; the buffer is MAX_LEN (2048). This caps the stem so
 	// ".snippet.txt" plus a later SourceCache suffix still fits MAX_PATH.
 	path[MAX_PATH - 28] = 0; // extensions
-	wcscat(path, L".snippet.txt");
+	lp_strcpy((path) + lp_strlen(path), u".snippet.txt");
 	if (logTraceOpen)
-		lplog(LOG_WHERE, L"TRACEOPEN %s %S", path, __FUNCTION__);
-	if (_waccess(path, 0) && flushString(snippet, path) < 0)
+		lplog(LOG_WHERE, u"TRACEOPEN %s %S", path, __FUNCTION__);
+	if (lp_waccess(path, 0) && flushString(snippet, path) < 0)
 		return -1;
 	return processPath(questionSource, path, source, cSource::WEB_SEARCH_SOURCE_TYPE, 50, parseOnly);
 }
@@ -185,11 +186,11 @@ int cQuestionAnswering::processSnippet(cSource* questionSource, wstring snippet,
 // wikipediaLinks when principalWhere==-1), skip paths already in
 // wikipediaLinksAlreadyScanned, and parse as WIKIPEDIA_SOURCE_TYPE (confidence 2).
 // Returns -1 on path failure or a duplicate scan.
-int cQuestionAnswering::processWikipedia(cSource* questionSource, int principalWhere, cSource*& source, vector <wstring>& wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <wstring>& wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns)
+int cQuestionAnswering::processWikipedia(cSource* questionSource, int principalWhere, cSource*& source, vector <lpwstring>& wikipediaLinks, int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool parseOnly, set <lpwstring>& wikipediaLinksAlreadyScanned, bool removePrecedingUncapitalizedWordsFromProperNouns)
 {
 	LFS
-		wchar_t path[1024];
-	vector <wstring> lookForSubject;
+		lpchar_t path[1024];
+	vector <lpwstring> lookForSubject;
 	if (questionSource->getWikipediaPath(principalWhere, wikipediaLinks, path, lookForSubject, includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, removePrecedingUncapitalizedWordsFromProperNouns) < 0)
 		return -1;
 	if (wikipediaLinksAlreadyScanned.find(path) != wikipediaLinksAlreadyScanned.end())
@@ -240,8 +241,8 @@ bool cQuestionAnswering::matchChildSourcePositionByName(cSource* parentSource, v
 		{
 			if (logQuestionDetail)
 			{
-				wstring tmpstr1, tmpstr2;
-				lplog(LOG_WHERE, L"matchChildSourcePositionByName:parentObject %s against child object %s succeeded", parentSource->objectString(parentObject, tmpstr1, true).c_str(), childSource->objectString(childSource->m[childWhere].objectMatches[mo].object, tmpstr2, true).c_str());
+				lpwstring tmpstr1, tmpstr2;
+				lplog(LOG_WHERE, u"matchChildSourcePositionByName:parentObject %s against child object %s succeeded", parentSource->objectString(parentObject, tmpstr1, true).c_str(), childSource->objectString(childSource->m[childWhere].objectMatches[mo].object, tmpstr2, true).c_str());
 			}
 			return true;
 		}
@@ -262,14 +263,14 @@ bool cQuestionAnswering::matchTimeObjects(cSource* parentSource, int parentWhere
 		vector <cSyntacticRelationGroup>::iterator parentSR = parentSource->findSyntacticRelationGroup(parentWhere);
 	if (parentSR == parentSource->syntacticRelationGroups.end())
 		return false;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	for (unsigned int t2 = 0; t2 < parentSR->timeInfo.size(); t2++)
-		lplog(LOG_WHERE, L"%d:MTO parentSR %s", parentWhere, parentSR->timeInfo[t2].toString(parentSource->m, tmpstr).c_str());
+		lplog(LOG_WHERE, u"%d:MTO parentSR %s", parentWhere, parentSR->timeInfo[t2].toString(parentSource->m, tmpstr).c_str());
 	vector <cSyntacticRelationGroup>::iterator childSR = childSource->findSyntacticRelationGroup(childWhere);
 	if (childSR == childSource->syntacticRelationGroups.end())
 		return false;
 	for (unsigned int t = 0; t < childSR->timeInfo.size(); t++)
-		lplog(LOG_WHERE, L"%d:MTO childSR %s", childWhere, childSR->timeInfo[t].toString(childSource->m, tmpstr).c_str());
+		lplog(LOG_WHERE, u"%d:MTO childSR %s", childWhere, childSR->timeInfo[t].toString(childSource->m, tmpstr).c_str());
 	for (unsigned int pt = 0; pt < parentSR->timeInfo.size(); pt++)
 		for (unsigned int ct = 0; ct < childSR->timeInfo.size(); ct++)
 			if (parentSR->timeInfo[pt].timeCapacity == childSR->timeInfo[ct].timeCapacity)
@@ -326,14 +327,14 @@ bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int pare
 		mqi.overallMatch = matchSourcePositions(parentSource, mqi.parentWhere, childSource, mqi.childWhere, mqi.namedNoMatch, mqi.synonym, parentInQuestionObject, mqi.semanticMismatch, mqi.adjectivalMatch, debugTrace);
 		if (logQuestionDetail)
 		{
-			wstring ws, cs, am, sm;
-			lplog(LOG_WHERE, L"matchAllSourcePositions: parent %d:%s child %d:%s %s %s %s %s %s",
+			lpwstring ws, cs, am, sm;
+			lplog(LOG_WHERE, u"matchAllSourcePositions: parent %d:%s child %d:%s %s %s %s %s %s",
 				mqi.parentWhere, parentSource->whereString(mqi.parentWhere, ws, false).c_str(), mqi.childWhere, childSource->whereString(mqi.childWhere, cs, false).c_str(),
-				(mqi.overallMatch) ? L"overallMatch" : L"",
-				(mqi.namedNoMatch) ? L"namedNoMatch" : L"",
-				(mqi.semanticMismatch) ? L"semanticMismatch" : L"", (mqi.semanticMismatch) ? itos(mqi.semanticMismatch, sm).c_str() : L"",
-				(mqi.adjectivalMatch >= 0) ? L"adjectivalMatch" : L"", (mqi.adjectivalMatch >= 0) ? itos(mqi.adjectivalMatch, am).c_str() : L"",
-				(mqi.synonym) ? L"synonym" : L"");
+				(mqi.overallMatch) ? u"overallMatch" : u"",
+				(mqi.namedNoMatch) ? u"namedNoMatch" : u"",
+				(mqi.semanticMismatch) ? u"semanticMismatch" : u"", (mqi.semanticMismatch) ? itos(mqi.semanticMismatch, sm).c_str() : u"",
+				(mqi.adjectivalMatch >= 0) ? u"adjectivalMatch" : u"", (mqi.adjectivalMatch >= 0) ? itos(mqi.adjectivalMatch, am).c_str() : u"",
+				(mqi.synonym) ? u"synonym" : u"");
 		}
 	}
 	vector <cMatchQuality> paMQ;
@@ -368,8 +369,8 @@ bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int pare
 		semanticMismatch = !atLeastOneSemanticMatch;
 		if (logQuestionDetail)
 		{
-			wstring sm;
-			lplog(LOG_WHERE, L"matchAllSourcePositions: OVERALL %s %s %s", (namedNoMatch) ? L"namedNoMatch" : L"", (semanticMismatch) ? L"semanticMismatch" : L"", (semanticMismatch) ? itos(saveSemanticMismatch, sm).c_str() : L"");
+			lpwstring sm;
+			lplog(LOG_WHERE, u"matchAllSourcePositions: OVERALL %s %s %s", (namedNoMatch) ? u"namedNoMatch" : u"", (semanticMismatch) ? u"semanticMismatch" : u"", (semanticMismatch) ? itos(saveSemanticMismatch, sm).c_str() : u"");
 		}
 		return false;
 	}
@@ -379,8 +380,8 @@ bool cQuestionAnswering::matchAllSourcePositions(cSource* parentSource, int pare
 		synonym = true;
 	if (logQuestionDetail)
 	{
-		wstring am;
-		lplog(LOG_WHERE, L"matchAllSourcePositions: OVERALL overallMatch %s %s", (adjectivalMatch >= 0) ? L"adjectivalMatch" : L"", (adjectivalMatch >= 0) ? itos(adjectivalMatch, am).c_str() : L"", (synonym) ? L"synonym" : L"");
+		lpwstring am;
+		lplog(LOG_WHERE, u"matchAllSourcePositions: OVERALL overallMatch %s %s", (adjectivalMatch >= 0) ? u"adjectivalMatch" : u"", (adjectivalMatch >= 0) ? itos(adjectivalMatch, am).c_str() : u"", (synonym) ? u"synonym" : u"");
 	}
 	return true;
 }
@@ -432,21 +433,21 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 	// compare by synonym
 	if (namedNoMatch) return false;
 	int parentOwnerWhere = -1, childOwnerWhere = -1;
-	bool parentIsDefiniteObject = parentSource->isDefiniteObject(parentWhere, L"PARENT", parentOwnerWhere, false);
-	bool childIsDefiniteObject = childSource->isDefiniteObject(childWhere, L"CHILD", childOwnerWhere, false);
+	bool parentIsDefiniteObject = parentSource->isDefiniteObject(parentWhere, u"PARENT", parentOwnerWhere, false);
+	bool childIsDefiniteObject = childSource->isDefiniteObject(childWhere, u"CHILD", childOwnerWhere, false);
 	bool matched = (!parentIsDefiniteObject && !childIsDefiniteObject);
 	if (matched && logQuestionDetail)
 	{
-		wstring tmpstr, tmpstr2;
-		lplog(LOG_WHERE, L"%d:both indefinite [no owners]: parent %d:%s child %d:%s matched=%s namedNoMatch=%s", parentWhere, parentWhere, parentSource->whereString(parentWhere, tmpstr, false).c_str(), childWhere, childSource->whereString(childWhere, tmpstr2, false).c_str(), (matched) ? L"true" : L"false", (namedNoMatch) ? L"true" : L"false");
+		lpwstring tmpstr, tmpstr2;
+		lplog(LOG_WHERE, u"%d:both indefinite [no owners]: parent %d:%s child %d:%s matched=%s namedNoMatch=%s", parentWhere, parentWhere, parentSource->whereString(parentWhere, tmpstr, false).c_str(), childWhere, childSource->whereString(childWhere, tmpstr2, false).c_str(), (matched) ? u"true" : u"false", (namedNoMatch) ? u"true" : u"false");
 	}
 	if (parentIsDefiniteObject && childIsDefiniteObject && parentOwnerWhere >= 0 && childOwnerWhere >= 0 && (parentOwnerWhere != parentWhere && childOwnerWhere != childWhere))
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		matched = matchSourcePositions(parentSource, parentOwnerWhere, childSource, childOwnerWhere, namedNoMatch, synonym, parentInQuestionObject, semanticMismatch, adjectivalMatch, debugTrace);
 		// if they are definite objects, byOwner, and the owners match
 		if (logQuestionDetail)
-			lplog(LOG_WHERE, L"%d:definite owners: parent %d:%s child %d:%s matched=%s namedNoMatch=%s", parentWhere, parentOwnerWhere, parentSource->whereString(parentOwnerWhere, tmpstr, false).c_str(), childOwnerWhere, childSource->whereString(childOwnerWhere, tmpstr2, false).c_str(), (matched) ? L"true" : L"false", (namedNoMatch) ? L"true" : L"false");
+			lplog(LOG_WHERE, u"%d:definite owners: parent %d:%s child %d:%s matched=%s namedNoMatch=%s", parentWhere, parentOwnerWhere, parentSource->whereString(parentOwnerWhere, tmpstr, false).c_str(), childOwnerWhere, childSource->whereString(childOwnerWhere, tmpstr2, false).c_str(), (matched) ? u"true" : u"false", (namedNoMatch) ? u"true" : u"false");
 	}
 	// parent=the Nobel Peace Prize / child=the prize
 	// parent=Jay-z [31][name][M][A:Jay-z ][WikiPerson] / child=4082:a story[4081-4083][4082][nongen][N]
@@ -466,7 +467,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 		if ((confidence = childSource->checkParticularPartSemanticMatch(LOG_WHERE, childWhere, parentSource, parentWhere, -1, synonym, semanticMismatch, fileCaching)) < CONFIDENCE_NOMATCH)
 		{
 			// why are we insisting on 'a'?
-			//if (imChild->beginObjectPosition>=0 && childSource->m[imChild->beginObjectPosition].word->first==L"a")
+			//if (imChild->beginObjectPosition>=0 && childSource->m[imChild->beginObjectPosition].word->first==u"a")
 			//{
 			//	if (confidence>1 || synonym) return false;
 			//	synonym=true; // decrease match
@@ -483,18 +484,18 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 			return true;
 		// parent=persons / child = Jared Loughner
 		if (childSource->objects[childObject].isWikiPerson &&
-			parentSource->matchChildSourcePositionSynonym(Words.query(L"person"), parentSource, parentWhere))
+			parentSource->matchChildSourcePositionSynonym(Words.query(u"person"), parentSource, parentWhere))
 			return true;
 		if (childSource->objects[childObject].isWikiPlace &&
-			parentSource->matchChildSourcePositionSynonym(Words.query(L"place"), parentSource, parentWhere))
+			parentSource->matchChildSourcePositionSynonym(Words.query(u"place"), parentSource, parentWhere))
 			return true;
 		if (childSource->objects[childObject].isWikiBusiness &&
-			parentSource->matchChildSourcePositionSynonym(Words.query(L"business"), parentSource, parentWhere))
+			parentSource->matchChildSourcePositionSynonym(Words.query(u"business"), parentSource, parentWhere))
 			return true;
 		if (childSource->objects[childObject].isWikiWork &&
-			(parentSource->matchChildSourcePositionSynonym(Words.query(L"book"), parentSource, parentWhere) ||
-				parentSource->matchChildSourcePositionSynonym(Words.query(L"album"), parentSource, parentWhere) ||
-				parentSource->matchChildSourcePositionSynonym(Words.query(L"song"), parentSource, parentWhere)))
+			(parentSource->matchChildSourcePositionSynonym(Words.query(u"book"), parentSource, parentWhere) ||
+				parentSource->matchChildSourcePositionSynonym(Words.query(u"album"), parentSource, parentWhere) ||
+				parentSource->matchChildSourcePositionSynonym(Words.query(u"song"), parentSource, parentWhere)))
 			return true;
 		// parent=US government officials / child=President George W . Bush
 		int parentObject = parentSource->m[parentWhere].getObject();
@@ -531,7 +532,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 					(childSource->m[imChild->beginObjectPosition].queryWinnerForm(determinerForm) >= 0 ||
 						childSource->m[imChild->beginObjectPosition].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
 						childSource->m[imChild->beginObjectPosition].queryWinnerForm(demonstrativeDeterminerForm) >= 0) &&
-					childSource->m[imChild->beginObjectPosition + 1].word->first == L"same");
+					childSource->m[imChild->beginObjectPosition + 1].word->first == u"same");
 			}
 			if (!isGeneric && imChild->objectMatches.size() != 0)
 			{
@@ -550,8 +551,8 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 			{
 				if (logQuestionDetail)
 				{
-					wstring tmpstr, tmpstr2;
-					lplog(LOG_WHERE, L"rejected generic answer: parent %s and child %s", parentSource->whereString(parentWhere, tmpstr, false).c_str(), childSource->whereString(childWhere, tmpstr2, false).c_str(), (matched) ? L"true" : L"false");
+					lpwstring tmpstr, tmpstr2;
+					lplog(LOG_WHERE, u"rejected generic answer: parent %s and child %s", parentSource->whereString(parentWhere, tmpstr, false).c_str(), childSource->whereString(childWhere, tmpstr2, false).c_str(), (matched) ? u"true" : u"false");
 				}
 				namedNoMatch = true;
 				return false;
@@ -559,8 +560,8 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 		}
 		if (imChild->word->first == parentSource->m[parentWhere].word->first && imChild->queryWinnerForm(nounForm) >= 0 && parentSource->m[parentWhere].queryWinnerForm(nounForm) >= 0)
 		{
-			wstring tmpstr, tmpstr2;
-			lplog(LOG_WHERE, L"matchSourcePositions:parentObject %s against child object %s succeeded (match primary word %s)",
+			lpwstring tmpstr, tmpstr2;
+			lplog(LOG_WHERE, u"matchSourcePositions:parentObject %s against child object %s succeeded (match primary word %s)",
 				parentSource->whereString(parentWhere, tmpstr, true).c_str(), childSource->whereString(childWhere, tmpstr2, true).c_str(), imChild->word->first.c_str());
 			adjectivalMatch = 0;
 			if (childSource->m[childWhere].beginObjectPosition < childWhere && parentSource->m[parentWhere].beginObjectPosition < parentWhere)
@@ -569,10 +570,10 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 					adjectivalMatch = 1;
 				else
 				{
-					unordered_set <wstring> synonyms;
+					unordered_set <lpwstring> synonyms;
 					childSource->getSynonyms(childSource->m[childWhere - 1].word->first, synonyms, NOUN);
 					if (logSynonymDetail)
-						lplog(LOG_WHERE, L"TSYM [1-1] comparing %s against synonyms [%s]%s", parentSource->m[parentWhere - 1].getMainEntry()->first.c_str(), childSource->m[childWhere - 1].word->first.c_str(), setString(synonyms, tmpstr, L"|").c_str());
+						lplog(LOG_WHERE, u"TSYM [1-1] comparing %s against synonyms [%s]%s", parentSource->m[parentWhere - 1].getMainEntry()->first.c_str(), childSource->m[childWhere - 1].word->first.c_str(), setString(synonyms, tmpstr, u"|").c_str());
 					if (synonyms.find(parentSource->m[parentWhere - 1].getMainEntry()->first) != synonyms.end())
 						adjectivalMatch = 2;
 					else
@@ -583,11 +584,11 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 		}
 		if (parentSource->m[parentWhere].beginObjectPosition < 0 && imChild->beginObjectPosition < 0)
 		{
-			unordered_set <wstring> synonyms;
-			wstring tmpstr;
+			unordered_set <lpwstring> synonyms;
+			lpwstring tmpstr;
 			childSource->getSynonyms(imChild->word->first, synonyms, NOUN);
 			if (logSynonymDetail)
-				lplog(LOG_WHERE, L"TSYM [1-1] comparing %s against synonyms [%s]%s", parentSource->m[parentWhere].getMainEntry()->first.c_str(), imChild->word->first.c_str(), setString(synonyms, tmpstr, L"|").c_str());
+				lplog(LOG_WHERE, u"TSYM [1-1] comparing %s against synonyms [%s]%s", parentSource->m[parentWhere].getMainEntry()->first.c_str(), imChild->word->first.c_str(), setString(synonyms, tmpstr, u"|").c_str());
 			if (synonyms.find(parentSource->m[parentWhere].getMainEntry()->first) != synonyms.end())
 				return synonym = true;
 		}
@@ -605,7 +606,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 		{
 			int pw = -2, pmo = parentSource->m[parentWhere].objectMatches[mo].object;
 			if (pmo >= (signed)parentSource->objects.size() || (pw = parentSource->objects[pmo].originalLocation) < 0 || pw >= (signed)parentSource->m.size())
-				lplog(LOG_WHERE, L"ERROR: %d:offset illegal! %d %d %d %d", parentWhere, pmo, parentSource->objects.size(), pw, parentSource->m.size());
+				lplog(LOG_WHERE, u"ERROR: %d:offset illegal! %d %d %d %d", parentWhere, pmo, parentSource->objects.size(), pw, parentSource->m.size());
 			else if ((parentSource->m[pw].endObjectPosition - parentSource->m[pw].beginObjectPosition) == 1 &&
 				parentSource->matchChildSourcePositionSynonym(parentSource->m[pw].word, childSource, childWhere))
 			{
@@ -624,7 +625,7 @@ bool cQuestionAnswering::matchSourcePositions(cSource* parentSource, int parentW
 // (the answer should not be the generic "book"). Book-title answers must be
 // quoted and present in the titles table. totalMatch is true only on a
 // non-synonym hit. cost is typically 8 (primary) or 4 (secondary/prep).
-int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, int parentWhere, int childWhere, int whereQuestionType, __int64 questionType, bool& totalMatch, wstring& matchInfoDetail, int cost, bool subQuery)
+int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, int parentWhere, int childWhere, int whereQuestionType, int64_t questionType, bool& totalMatch, lpwstring& matchInfoDetail, int cost, bool subQuery)
 {
 	LFS
 		totalMatch = false;
@@ -653,7 +654,7 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 	}
 	if (childIsPronoun)
 	{
-		matchInfoDetail += L"[PRONOUN]";
+		matchInfoDetail += u"[PRONOUN]";
 		return (inQuestionObject) ? -cost : 0;
 	}
 	if (inQuestionObject)
@@ -664,7 +665,7 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 		// The Prize is awarded in [Spain].
 		if (questionSource->m[parentWhere].getMainEntry() == childSource->m[childWhere].getMainEntry())
 		{
-			matchInfoDetail += L"[QUESTION_OBJECT_EXACT_MATCH]";
+			matchInfoDetail += u"[QUESTION_OBJECT_EXACT_MATCH]";
 			return (subQuery) ? cost : -cost;
 		}
 		// questions with acceptable answers
@@ -672,14 +673,14 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 		// these answers must come from highly local sources, of which we have none, so therefore these answers are tabled for now:
 		// which books did you put on the table? The big books.  The white ones.
 		// which book did you put on the table? A big book.
-		unordered_set <wstring> bookSynonyms;
-		questionSource->getSynonyms(L"book", bookSynonyms, NOUN);
-		if (questionSource->m[parentWhere].getMainEntry()->first == L"book" || bookSynonyms.find(questionSource->m[parentWhere].getMainEntry()->first) != bookSynonyms.end())
+		unordered_set <lpwstring> bookSynonyms;
+		questionSource->getSynonyms(u"book", bookSynonyms, NOUN);
+		if (questionSource->m[parentWhere].getMainEntry()->first == u"book" || bookSynonyms.find(questionSource->m[parentWhere].getMainEntry()->first) != bookSynonyms.end())
 		{
 			int childObject = childSource->m[childWhere].getObject();
 			if (childObject < 0)
 			{
-				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_OBJECT]";
+				matchInfoDetail += u"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_OBJECT]";
 				return -cost;
 			}
 			int begin = childSource->objects[childObject].begin, end = childSource->objects[childObject].end;
@@ -691,39 +692,39 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 				isEndQuote |= (cWord::isDoubleQuote(childSource->m[end].word->first[0]));
 			if (!isBeginQuote || !isEndQuote)
 			{
-				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_QUOTE]";
+				matchInfoDetail += u"[QUESTION_OBJECT_NO_BOOK_MATCH_NO_QUOTE]";
 				return -cost;
 			}
-			wstring bookTitle;
+			lpwstring bookTitle;
 			childSource->objectString(childObject, bookTitle, true);
 			if (!bookTitle.empty() && cWord::isDoubleQuote(bookTitle[0]))
 				bookTitle = bookTitle.substr(1);
 			if (!bookTitle.empty() && cWord::isDoubleQuote(bookTitle[bookTitle.size() - 1]))
 				bookTitle = bookTitle.substr(0, bookTitle.size() - 1);
-			if (!bookTitle.empty() && bookTitle[bookTitle.size() - 1] == L',')
+			if (!bookTitle.empty() && bookTitle[bookTitle.size() - 1] == u',')
 				bookTitle = bookTitle.substr(0, bookTitle.size() - 1);
 			if (isBookTitle(questionSource->mysql, bookTitle))
 			{
-				matchInfoDetail += L"[QUESTION_OBJECT_BOOK_MATCH]";
-				lplog(LOG_WHERE, L"Found Title %s", bookTitle.c_str());
+				matchInfoDetail += u"[QUESTION_OBJECT_BOOK_MATCH]";
+				lplog(LOG_WHERE, u"Found Title %s", bookTitle.c_str());
 				return cost;
 			}
 			else
 			{
-				matchInfoDetail += L"[QUESTION_OBJECT_NO_BOOK_MATCH]";
+				matchInfoDetail += u"[QUESTION_OBJECT_NO_BOOK_MATCH]";
 				return -cost;
 			}
 		}
-		unordered_set <wstring> synonyms;
+		unordered_set <lpwstring> synonyms;
 		questionSource->getSynonyms(questionSource->m[parentWhere].getMainEntry()->first, synonyms, NOUN);
 		if (synonyms.find(childSource->m[childWhere].getMainEntry()->first) != synonyms.end())
 		{
-			matchInfoDetail += L"[QUESTION_OBJECT_SYNONYM_MATCH]";
+			matchInfoDetail += u"[QUESTION_OBJECT_SYNONYM_MATCH]";
 			return (subQuery) ? cost : -cost;
 		}
 		if (!(questionType & QTAFlag) && questionType != unknownQTFlag)
 		{
-			matchInfoDetail += L"[NOT_QTA (so half cost)]";
+			matchInfoDetail += u"[NOT_QTA (so half cost)]";
 			return cost >> 1;
 		}
 	}
@@ -735,16 +736,16 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 	if (matchAllSourcePositions(questionSource, parentWhere, childSource, childWhere, namedNoMatch, synonym, inQuestionObject, semanticMismatch, adjectivalMatch, questionSource->debugTrace))
 	{
 		//if (inQuestionObject && questionType==unknownQTFlag) // in subquery - boost
-		//	lplog(LOG_WHERE,L"%d:Boost found subquery match position - cost=%d!",childWhere,(synonym) ? cost*3/4 : cost);
+		//	lplog(LOG_WHERE,u"%d:Boost found subquery match position - cost=%d!",childWhere,(synonym) ? cost*3/4 : cost);
 		if (synonym)
-			matchInfoDetail += L"[MATCH_SYNONYM]";
+			matchInfoDetail += u"[MATCH_SYNONYM]";
 		totalMatch = !synonym;
 		if (synonym)
 			return cost * 3 / 4;
 		// adjectives match exactly
 		if (adjectivalMatch == 1)
 		{
-			matchInfoDetail += L"[ADJECTIVE_EXACT_MATCH]";
+			matchInfoDetail += u"[ADJECTIVE_EXACT_MATCH]";
 			return cost * 2;
 		}
 		// adjectives are synonyms
@@ -761,7 +762,7 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 		return -cost;
 	if (semanticMismatch)
 	{
-		matchInfoDetail += L"[SEMANTIC_MISMATCH]";
+		matchInfoDetail += u"[SEMANTIC_MISMATCH]";
 		return -cost;
 	}
 	return 0;
@@ -771,73 +772,73 @@ int cQuestionAnswering::srgMatch(cSource* questionSource, cSource* childSource, 
 // am/T_START (1/2), same VerbNet class or the receive/pursue pair (1/2).
 // Missing either where returns 0. verbTypeMatch is a log label only
 // ("PRIMARY", "SECONDARY TO PRIMARY", ...).
-int cQuestionAnswering::sriVerbMatch(cSource* parentSource, cSource* childSource, int parentWhere, int childWhere, wstring& matchInfoDetailVerb, wstring verbTypeMatch, int cost)
+int cQuestionAnswering::sriVerbMatch(cSource* parentSource, cSource* childSource, int parentWhere, int childWhere, lpwstring& matchInfoDetailVerb, lpwstring verbTypeMatch, int cost)
 {
 	LFS
 		if (parentWhere < 0 || childWhere < 0)
 		{
-			matchInfoDetailVerb += L"[" + verbTypeMatch + L" where is negative]";
+			matchInfoDetailVerb += u"[" + verbTypeMatch + u" where is negative]";
 			return 0;
 		}
 	tIWMM childWord, parentWord;
 	if ((childWord = childSource->m[childWhere].getMainEntry()) == (parentWord = parentSource->m[parentWhere].getMainEntry()))
 	{
-		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb exact match]";
+		matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb exact match]";
 		return cost;
 	}
-	unordered_set <wstring> childSynonyms;
-	wstring tmpstr;
+	unordered_set <lpwstring> childSynonyms;
+	lpwstring tmpstr;
 	childSource->getSynonyms(childWord->first, childSynonyms, VERB);
 	if (logSynonymDetail)
-		lplog(LOG_WHERE, L"TSYM [VERB] comparing PARENT %s against synonyms [%s]%s", parentWord->first.c_str(), childWord->first.c_str(), setString(childSynonyms, tmpstr, L"|").c_str());
+		lplog(LOG_WHERE, u"TSYM [VERB] comparing PARENT %s against synonyms [%s]%s", parentWord->first.c_str(), childWord->first.c_str(), setString(childSynonyms, tmpstr, u"|").c_str());
 	if (childSynonyms.find(parentWord->first) != childSynonyms.end())
 	{
-		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb parent in child synonym match]";
+		matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb parent in child synonym match]";
 		return cost * 3 / 4;
 	}
-	unordered_set <wstring> parentSynonyms;
+	unordered_set <lpwstring> parentSynonyms;
 	childSource->getSynonyms(parentWord->first, parentSynonyms, VERB);
 	if (logSynonymDetail)
-		lplog(LOG_WHERE, L"%s TSYM [VERB] comparing CHILD %s against synonyms [%s]%s", verbTypeMatch.c_str(), childWord->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, L"|").c_str());
+		lplog(LOG_WHERE, u"%s TSYM [VERB] comparing CHILD %s against synonyms [%s]%s", verbTypeMatch.c_str(), childWord->first.c_str(), parentWord->first.c_str(), setString(parentSynonyms, tmpstr, u"|").c_str());
 	if (parentSynonyms.find(childWord->first) != parentSynonyms.end())
 	{
-		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb child in parent synonym match]";
+		matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb child in parent synonym match]";
 		return cost * 3 / 4;
 	}
-	if ((childWord->first == L"am" && (parentWord->second.timeFlags & 31) == T_START) || (parentWord->first == L"am" && (childWord->second.timeFlags & 31) == T_START))
+	if ((childWord->first == u"am" && (parentWord->second.timeFlags & 31) == T_START) || (parentWord->first == u"am" && (childWord->second.timeFlags & 31) == T_START))
 	{
 		if (logSynonymDetail)
-			lplog(LOG_WHERE, L"%s TSYM [VERBBEGINBEING] matched CHILD %s against PARENT %s", verbTypeMatch.c_str(), childWord->first.c_str(), parentWord->first.c_str());
-		matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb AM match]";
+			lplog(LOG_WHERE, u"%s TSYM [VERBBEGINBEING] matched CHILD %s against PARENT %s", verbTypeMatch.c_str(), childWord->first.c_str(), parentWord->first.c_str());
+		matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb AM match]";
 		return cost / 2;
 	}
-	wstring parentVerb, parentVerbClassInfo, childVerb, childVerbClassInfo;
-	unordered_map <wstring, set <int> >::iterator parentVerbClasses = parentSource->getVerbClasses(parentWhere, parentVerb);
+	lpwstring parentVerb, parentVerbClassInfo, childVerb, childVerbClassInfo;
+	unordered_map <lpwstring, set <int> >::iterator parentVerbClasses = parentSource->getVerbClasses(parentWhere, parentVerb);
 	if (parentVerbClasses != vbNetVerbToClassMap.end())
 	{
-		parentVerbClassInfo = parentVerbClasses->first + L":";
+		parentVerbClassInfo = parentVerbClasses->first + u":";
 		for (set <int>::iterator vbi = parentVerbClasses->second.begin(), vbiEnd = parentVerbClasses->second.end(); vbi != vbiEnd; vbi++)
-			parentVerbClassInfo += vbNetClasses[*vbi].name() + L" ";
+			parentVerbClassInfo += vbNetClasses[*vbi].name() + u" ";
 	}
-	unordered_map <wstring, set <int> >::iterator childVerbClasses = childSource->getVerbClasses(childWhere, childVerb);
+	unordered_map <lpwstring, set <int> >::iterator childVerbClasses = childSource->getVerbClasses(childWhere, childVerb);
 	if (childVerbClasses != vbNetVerbToClassMap.end())
 	{
-		childVerbClassInfo = childVerbClasses->first + L":";
+		childVerbClassInfo = childVerbClasses->first + u":";
 		for (set <int>::iterator vbi = childVerbClasses->second.begin(), vbiEnd = childVerbClasses->second.end(); vbi != vbiEnd; vbi++)
-			childVerbClassInfo += vbNetClasses[*vbi].name() + L" ";
+			childVerbClassInfo += vbNetClasses[*vbi].name() + u" ";
 	}
-	lplog(LOG_WHERE, L"%s VerbNet comparing PARENT verb %s [class=%s] against CHILD verb %d:%s [class=%s]", verbTypeMatch.c_str(), parentVerb.c_str(), parentVerbClassInfo.c_str(), childWhere, childVerb.c_str(), childVerbClassInfo.c_str());
+	lplog(LOG_WHERE, u"%s VerbNet comparing PARENT verb %s [class=%s] against CHILD verb %d:%s [class=%s]", verbTypeMatch.c_str(), parentVerb.c_str(), parentVerbClassInfo.c_str(), childWhere, childVerb.c_str(), childVerbClassInfo.c_str());
 	if (parentVerbClasses != vbNetVerbToClassMap.end() && childVerbClasses != vbNetVerbToClassMap.end())
 	{
 		if (parentVerbClasses->first == childVerbClasses->first)
 		{
-			matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb match verb class]";
+			matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb match verb class]";
 			return cost / 2;
 		}
-		if ((parentVerbClasses->first == L"receive" && childVerbClasses->first == L"pursue") ||
-			(parentVerbClasses->first == L"pursue" && childVerbClasses->first == L"receive"))
+		if ((parentVerbClasses->first == u"receive" && childVerbClasses->first == u"pursue") ||
+			(parentVerbClasses->first == u"pursue" && childVerbClasses->first == u"receive"))
 		{
-			matchInfoDetailVerb += L"[" + verbTypeMatch + L" verb match verb class receive/pursue]";
+			matchInfoDetailVerb += u"[" + verbTypeMatch + u" verb match verb class receive/pursue]";
 			return cost / 2;
 		}
 	}
@@ -874,28 +875,28 @@ int cQuestionAnswering::equivalenceClassCheck(cSource* questionSource, cSource* 
 		(childSource->objects[childSource->m[whereChildSpecificObject].getObject()].objectClass == NAME_OBJECT_CLASS ||
 			childSource->objects[childSource->m[whereChildSpecificObject].getObject()].objectClass == NON_GENDERED_NAME_OBJECT_CLASS))
 		whereChildSpecificObject = childSource->m[whereChildSpecificObject].endObjectPosition - 1;
-	unordered_map <wstring, set < wstring > >::iterator nvi = nounVerbMap.find(childSource->m[whereChildSpecificObject].word->first);
+	unordered_map <lpwstring, set < lpwstring > >::iterator nvi = nounVerbMap.find(childSource->m[whereChildSpecificObject].word->first);
 	// professor -> profess
 	if (nvi == nounVerbMap.end())
 	{
 		if (logEquivalenceDetail)
-			lplog(LOG_WHERE, L"%d:noun %s not found", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str());
+			lplog(LOG_WHERE, u"%d:noun %s not found", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str());
 		return 0;
 	}
 	tIWMM childConvertedVerb = Words.query(*nvi->second.begin());
 	if (childConvertedVerb == Words.end())
 	{
 		if (logEquivalenceDetail)
-			lplog(LOG_WHERE, L"%d:verb %s from noun %s not found", whereChildSpecificObject, nvi->second.begin()->c_str(), childSource->m[whereChildSpecificObject].word->first.c_str());
+			lplog(LOG_WHERE, u"%d:verb %s from noun %s not found", whereChildSpecificObject, nvi->second.begin()->c_str(), childSource->m[whereChildSpecificObject].word->first.c_str());
 		return 0;
 	}
 	tIWMM childConvertedVerbME = (childConvertedVerb->second.mainEntry == wNULL) ? childConvertedVerb : childConvertedVerb->second.mainEntry;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (childConvertedVerbME != questionSource->m[parentSRG->whereVerb].getMainEntry())
 	{
 		bool match = false;
 		// profess synonyms = teach...
-		unordered_set <wstring> synonyms;
+		unordered_set <lpwstring> synonyms;
 		childSource->getSynonyms(childConvertedVerbME->first, synonyms, VERB);
 		// does the verb match any synonym?
 		for (auto si = synonyms.begin(), siEnd = synonyms.end(); si != siEnd && !match; si++)
@@ -907,18 +908,18 @@ int cQuestionAnswering::equivalenceClassCheck(cSource* questionSource, cSource* 
 		if (!match)
 		{
 			if (logQuestionDetail)
-				lplog(LOG_WHERE, L"%d:%s:convertedVerb %s[ME %s] nor synonyms (%s) match parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
-					childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), setString(synonyms, tmpstr, L"|").c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
+				lplog(LOG_WHERE, u"%d:%s:convertedVerb %s[ME %s] nor synonyms (%s) match parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
+					childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), setString(synonyms, tmpstr, u"|").c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
 			return 0;
 		}
 		if (logQuestionDetail)
-			lplog(LOG_WHERE, L"%d:equivalence class check succeeded:"
-				L"%s:convertedVerb %s[ME %s] synonyms (%s) matched parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
-				childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), setString(synonyms, tmpstr, L"|").c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
+			lplog(LOG_WHERE, u"%d:equivalence class check succeeded:"
+				u"%s:convertedVerb %s[ME %s] synonyms (%s) matched parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
+				childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), setString(synonyms, tmpstr, u"|").c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
 	}
 	else if (logQuestionDetail)
-		lplog(LOG_WHERE, L"%d:equivalence class check succeeded:"
-			L"%s:convertedVerb %s[ME %s] matched parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
+		lplog(LOG_WHERE, u"%d:equivalence class check succeeded:"
+			u"%s:convertedVerb %s[ME %s] matched parentVerb %s[ME %s].", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(),
 			childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
 	equivalenceClass = 1;
 	return matchSum;
@@ -939,35 +940,35 @@ int cQuestionAnswering::equivalenceClassCheck2(cSource* questionSource, cSource*
 		(childSource->objects[childSource->m[whereChildSpecificObject].getObject()].objectClass == NAME_OBJECT_CLASS ||
 			childSource->objects[childSource->m[whereChildSpecificObject].getObject()].objectClass == NON_GENDERED_NAME_OBJECT_CLASS))
 		whereChildSpecificObject = childSource->m[whereChildSpecificObject].endObjectPosition - 1;
-	unordered_set <wstring> synonyms;
+	unordered_set <lpwstring> synonyms;
 	childSource->getSynonyms(childSource->m[whereChildSpecificObject].word->first, synonyms, NOUN);
 	for (auto si = synonyms.begin(), siEnd = synonyms.end(); si != siEnd; si++)
 	{
-		unordered_map <wstring, set < wstring > >::iterator nvi = nounVerbMap.find(*si);
+		unordered_map <lpwstring, set < lpwstring > >::iterator nvi = nounVerbMap.find(*si);
 		// teacher -> teach
 		if (nvi == nounVerbMap.end())
 		{
 			if (logSynonymDetail)
-				lplog(LOG_WHERE, L"%d:TSYM synonym noun %s not found", whereChildSpecificObject, si->c_str());
+				lplog(LOG_WHERE, u"%d:TSYM synonym noun %s not found", whereChildSpecificObject, si->c_str());
 			continue;
 		}
 		tIWMM childConvertedVerb = Words.query(*nvi->second.begin());
 		if (childConvertedVerb == Words.end())
 		{
-			//const wchar_t *ch=nvi->second.begin()->c_str();
+			//const lpchar_t *ch=nvi->second.begin()->c_str();
 			if (logSynonymDetail)
-				lplog(LOG_WHERE, L"%d:SYNONYM of %s(%s):verb %s not found", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(), si->c_str(), nvi->second.begin()->c_str());
+				lplog(LOG_WHERE, u"%d:SYNONYM of %s(%s):verb %s not found", whereChildSpecificObject, childSource->m[whereChildSpecificObject].word->first.c_str(), si->c_str(), nvi->second.begin()->c_str());
 			continue;
 		}
 		tIWMM childConvertedVerbME = (childConvertedVerb->second.mainEntry == wNULL) ? childConvertedVerb : childConvertedVerb->second.mainEntry;
 		if (childConvertedVerbME != questionSource->m[parentSRG->whereVerb].getMainEntry())
 		{
 			if (logEquivalenceDetail)
-				lplog(LOG_WHERE, L"%d:convertedVerb %s[ME %s] doesn't match parentVerb %s[ME %s].", whereChildSpecificObject,
+				lplog(LOG_WHERE, u"%d:convertedVerb %s[ME %s] doesn't match parentVerb %s[ME %s].", whereChildSpecificObject,
 					childConvertedVerb->first.c_str(), childConvertedVerbME->first.c_str(), questionSource->m[parentSRG->whereVerb].word->first.c_str(), questionSource->m[parentSRG->whereVerb].getMainEntry()->first.c_str());
 			continue;
 		}
-		lplog(LOG_WHERE, L"%d:equivalence class (2) check succeeded (verb %s from synonym noun %s):", whereChildSpecificObject, nvi->second.begin()->c_str(), si->c_str());
+		lplog(LOG_WHERE, u"%d:equivalence class (2) check succeeded (verb %s from synonym noun %s):", whereChildSpecificObject, nvi->second.begin()->c_str(), si->c_str());
 		equivalenceClass = 2;
 		return matchSum;
 	}
@@ -976,17 +977,17 @@ int cQuestionAnswering::equivalenceClassCheck2(cSource* questionSource, cSource*
 
 // If sum!=0, overwrite str[0] with '+' or '-' (in a local copy) and append
 // "N]" onto matchInfo via itos.
-void appendSum(int sum, const wchar_t* str, wstring& matchInfo)
+void appendSum(int sum, const lpchar_t* str, lpwstring& matchInfo)
 {
 	LFS
 		if (sum == 0) return;
-	wstring writableStr = str;
+	lpwstring writableStr = str;
 	if (!writableStr.empty())
 	{
-		if (sum < 0) writableStr[0] = L'-';
-		if (sum > 0) writableStr[0] = L'+';
+		if (sum < 0) writableStr[0] = u'-';
+		if (sum > 0) writableStr[0] = u'+';
 	}
-	itos(writableStr.c_str(), sum, matchInfo, L"]");
+	itos(writableStr.c_str(), sum, matchInfo, u"]");
 }
 
 // Given a _META_NAME_EQUIVALENCE tag set on the child, require every non-'A'
@@ -996,37 +997,37 @@ void appendSum(int sum, const wchar_t* str, wstring& matchInfo)
 // or -1 if rejected (0 is a valid where - the first token / Narrator).
 int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int whereMNE, int element, cSource* questionSource, cSource* childSource, vector <cSyntacticRelationGroup>::iterator childSRG, cPattern*& mapPatternAnswer, cPattern*& mapPatternQuestion)
 {
-	childSource->printTagSet(LOG_WHERE, L"MNE", 0, tagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
+	childSource->printTagSet(LOG_WHERE, u"MNE", 0, tagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
 	// collect tag for each of the rest of the elements
-	unordered_map <int, wstring>::iterator lvmi = mapPatternAnswer->locationToVariableMap.begin();
+	unordered_map <int, lpwstring>::iterator lvmi = mapPatternAnswer->locationToVariableMap.begin();
 	lvmi++;
 	int whereAnswer = -1, matchingElements = 0, answerTagLen = -1;
-	vector <wstring> parameters;
+	vector <lpwstring> parameters;
 	for (unsigned int e = 1; e < mapPatternAnswer->numElements(); e++, lvmi++)
 	{
-		if (mapPatternAnswer->getElement(e)->specificWords[0] == L".") // end with . because of sentence processing, but this is not significant.
+		if (mapPatternAnswer->getElement(e)->specificWords[0] == u".") // end with . because of sentence processing, but this is not significant.
 			continue;
 		if (lvmi == mapPatternAnswer->locationToVariableMap.end())
-			lplog(LOG_FATAL_ERROR, L"locationToVariableMap overflow for pattern %s[%s], element %d", mapPatternAnswer->name.c_str(), mapPatternAnswer->differentiator.c_str(), e);
-		int tag = findOneTag(tagSet, (wchar_t*)mapPatternAnswer->getElement(e)->specificWords[0].c_str(), -1);
+			lplog(LOG_FATAL_ERROR, u"locationToVariableMap overflow for pattern %s[%s], element %d", mapPatternAnswer->name.c_str(), mapPatternAnswer->differentiator.c_str(), e);
+		int tag = findOneTag(tagSet, (lpchar_t*)mapPatternAnswer->getElement(e)->specificWords[0].c_str(), -1);
 		if (tag < 0) continue;
 		int whereTag = tagSet[tag].sourcePosition;
 		if (tagSet[tag].len > 1 && childSource->m[whereTag].principalWherePosition >= 0) // could be an adjective
 			whereTag = childSource->m[whereTag].principalWherePosition;
-		wstring childVarNameValue;
+		lpwstring childVarNameValue;
 		childSource->whereString(whereTag, childVarNameValue, true);
-		wstring varName = lvmi->second;
-		if (varName != L"A")
+		lpwstring varName = lvmi->second;
+		if (varName != u"A")
 		{
 			// find location of mapPatternQuestion
 			int parentWhere = mapPatternQuestion->variableToLocationMap[varName];
-			wstring parentVarNameValue;
+			lpwstring parentVarNameValue;
 			questionSource->whereString(parentWhere, parentVarNameValue, true);
 			if (childVarNameValue != parentVarNameValue)
 				continue;
 			matchingElements++;
-			wstring tmpstr;
-			lplog(LOG_WHERE, L"%d:meta matched parameter [%s]=parent [%d:%s] = child [%d:%s].", whereMNE, varName.c_str(), parentWhere, parentVarNameValue.c_str(), whereTag, childVarNameValue.c_str());
+			lpwstring tmpstr;
+			lplog(LOG_WHERE, u"%d:meta matched parameter [%s]=parent [%d:%s] = child [%d:%s].", whereMNE, varName.c_str(), parentWhere, parentVarNameValue.c_str(), whereTag, childVarNameValue.c_str());
 			parameters.push_back(childVarNameValue);
 		}
 		else
@@ -1037,25 +1038,25 @@ int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int
 	}
 	if (whereAnswer != -1 && matchingElements > 0 && childSource->m[whereAnswer].getObject() >= 0 && answerTagLen == childSource->m[whereAnswer].endObjectPosition - childSource->m[whereAnswer].beginObjectPosition)
 	{
-		wstring childVarNameValue;
+		lpwstring childVarNameValue;
 		childSource->whereString(whereAnswer, childVarNameValue, true);
 		bool parameterMatchesAnswer = false;
-		for (vector <wstring>::iterator pi = parameters.begin(), piEnd = parameters.end(); pi != piEnd && !parameterMatchesAnswer; pi++)
+		for (vector <lpwstring>::iterator pi = parameters.begin(), piEnd = parameters.end(); pi != piEnd && !parameterMatchesAnswer; pi++)
 			parameterMatchesAnswer = *pi == childVarNameValue;
 		if (parameterMatchesAnswer)
 			return -1;
 		// test only for patterns diff 8,9,G
-		wstring diff = patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator;
-		lplog(LOG_WHERE, L"%d:meta matched pattern %s[%s]", whereMNE, patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->name.c_str(), patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator.c_str());
-		set <wstring> checkVerbs;
+		lpwstring diff = patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator;
+		lplog(LOG_WHERE, u"%d:meta matched pattern %s[%s]", whereMNE, patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->name.c_str(), patterns[childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].getPattern()]->differentiator.c_str());
+		set <lpwstring> checkVerbs;
 		if (!diff.empty())
 			switch (diff[0])
 			{
-			case '8':checkVerbs = { L"know",L"call",L"name" }; break;
-			case '9':checkVerbs = { L"look",L"appear" }; break;
-			case 'G':checkVerbs = { L"recognize" }; break;
+			case '8':checkVerbs = { u"know",u"call",u"name" }; break;
+			case '9':checkVerbs = { u"look",u"appear" }; break;
+			case 'G':checkVerbs = { u"recognize" }; break;
 			}
-		wstring tmpstr;
+		lpwstring tmpstr;
 		bool foundMatch = checkVerbs.empty();
 		if (checkVerbs.size() && childSource->m[whereAnswer].getRelVerb() >= 0)
 		{
@@ -1064,26 +1065,26 @@ int cQuestionAnswering::processMetanameTagset(vector <cTagLocation>& tagSet, int
 			{
 				if (foundMatch = (Words.gquery(cv) == childWord))
 					break;
-				unordered_set <wstring> checkSynonyms;
+				unordered_set <lpwstring> checkSynonyms;
 				questionSource->getSynonyms(cv, checkSynonyms, VERB);
 				if (logSynonymDetail)
-					lplog(LOG_WHERE, L"TSYM [VERB] comparing CHECK %s and synonyms [%s] against %s", cv.c_str(), setString(checkSynonyms, tmpstr, L"|").c_str(), childWord->first.c_str());
+					lplog(LOG_WHERE, u"TSYM [VERB] comparing CHECK %s and synonyms [%s] against %s", cv.c_str(), setString(checkSynonyms, tmpstr, u"|").c_str(), childWord->first.c_str());
 				if (foundMatch = (checkSynonyms.find(childWord->first) != checkSynonyms.end()))
 					break;
 			}
 		}
 		if (childSource->m[whereAnswer].getObject() >= 0 && childSource->objects[childSource->m[whereAnswer].getObject()].objectClass == NAME_OBJECT_CLASS && foundMatch)
 		{
-			wstring tmpstr2;
-			lplog(LOG_WHERE, L"%d:meta matched answer=%s.\n%s",
+			lpwstring tmpstr2;
+			lplog(LOG_WHERE, u"%d:meta matched answer=%s.\n%s",
 				whereMNE, childSource->whereString(whereAnswer, tmpstr, false).c_str(),
 				childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr2, false).c_str());
 			return whereAnswer;
 		}
 		else
 		{
-			wstring tmpstr2;
-			lplog(LOG_WHERE, L"%d:meta rejected answer=%s.\n%s",
+			lpwstring tmpstr2;
+			lplog(LOG_WHERE, u"%d:meta rejected answer=%s.\n%s",
 				whereMNE, childSource->whereString(whereAnswer, tmpstr, false).c_str(),
 				childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr2, false).c_str());
 		}
@@ -1136,27 +1137,27 @@ int cQuestionAnswering::metaPatternMatch(cSource* questionSource, cSource* child
 			continue;
 		if (lastWhere == whereMNE)
 			continue;
-		mapPatternAnswer->lplogShort(L"AnswerPattern", LOG_INFO);
-		mapPatternQuestion->lplogShort(L"QuestionPattern", LOG_INFO);
+		mapPatternAnswer->lplogShort(u"AnswerPattern", LOG_INFO);
+		mapPatternQuestion->lplogShort(u"QuestionPattern", LOG_INFO);
 		lastWhere = whereMNE;
 		vector < vector <cTagLocation> > tagSets;
-		// L"_META_NAME_EQUIVALENCE",-3,L"NAME_PRIMARY",L"NAME_SECONDARY",L"NAME_ABOUT",NULL
-		if (childSource->startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, false, true, L"meta pattern match") > 0)
+		// u"_META_NAME_EQUIVALENCE",-3,u"NAME_PRIMARY",u"NAME_SECONDARY",u"NAME_ABOUT",NULL
+		if (childSource->startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, childSource->m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, false, true, u"meta pattern match") > 0)
 			for (auto& tagSet : tagSets)
 			{
 				int whereAnswer = processMetanameTagset(tagSet, whereMNE, element, questionSource, childSource, childSRG, mapPatternAnswer, mapPatternQuestion);
 				if (whereAnswer >= 0)
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE, L"%d:meta pattern match found answer=%s.\n%s",
+					lpwstring tmpstr;
+					lplog(LOG_WHERE, u"%d:meta pattern match found answer=%s.\n%s",
 						whereMNE, childSource->whereString(whereAnswer, tmpstr, false).c_str(),
 						childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr, false).c_str());
 					return whereAnswer;
 				}
 				else
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE, L"%d:meta pattern match rejected answer.\n%s",
+					lpwstring tmpstr;
+					lplog(LOG_WHERE, u"%d:meta pattern match rejected answer.\n%s",
 						whereMNE,
 						childSource->phraseString(childSRG->printMin, childSRG->printMax, tmpstr, false).c_str());
 				}
@@ -1177,7 +1178,7 @@ int cQuestionAnswering::metaPatternMatch(cSource* questionSource, cSource* child
 //     7. if already in the considered list (whereQuestionInformationSourceObjectsStrings) return false.
 //     8. log the context around certain illegal text words
 //     9. if this string contains any of the others as a separate word string (whereQuestionInformationSourceObjectsStrings), return false.
-bool cQuestionAnswering::processChildObjectIntoString(cSource* childSource, int childObject, unordered_set <wstring>& whereQuestionInformationSourceObjectsStrings, wstring& childObjectString)
+bool cQuestionAnswering::processChildObjectIntoString(cSource* childSource, int childObject, unordered_set <lpwstring>& whereQuestionInformationSourceObjectsStrings, lpwstring& childObjectString)
 {
 	// ****************************
 	// process childObject into a string
@@ -1194,7 +1195,7 @@ bool cQuestionAnswering::processChildObjectIntoString(cSource* childSource, int 
 	// remove determiners like 'this' or 'that', 'there' or 'so'
 	if (childSource->objects[childObject].end - childSource->objects[childObject].begin == 1 &&
 		(childSource->m[childSource->objects[childObject].begin].queryWinnerForm(demonstrativeDeterminerForm) >= 0 || childSource->m[childSource->objects[childObject].begin].queryWinnerForm(letterForm) >= 0 ||
-			childSource->m[childSource->objects[childObject].begin].word->first == L"there" || childSource->m[childSource->objects[childObject].begin].word->first == L"so"))
+			childSource->m[childSource->objects[childObject].begin].word->first == u"there" || childSource->m[childSource->objects[childObject].begin].word->first == u"so"))
 		return false;
 	unsigned int begin = childSource->m[childSource->objects[childObject].originalLocation].beginObjectPosition;
 	// this increases the hit rate by not making a distinction with determiners.
@@ -1205,37 +1206,37 @@ bool cQuestionAnswering::processChildObjectIntoString(cSource* childSource, int 
 		childSource->m[begin].queryWinnerForm(relativizerForm) >= 0 ||
 		childSource->m[begin].queryWinnerForm(pronounForm) >= 0 ||
 		childSource->m[begin].queryWinnerForm(quantifierForm) >= 0 ||
-		childSource->m[begin].word->first == L"which"))
+		childSource->m[begin].word->first == u"which"))
 		begin++;
 	if (begin == childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition)
 		return false;
 	childSource->phraseString(begin, childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition, childObjectString, true);
 	// ownership objects are converted
-	if (childObjectString.length() > 2 && childObjectString[childObjectString.length() - 2] == L'\'')
+	if (childObjectString.length() > 2 && childObjectString[childObjectString.length() - 2] == u'\'')
 		childObjectString.erase(childObjectString.length() - 2);
 	// exclude from semantic map any objects which include the whereQuestionInformationSourceObjects
-	wstring objectStrLwr = childObjectString;
+	lpwstring objectStrLwr = childObjectString;
 	transform(objectStrLwr.begin(), objectStrLwr.end(), objectStrLwr.begin(), (int(*)(int)) tolower);
 	if (whereQuestionInformationSourceObjectsStrings.find(objectStrLwr) != whereQuestionInformationSourceObjectsStrings.end())
 		return false;
 	// log the context around certain illegal text words
-	if (childObjectString == L"br" || (childObjectString == L"com" && begin > 0 && childSource->m[begin - 1].word->first == L".") || childObjectString == L"http" || childObjectString == L"href" || childObjectString == L"span" || childObjectString == L"div" ||
-		childObjectString == L"html" || childObjectString == L"which" || childObjectString == L"that")
+	if (childObjectString == u"br" || (childObjectString == u"com" && begin > 0 && childSource->m[begin - 1].word->first == u".") || childObjectString == u"http" || childObjectString == u"href" || childObjectString == u"span" || childObjectString == u"div" ||
+		childObjectString == u"html" || childObjectString == u"which" || childObjectString == u"that")
 	{
 		int end = childSource->m[childSource->objects[childObject].originalLocation].endObjectPosition + 10;
 		if (end > childSource->m.size())
 			end = childSource->m.size();
 		childSource->phraseString((begin > 10) ? begin - 10 : 0, end, childObjectString, true);
-		lplog(LOG_WHERE, L"accumulateProximityEntry[processChildObjectIntoString] context %s:%d:%s", childObjectString.c_str(), begin, childSource->sourcePath.c_str());
+		lplog(LOG_WHERE, u"accumulateProximityEntry[processChildObjectIntoString] context %s:%d:%s", childObjectString.c_str(), begin, childSource->sourcePath.c_str());
 		return false;
 	}
 	// does this lowered string contain any other object string?  If so, continue
 	// search for each string as a separate word 
 	bool wqiFound = false;
-	for (unordered_set <wstring>::iterator wqi = whereQuestionInformationSourceObjectsStrings.begin(), wqiEnd = whereQuestionInformationSourceObjectsStrings.end(); wqi != wqiEnd && !wqiFound; wqi++)
+	for (unordered_set <lpwstring>::iterator wqi = whereQuestionInformationSourceObjectsStrings.begin(), wqiEnd = whereQuestionInformationSourceObjectsStrings.end(); wqi != wqiEnd && !wqiFound; wqi++)
 	{
 		size_t pos = objectStrLwr.find(*wqi);
-		wqiFound = (pos != wstring::npos && ((pos == 0 || !iswalpha(objectStrLwr[pos - 1])) && (pos + wqi->length() >= objectStrLwr.length() || !iswalpha(objectStrLwr[pos + wqi->length()]))));
+		wqiFound = (pos != lpwstring::npos && ((pos == 0 || !iswalpha(objectStrLwr[pos - 1])) && (pos + wqi->length() >= objectStrLwr.length() || !iswalpha(objectStrLwr[pos + wqi->length()]))));
 	}
 	return !wqiFound;
 }
@@ -1246,9 +1247,9 @@ bool cQuestionAnswering::processChildObjectIntoString(cSource* childSource, int 
 //     5. add the distance to the nearest principalWhere object to the sum in the relativeObjects entry corresponding to this lowered string (which is calculated from the object at where)
 //     6. if the principalWhere and the where positions share a relative verb location, record in the number of direct relations, with a source path and which location (where)
 void cQuestionAnswering::recordDistanceIntoProximityMap(cSource* childSource, unsigned int childSourceIndex, set <cObject::cLocation>& questionObjectMatchInChildSourceLocations,
-	set <cObject::cLocation>::iterator& questionObjectMatchIndex, bool confidence, unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator)
+	set <cObject::cLocation>::iterator& questionObjectMatchIndex, bool confidence, unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator)
 {
-	//lplog(LOG_WHERE,L"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,childObjectString.c_str(),roi->second.inSource,roi->second.confidentInSource);
+	//lplog(LOG_WHERE,u"WSM %s:%d:%s [%d:%d]",sourcePath.c_str(),where,childObjectString.c_str(),roi->second.inSource,roi->second.confidentInSource);
 
 	// get the closest principalWhere location to where and calculate distance
 	// 1 4 8 CASES: where==0, where==1 where==2 where==4 where===6 where==8 where==9
@@ -1295,7 +1296,7 @@ void cQuestionAnswering::recordDistanceIntoProximityMap(cSource* childSource, un
 //     1. process child object into a string.
 //     2. record distance into the proximity map (the one for each QuestionInformationSourceObject in parentSRG) for childObjectString (closestObjectIterator) to how near it is to questionObjectMatchIndex (that matches the questionInformationObject in the child source)
 void cQuestionAnswering::accumulateProximityEntry(cSource* childSource, unsigned int childSourceIndex, set <cObject::cLocation>& questionObjectMatchInChildSourceLocations,
-	set <cObject::cLocation>::iterator& questionObjectMatchIndex, bool confidence, cSyntacticRelationGroup* parentSRG, cProximityMap* proximityMap, unordered_set <wstring>& whereQuestionInformationSourceObjectsStrings)
+	set <cObject::cLocation>::iterator& questionObjectMatchIndex, bool confidence, cSyntacticRelationGroup* parentSRG, cProximityMap* proximityMap, unordered_set <lpwstring>& whereQuestionInformationSourceObjectsStrings)
 {
 	LFS
 		vector <cOM> childObjectMatches = childSource->m[childSourceIndex].objectMatches;
@@ -1303,7 +1304,7 @@ void cQuestionAnswering::accumulateProximityEntry(cSource* childSource, unsigned
 		childObjectMatches.push_back(cOM(childSource->m[childSourceIndex].getObject(), -1));
 	for (unsigned int I = 0; I < childObjectMatches.size(); I++)
 	{
-		wstring childObjectString;
+		lpwstring childObjectString;
 		int childObject = childObjectMatches[I].object;
 		if (processChildObjectIntoString(childSource, childObject, whereQuestionInformationSourceObjectsStrings, childObjectString))
 		{
@@ -1311,7 +1312,7 @@ void cQuestionAnswering::accumulateProximityEntry(cSource* childSource, unsigned
 			// record distance into the proximity map (the one for each QuestionInformationSourceObject in parentSRG) for childObjectString (closestObjectIterator) to how near it is to questionObjectMatchIndex (that matches the questionInformationObject in the child source)
 			// ****************************
 			// find or create an entry in proximityMap relativeObjects corresponding to the object string.
-			unordered_map <wstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator = proximityMap->closestObjects.find(childObjectString);
+			unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator closestObjectIterator = proximityMap->closestObjects.find(childObjectString);
 			if (closestObjectIterator == proximityMap->closestObjects.end())
 			{
 				proximityMap->closestObjects[childObjectString] = cProximityMap::cProximityEntry(*this, childSource, childSourceIndex, childObject, parentSRG);
@@ -1342,8 +1343,8 @@ void cQuestionAnswering::accumulateProximityEntry(cSource* childSource, unsigned
 void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSyntacticRelationGroup* parentSRG, cSource* childSource, bool confidence)
 {
 	LFS
-		wstring tmpstr;
-	unordered_set <wstring> whereQuestionInformationSourceObjectsStrings;
+		lpwstring tmpstr;
+	unordered_set <lpwstring> whereQuestionInformationSourceObjectsStrings;
 	// 1. for each question information object, 
 	//      create a string that is all lower case.  
 	//      If it was all upper case, and very short, make it into an acronym
@@ -1357,7 +1358,7 @@ void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSynta
 			{
 				isAllUpper = isAllUpper && isupper(tmpstr[I]);
 				containsNonAlpha |= !isalpha(tmpstr[I]);
-				containsPeriod |= tmpstr[I] == L'.';
+				containsPeriod |= tmpstr[I] == u'.';
 			}
 		}
 		transform(tmpstr.begin(), tmpstr.end(), tmpstr.begin(), (int(*)(int)) tolower);
@@ -1365,11 +1366,11 @@ void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSynta
 		if (tmpstr.length() < 4 && isAllUpper && !containsNonAlpha && !containsPeriod)
 		{
 			// assume this is a special acronym - convert to an acronym with periods.
-			wstring tmpstr2;
+			lpwstring tmpstr2;
 			for (int I = 0; I < tmpstr.length(); I++)
 			{
 				tmpstr2 += tmpstr[I];
-				tmpstr2 += L'.';
+				tmpstr2 += u'.';
 			}
 			whereQuestionInformationSourceObjectsStrings.insert(tmpstr2);
 		}
@@ -1403,13 +1404,13 @@ void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSynta
 			set <cObject::cLocation> questionObjectMatchInChildSourceLocations;
 			bool namedNoMatch = false;
 			if (logProximityMap)
-				lplog(LOG_WHERE, L"%s:? SM", questionSource->objectString(*poi, tmpstr, false).c_str());
+				lplog(LOG_WHERE, u"%s:? SM", questionSource->objectString(*poi, tmpstr, false).c_str());
 			// 6. for every object in a child source
 			for (unsigned int I = 0; I < childSource->objects.size(); I++)
 			{
-				wstring tmpstr2;
+				lpwstring tmpstr2;
 				//if (logProximityMap)
-				//	lplog(LOG_WHERE,L"==%s? SM",childSource->objectString(I,tmpstr2,false).c_str());
+				//	lplog(LOG_WHERE,u"==%s? SM",childSource->objectString(I,tmpstr2,false).c_str());
 				// 7. if the child source object matches the parentObject, accumulate the locations for this child source object in primcipalObjectLocations.
 				if (childSource->objects[I].objectClass == parentObjectClass && matchObjectsByName(questionSource, questionSource->objects.begin() + poi->object, childSource, childSource->objects.begin() + I, namedNoMatch, questionSource->debugTrace))
 				{
@@ -1442,14 +1443,14 @@ void cQuestionAnswering::accumulateProximityMaps(cSource* questionSource, cSynta
 // matchSum > 14 and (subject matched and a verb matched), or the parent is a
 // subquery with a subject match. Subquery wiki-type agreement can add +8/+4.
 // Enters a cAS via enterAnswerAccumulatingIdenticalAnswers.
-void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObjectPrep(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
+	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const lpwstring matchInfoDetailSubject, const int matchSumSubject, const int wo, int &po,
 	const bool questionTypeSubject, const bool questionTypePrepObject,
-	const bool subjectMatch, const int verbMatch, const wstring matchInfoDetailVerb,
-	wstring &matchInfoDetail, const int objectMatch, const int relativizerAsPrepMatch, const int secondaryObjectMatch, const int secondaryVerbMatch, set<int> &whereAnswerMatchSubquery)
+	const bool subjectMatch, const int verbMatch, const lpwstring matchInfoDetailVerb,
+	lpwstring &matchInfoDetail, const int objectMatch, const int relativizerAsPrepMatch, const int secondaryObjectMatch, const int secondaryVerbMatch, set<int> &whereAnswerMatchSubquery)
 {
-	wstring matchInfo = matchInfoDetail;
+	lpwstring matchInfo = matchInfoDetail;
 	int prepObjectMatch = 0, prepMatch = 0;
 	if (po != -1)
 	{
@@ -1467,7 +1468,7 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 		prepMatch = 2;
 		prepObjectMatch = relativizerAsPrepMatch;
 		po = wo;
-		matchInfo += L"[RELATIVIZER_AS_PREPOBJECT]";
+		matchInfo += u"[RELATIVIZER_AS_PREPOBJECT]";
 	}
 	int equivalenceClass = 0, equivalenceMatch = 0;
 	if (verbMatch <= 0 && (subjectMatch || (questionTypeSubject && !(parentSRG->questionType & QTAFlag))) && (po == -1 || (prepMatch > 0 && (prepObjectMatch > 0 || questionSource->inObject(parentSRG->wherePrepObject, parentSRG->whereQuestionType)))))
@@ -1478,20 +1479,20 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 	int matchSum = matchSumSubject + verbMatch + objectMatch + secondaryVerbMatch + secondaryObjectMatch + prepMatch + prepObjectMatch + equivalenceMatch;
 	if (logQuestionDetail || matchSum >= 8 + 6)
 	{
-		appendSum(matchSumSubject, L"+SUBJ[", matchInfo);
-		appendSum(verbMatch, L"+VERB[", matchInfo);
-		appendSum(objectMatch, L"+OBJ[", matchInfo);
-		appendSum(secondaryVerbMatch, L"+VERB2[", matchInfo);
-		appendSum(secondaryObjectMatch, L"+OBJ2[", matchInfo);
-		appendSum(prepMatch, L"+PREP[", matchInfo);
-		appendSum(prepObjectMatch, L"+PREPOBJ[", matchInfo);
-		appendSum(equivalenceMatch, L"+EM[", matchInfo);
+		appendSum(matchSumSubject, u"+SUBJ[", matchInfo);
+		appendSum(verbMatch, u"+VERB[", matchInfo);
+		appendSum(objectMatch, u"+OBJ[", matchInfo);
+		appendSum(secondaryVerbMatch, u"+VERB2[", matchInfo);
+		appendSum(secondaryObjectMatch, u"+OBJ2[", matchInfo);
+		appendSum(prepMatch, u"+PREP[", matchInfo);
+		appendSum(prepObjectMatch, u"+PREPOBJ[", matchInfo);
+		appendSum(equivalenceMatch, u"+EM[", matchInfo);
 	}
 	if (logQuestionDetail)
 	{
-		wstring ps;
+		lpwstring ps;
 		childSource->prepPhraseToString(childSRG->wherePrep, ps);
-		childSource->printSRG(L"    [printall] " + matchInfo, &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, ps, false, -1, L"");
+		childSource->printSRG(u"    [printall] " + matchInfo, &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, ps, false, -1, u"");
 	}
 	if (matchSum > 8 + 6 && ((parentSRG->subQuery && subjectMatch) || (subjectMatch && (verbMatch > 0 || secondaryVerbMatch > 0)))) // a single element match and 3/4 of another (sym match)
 	{
@@ -1503,7 +1504,7 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 				if (match = checkParticularPartIdentical(questionSource, childSource, parentSRG->whereQuestionType, wc))
 				{
 					matchSum += 8;
-					matchInfo += L"ANSWER_MATCH[+8]";
+					matchInfo += u"ANSWER_MATCH[+8]";
 				}
 				int parentObject, childObject;
 				if ((parentObject = questionSource->m[parentSRG->whereQuestionType].getObject()) >= 0 && (childObject = childSource->m[wc].getObject()) >= 0)
@@ -1517,29 +1518,29 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 							(questionSource->objects[parentObject].isWikiWork && childSource->objects[childObject].isWikiWork)))
 					{
 						matchSum += 4;
-						matchInfo += L"ANSWER_MATCH_WIKITYPE[+4]";
+						matchInfo += u"ANSWER_MATCH_WIKITYPE[+4]";
 					}
 					if (areBothPlaces && questionSource->objects[parentObject].getSubType() == childSource->objects[childObject].getSubType() &&
 						questionSource->objects[parentObject].getSubType() != UNKNOWN_PLACE_SUBTYPE && questionSource->objects[parentObject].getSubType() >= 0)
 					{
 						matchSum += 4;
-						matchInfo += L"ANSWER_MATCH_OBJECT_SUBTYPE[+4]";
+						matchInfo += u"ANSWER_MATCH_OBJECT_SUBTYPE[+4]";
 					}
 					if (wikiTypeMatch && !match && matchSum > 16)
 					{
-						matchInfo += L"WIKI_OTHER_ANSWER[0]";
+						matchInfo += u"WIKI_OTHER_ANSWER[0]";
 					}
 				}
 			}
 		}
-		enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRG, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRG), equivalenceClass, ws, wo, po, false, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRGs);
+		enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRG, cAS(childSourceType, childSource, -1, matchSum, matchInfo, &(*childSRG), equivalenceClass, ws, wo, po, false, false, u"", u"", 0, 0, 0, NULL), maxAnswer, answerSRGs);
 	}
 	if (logQuestionDetail)
 	{
-		wstring ps;
+		lpwstring ps;
 		if (po != -1)
 			childSource->prepPhraseToString(po, ps);
-		childSource->printSRG(L"", &(*childSRG), 0, ws, wo, ps, false, matchSum, matchInfo);
+		childSource->printSRG(u"", &(*childSRG), 0, ws, wo, ps, false, matchSum, matchInfo);
 	}
 }
 
@@ -1549,34 +1550,34 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 // primary score on failure). "was a featured X" with 'is' can resurrect a
 // failed verb match (MOVED_VERB_TO_OBJECT). Then walk every prep of the child
 // SRG into the Prep scorer. verbMatch is in/out because those fallbacks mutate it.
-void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbObject(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
+	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const lpwstring matchInfoDetailSubject, const int matchSumSubject, const int wo,
 	const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject,
-	const bool subjectMatch, int &verbMatch, const wstring matchInfoDetailVerb)
+	const bool subjectMatch, int &verbMatch, const lpwstring matchInfoDetailVerb)
 {
 
 	LFSL
 	if (wo != childSRG->whereObject && logQuestionDetail)
 	{
-		wstring ps;
+		lpwstring ps;
 		childSource->prepPhraseToString(childSRG->wherePrep, ps);
-		childSource->printSRG(L"    [printallCO] ", &(*childSRG), 0, ws, wo, ps, false, -1, L"");
+		childSource->printSRG(u"    [printallCO] ", &(*childSRG), 0, ws, wo, ps, false, -1, u"");
 	}
 	set<int> whereAnswerMatchSubquery;
-	wstring matchInfoDetail = matchInfoDetailSubject + matchInfoDetailVerb;
+	lpwstring matchInfoDetail = matchInfoDetailSubject + matchInfoDetailVerb;
 	int objectMatch = 0, secondaryVerbMatch = 0, secondaryObjectMatch = 0;
 	objectMatch = srgMatch(questionSource, childSource, parentSRG->whereObject, wo, parentSRG->whereQuestionType, parentSRG->questionType, childSRG->nonSemanticObjectTotalMatch, matchInfoDetail, 8, parentSRG->subQuery);
 	if (parentSRG->subQuery && questionTypeObject && objectMatch > 0)
 		whereAnswerMatchSubquery.insert(childSRG->whereObject);
 
-	secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereSecondaryVerb, childSRG->whereSecondaryVerb, matchInfoDetail, L"SECONDARY TO SECONDARY", 4);
+	secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereSecondaryVerb, childSRG->whereSecondaryVerb, matchInfoDetail, u"SECONDARY TO SECONDARY", 4);
 	if (parentSRG->whereSecondaryVerb >= 0 && (secondaryVerbMatch == 0 || childSRG->whereSecondaryVerb < 0))
 	{
-		if (childSRG->whereSecondaryVerb >= 0 || (secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereSecondaryVerb, vi, matchInfoDetail, L"SECONDARY TO PRIMARY", 8)) == 0)
+		if (childSRG->whereSecondaryVerb >= 0 || (secondaryVerbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereSecondaryVerb, vi, matchInfoDetail, u"SECONDARY TO PRIMARY", 8)) == 0)
 		{
 			secondaryVerbMatch = -verbMatch;
-			matchInfoDetail += L"[SECONDARY_VERB_MATCH_FAILED]";
+			matchInfoDetail += u"[SECONDARY_VERB_MATCH_FAILED]";
 		}
 		else
 			verbMatch = 0;
@@ -1589,7 +1590,7 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 		if (childSRG->whereSecondaryObject >= 0 || (secondaryObjectMatch = srgMatch(questionSource, childSource, parentSRG->whereSecondaryObject, wo, parentSRG->whereQuestionType, parentSRG->questionType, childSRG->nonSemanticSecondaryObjectTotalMatch, matchInfoDetail, 8, parentSRG->subQuery)) == 0)
 		{
 			secondaryObjectMatch = -objectMatch;
-			matchInfoDetail += L"[SECONDARY_OBJECT_MATCH_FAILED]";
+			matchInfoDetail += u"[SECONDARY_OBJECT_MATCH_FAILED]";
 		}
 		else
 			objectMatch = 0;
@@ -1602,14 +1603,14 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 		(coe - cob) > 2 && childSource->m[cob].queryForm(determinerForm) >= 0 && childSource->m[cob + 1].getMainEntry() == questionSource->m[parentSRG->whereVerb].getMainEntry())
 	{
 		verbMatch = 8;
-		matchInfoDetail += L"[MOVED_VERB_TO_OBJECT]";
+		matchInfoDetail += u"[MOVED_VERB_TO_OBJECT]";
 	}
 	set <int> relPreps;
 	childSource->getAllPreps(&(*childSRG), relPreps, wo);
 	int relativizerAsPrepMatch = 0;
 	// where you went -- You went TO Prague
 	// when you went -- You went AT 12:30.
-	unordered_set<wstring> relativizerObjectsActLikePrepObjects = { L"where",L"when" };
+	unordered_set<lpwstring> relativizerObjectsActLikePrepObjects = { u"where",u"when" };
 	if (objectMatch == 0 && wo >= 0 && childSource->m[wo].queryWinnerForm(relativizerForm) != -1 && parentSRG->wherePrep >= 0 && relativizerObjectsActLikePrepObjects.find(childSource->m[wo].word->first) != relativizerObjectsActLikePrepObjects.end())
 	{
 		relativizerAsPrepMatch = srgMatch(questionSource, childSource, parentSRG->wherePrepObject, wo, parentSRG->whereQuestionType, parentSRG->questionType, childSRG->nonSemanticPrepositionObjectTotalMatch, matchInfoDetail, 4, parentSRG->subQuery);
@@ -1636,13 +1637,13 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerbOb
 // Otherwise walk the child's compound-object chain. Always ends with -1.
 // -1 - break
 // 0 - continue
-int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
-	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const wstring matchInfoDetailSubject, const int matchSumSubject, 
+	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const int vi, const lpwstring matchInfoDetailSubject, const int matchSumSubject, 
 	const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject)
 {
-	wstring matchInfoDetailVerb;
-	int verbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereVerb, vi, matchInfoDetailVerb, L"PRIMARY", 8);
+	lpwstring matchInfoDetailVerb;
+	int verbMatch = sriVerbMatch(questionSource, childSource, parentSRG->whereVerb, vi, matchInfoDetailVerb, u"PRIMARY", 8);
 	bool subjectMatch = matchSumSubject > 0;
 	bool inSubQuery = parentSRG->questionType == unknownQTFlag;
 	if (verbMatch <= 0 && !subjectMatch && !questionTypeSubject && !inSubQuery)
@@ -1653,8 +1654,8 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cS
 	}
 	//if (matchSumSubject>0 && inSubQuery)
 	//{
-	//	wstring tmp1,tmp2;
-	//	lplog(LOG_WHERE,L"Comparing subjects %d [%d, %d] %s and %s.",matchSumSubject,parentSRG->whereSubject,ws,whereString(parentSRG->whereSubject,tmp1,false).c_str(),childSource->whereString(ws,tmp2,false).c_str());
+	//	lpwstring tmp1,tmp2;
+	//	lplog(LOG_WHERE,u"Comparing subjects %d [%d, %d] %s and %s.",matchSumSubject,parentSRG->whereSubject,ws,whereString(parentSRG->whereSubject,tmp1,false).c_str(),childSource->whereString(ws,tmp2,false).c_str());
 	//}
 	for (int wo = childSRG->whereObject; true; wo = childSource->m[wo].nextCompoundPartObject)
 	{
@@ -1674,7 +1675,7 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubjectVerb(cS
 // compound verbs. Returns -1 to stop the compound-subject loop, 0 to continue.
 // -1 - break
 // 0 - continue
-int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const wstring childSourceType, cSource* childSource,
+int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSource* questionSource, const lpwstring childSourceType, cSource* childSource,
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer,
 	vector <cSyntacticRelationGroup>::iterator childSRG, const int ws, const bool questionTypeSubject, const bool questionTypeObject, const bool questionTypePrepObject)
 {
@@ -1682,25 +1683,25 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSourc
 	if ((ws != childSRG->whereSubject && ws < 0) || ws >= (int)childSource->m.size()) 
 		return -1;
 	int matchSumSubject;
-	wstring matchInfoDetailSubject;
+	lpwstring matchInfoDetailSubject;
 	if (parentSRG->subQuery)
 	{
 		matchSumSubject = (checkParticularPartIdentical(questionSource, childSource, parentSRG->whereSubject, ws)) ? 8 : -1;
-		matchInfoDetailSubject = (matchSumSubject < 0) ? L"[SUBQUERY_NOT_IDENTICAL]" : L"[SUBQUERY_IDENTICAL]";
+		matchInfoDetailSubject = (matchSumSubject < 0) ? u"[SUBQUERY_NOT_IDENTICAL]" : u"[SUBQUERY_IDENTICAL]";
 	}
 	else
 		matchSumSubject = srgMatch(questionSource, childSource, parentSRG->whereSubject, ws, parentSRG->whereQuestionType, parentSRG->questionType, childSRG->nonSemanticSubjectTotalMatch, matchInfoDetailSubject, 8, parentSRG->subQuery);
 	if (parentSRG->whereQuestionInformationSourceObjects.find(parentSRG->whereSubject) != parentSRG->whereQuestionInformationSourceObjects.end() && matchSumSubject < 8)
 	{
 		matchSumSubject = 0;
-		matchInfoDetailSubject += L"[QUERY_INFORMATION_SOURCE_NOT_IDENTICAL_MATCH]";
+		matchInfoDetailSubject += u"[QUERY_INFORMATION_SOURCE_NOT_IDENTICAL_MATCH]";
 	}
 	if (childSRG->whereSubject >= 0 && childSource->m[childSRG->whereSubject].objectMatches.size() > 1 && matchSumSubject >= 0)
 	{
 		matchSumSubject /= childSource->m[childSRG->whereSubject].objectMatches.size();
-		wstring subjectString;
+		lpwstring subjectString;
 		childSource->whereString(childSRG->whereSubject, subjectString, false);
-		matchInfoDetailSubject += L"[MULTIPLE_CHILD_MATCH_SUBJ(" + subjectString + L")]";
+		matchInfoDetailSubject += u"[MULTIPLE_CHILD_MATCH_SUBJ(" + subjectString + u")]";
 	}
 	if (matchSumSubject < 0)
 	{
@@ -1721,15 +1722,15 @@ int cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelationSubject(cSourc
 
 // One child SRG: skip if it is itself a question or negation disagrees.
 // Optionally try metaPatternMatch.  Then walk up to 4 compound subjects.
-void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, wstring childSourceType, cSource* childSource, 
+void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* questionSource, lpwstring childSourceType, cSource* childSource, 
 	cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, 
 	vector <cSyntacticRelationGroup>::iterator childSRG, bool questionTypeSubject, bool questionTypeObject, bool questionTypePrepObject)
 {
 	if (logQuestionDetail)
 	{
-		wstring ps;
+		lpwstring ps;
 		childSource->prepPhraseToString(childSRG->wherePrep, ps);
-		childSource->printSRG(L"    [printall] ", &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, ps, false, -1, L"");
+		childSource->printSRG(u"    [printall] ", &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, ps, false, -1, u"");
 	}
 	// child cannot be question
 	bool inQuestion = (childSRG->whereSubject >= 0 && (childSource->m[childSRG->whereSubject].flags & cWordMatch::flagInQuestion));
@@ -1750,7 +1751,7 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* que
 	//	continue;
 	int whereMetaPatternAnswer = -1;
 	if (parentSRG->mapPatternAnswer != NULL && (whereMetaPatternAnswer = metaPatternMatch(questionSource, childSource, childSRG, parentSRG->mapPatternAnswer, parentSRG->mapPatternQuestion)) >= 0)
-		enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRG, cAS(childSourceType, childSource, -1, maxAnswer, L"META_PATTERN", &(*childSRG), 0, whereMetaPatternAnswer, -1, -1, false, false, L"", L"", 0, 0, 0, NULL), maxAnswer, answerSRGs);
+		enterAnswerAccumulatingIdenticalAnswers(questionSource, parentSRG, cAS(childSourceType, childSource, -1, maxAnswer, u"META_PATTERN", &(*childSRG), 0, whereMetaPatternAnswer, -1, -1, false, false, u"", u"", 0, 0, 0, NULL), maxAnswer, answerSRGs);
 	int compoundPartLoopsSubject = 0;
 	for (int ws = childSRG->whereSubject; compoundPartLoopsSubject < 4; ws = childSource->m[ws].nextCompoundPartObject, compoundPartLoopsSubject++)
 	{
@@ -1773,14 +1774,14 @@ void cQuestionAnswering::analyzeQuestionFromSourceSyntacticRelation(cSource* que
 //    match preferentially the subject/verb/object/prep?/prepObject, 
 //    with special analysis match of the whereQuestionTargetSuggestionIndex, if srg->questionType is an adjective type.
 //    answer is the special analysis match.
-int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, wchar_t* derivation, wstring childSourceType, cSource* childSource, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, bool eraseIfNoAnswers)
+int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, lpchar_t* derivation, lpwstring childSourceType, cSource* childSource, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs, int& maxAnswer, bool eraseIfNoAnswers)
 {
 	LFS
 		int currentPercent, lastProgressPercent = -1, startClockTime = clock();
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"********[%s used %d times:%d total sources] %s:", derivation, childSource->numSearchedInMemory, sourcesMap.size(), childSource->sourcePath.c_str());
+		lplog(LOG_WHERE, u"********[%s used %d times:%d total sources] %s:", derivation, childSource->numSearchedInMemory, sourcesMap.size(), childSource->sourcePath.c_str());
 	else
-		lplog(LOG_WHERE, L"********[%s] %s:", derivation, childSource->sourcePath.c_str());
+		lplog(LOG_WHERE, u"********[%s] %s:", derivation, childSource->sourcePath.c_str());
 	childSource->parentSource = NULL; // this is set so we can investigate child sources through identification of ISA types
 	accumulateProximityMaps(questionSource, parentSRG, childSource, childSource->sourceType == cSource::WIKIPEDIA_SOURCE_TYPE);
 	if (!childSource->isFormsProcessed)
@@ -1794,7 +1795,7 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, wchar
 				{
 					LFSL
 						if (logQuestionDetail)
-							childSource->printSRG(L"IS SWITCH", &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, L"", false, -1, L"");
+							childSource->printSRG(u"IS SWITCH", &(*childSRG), 0, childSRG->whereSubject, childSRG->whereObject, u"", false, -1, u"");
 					vector <cSyntacticRelationGroup>::iterator endCopySRI = childSource->syntacticRelationGroups.insert(childSource->syntacticRelationGroups.end(), *childSRG);
 					childSRG = childSource->syntacticRelationGroups.begin() + I;
 					endCopySRI->whereSubject = childSRG->whereObject;
@@ -1812,14 +1813,14 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, wchar
 			questionTypeSubject, questionTypeObject, questionTypePrepObject);
 		if ((currentPercent = (childSRG - childSource->syntacticRelationGroups.begin()) * 100 / childSource->syntacticRelationGroups.size()) > lastProgressPercent)
 		{
-			wprintf(L"PROGRESS: %03d%% child relations processed with %04d seconds elapsed \r", currentPercent, (int)((clock() - startClockTime) / CLOCKS_PER_SEC));
+			lp_wprintf(u"PROGRESS: %03d%% child relations processed with %04d seconds elapsed \r", currentPercent, (int)((clock() - startClockTime) / CLOCKS_PER_SEC));
 			lastProgressPercent = currentPercent;
 		}
 	}
-	wprintf(L"PROGRESS: 100%% child relations processed with %04d seconds elapsed \r", (int)((clock() - startClockTime) / CLOCKS_PER_SEC));
+	lp_wprintf(u"PROGRESS: 100%% child relations processed with %04d seconds elapsed \r", (int)((clock() - startClockTime) / CLOCKS_PER_SEC));
 	if (childSource->answerContainedInSource == 0 && childSource->numSearchedInMemory == 1 && eraseIfNoAnswers)
 	{
-		unordered_map <wstring, cSource*>::iterator smi = sourcesMap.find(childSource->sourcePath);
+		unordered_map <lpwstring, cSource*>::iterator smi = sourcesMap.find(childSource->sourcePath);
 		if (smi != sourcesMap.end())
 		{
 			cSource* source = smi->second;
@@ -1838,9 +1839,9 @@ int cQuestionAnswering::analyzeQuestionFromSource(cSource* questionSource, wchar
 // process RDFType abstract, then go through the wikipedia source and wikipedia links in the RDF type, also going through any tables in the sources.
 // Stops early if any pass reaches matchSum > 24. wikiTableMap[whereQuestionContextSuggestion]
 // is new'd here; the caller's wikiTableMap owns and frees these pointers once it is done with them.
-void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource* questionSource, wchar_t* derivation, int whereQuestionContextSuggestion, cSyntacticRelationGroup* parentSRG,
+void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(cSource* questionSource, lpchar_t* derivation, int whereQuestionContextSuggestion, cSyntacticRelationGroup* parentSRG,
 	cTreeCat* rdfType, bool parseOnly, vector < cAS >& answerSRGs, int& maxAnswer,
-	unordered_map <int, cWikipediaTableCandidateAnswers*>& wikiTableMap, set <wstring>& wikipediaLinksAlreadyScanned)
+	unordered_map <int, cWikipediaTableCandidateAnswers*>& wikiTableMap, set <lpwstring>& wikipediaLinksAlreadyScanned)
 {
 	LFS
 		if (rdfType != NULL)
@@ -1848,26 +1849,26 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 			int whereQuestionTypeObject = (parentSRG->questionType == unknownQTFlag) ? parentSRG->whereSubject : getWhereQuestionTypeObject(questionSource, parentSRG);
 			cSource* abstractSource = NULL;
 			int qMaxAnswer = -1;
-			lplog(LOG_WHERE, L"birthDate=%s,birthPlace=%s,occupation=%s", rdfType->birthDate.c_str(), rdfType->birthPlace.c_str(), rdfType->occupation.c_str());
+			lplog(LOG_WHERE, u"birthDate=%s,birthPlace=%s,occupation=%s", rdfType->birthDate.c_str(), rdfType->birthPlace.c_str(), rdfType->occupation.c_str());
 			if (processAbstract(questionSource, rdfType, abstractSource, parseOnly) >= 0)
 			{
-				analyzeQuestionFromSource(questionSource, derivation, L"abstract: " + abstractSource->sourcePath, abstractSource, parentSRG, answerSRGs, qMaxAnswer, false);
+				analyzeQuestionFromSource(questionSource, derivation, u"abstract: " + abstractSource->sourcePath, abstractSource, parentSRG, answerSRGs, qMaxAnswer, false);
 				maxAnswer = max(maxAnswer, qMaxAnswer);
 				if (qMaxAnswer > 24)
 					return;
 			}
-			int maxPrepositionalPhraseNonMixMatch = -1, dlen = wcslen(derivation);
+			int maxPrepositionalPhraseNonMixMatch = -1, dlen = lp_strlen(derivation);
 			questionSource->ppExtensionAvailable(whereQuestionContextSuggestion, maxPrepositionalPhraseNonMixMatch, true);
 			int minPrepositionalPhraseNonMixMatch = (maxPrepositionalPhraseNonMixMatch == 0) ? 0 : 1;
 			for (int I = maxPrepositionalPhraseNonMixMatch; I >= minPrepositionalPhraseNonMixMatch; I--)
 			{
 				if (I != 0)
-					StringCbPrintf(derivation + dlen, 1024 - dlen, L"P%d:", I);
+					lp_snprintf(derivation + dlen, 1024 - dlen, u"P%d:", I);
 				// process wikipedia entry - including any lower case words preceding a proper noun.
 				cSource* wikipediaSource = NULL;
 				if (processWikipedia(questionSource, whereQuestionContextSuggestion, wikipediaSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned, false) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource, derivation, L"wikipedia:" + wikipediaSource->sourcePath, wikipediaSource, parentSRG, answerSRGs, qMaxAnswer, false);
+					analyzeQuestionFromSource(questionSource, derivation, u"wikipedia:" + wikipediaSource->sourcePath, wikipediaSource, parentSRG, answerSRGs, qMaxAnswer, false);
 					if (whereQuestionTypeObject >= 0)
 					{
 						vector < cSourceTable > wikiTables;
@@ -1882,7 +1883,7 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 				// process wikipedia entry NOT including any lower case words preceding a proper noun.
 				if (processWikipedia(questionSource, whereQuestionContextSuggestion, wikipediaSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned, true) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource, derivation, L"wikipediaNPUW:" + wikipediaSource->sourcePath, wikipediaSource, parentSRG, answerSRGs, qMaxAnswer, false);
+					analyzeQuestionFromSource(questionSource, derivation, u"wikipediaNPUW:" + wikipediaSource->sourcePath, wikipediaSource, parentSRG, answerSRGs, qMaxAnswer, false);
 					if (whereQuestionTypeObject >= 0)
 					{
 						vector < cSourceTable > wikiTables;
@@ -1898,7 +1899,7 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 				cSource* wikipediaLinkSource = NULL;
 				if (processWikipedia(questionSource, -1, wikipediaLinkSource, rdfType->wikipediaLinks, I, parseOnly, wikipediaLinksAlreadyScanned, false) >= 0)
 				{
-					analyzeQuestionFromSource(questionSource, derivation, L"wikipediaLink:" + wikipediaLinkSource->sourcePath, wikipediaLinkSource, parentSRG, answerSRGs, qMaxAnswer, false);
+					analyzeQuestionFromSource(questionSource, derivation, u"wikipediaLink:" + wikipediaLinkSource->sourcePath, wikipediaLinkSource, parentSRG, answerSRGs, qMaxAnswer, false);
 					if (whereQuestionTypeObject >= 0)
 					{
 						vector < cSourceTable > wikiTables;
@@ -1920,8 +1921,8 @@ void cQuestionAnswering::analyzeQuestionThroughAbstractAndWikipediaFromRDFType(c
 bool cQuestionAnswering::checkObjectIdentical(cSource* source1, cSource* source2, int object1, int object2)
 {
 	LFS
-		wstring tmpstr1, tmpstr2;
-	//lplog(LOG_WHERE,L"Comparing %s against %s.",
+		lpwstring tmpstr1, tmpstr2;
+	//lplog(LOG_WHERE,u"Comparing %s against %s.",
 	//  source1->objectString(source1->objects.begin()+object1,tmpstr1,false,false).c_str(),
 	//  source2->objectString(source2->objects.begin()+object2,tmpstr2,false,false).c_str());
 	int ca = source1->objects[object1].objectClass;
@@ -1929,7 +1930,7 @@ bool cQuestionAnswering::checkObjectIdentical(cSource* source1, cSource* source2
 	{
 		if (source1->objects[object1].nameMatchExact(source2->objects[object2]))
 		{
-			//lplog(LOG_WHERE,L"Comparing %s against %s [checkObjectIdentical=TRUE].",
+			//lplog(LOG_WHERE,u"Comparing %s against %s [checkObjectIdentical=TRUE].",
 			//  source1->objectString(source1->objects.begin()+object1,tmpstr1,false,false).c_str(),
 			//	source2->objectString(source2->objects.begin()+object2,tmpstr2,false,false).c_str());
 			return true;
@@ -1962,7 +1963,7 @@ bool cQuestionAnswering::checkObjectIdentical(cSource* source1, cSource* source2
 	for (int I = 0; I < endPosition1 - beginPosition1; I++)
 		if (source1->m[beginPosition1 + I].word != source2->m[beginPosition2 + I].word)
 			return false;
-	//lplog(LOG_WHERE,L"Comparing %s against %s [checkObjectIdentical=TRUE].",
+	//lplog(LOG_WHERE,u"Comparing %s against %s [checkObjectIdentical=TRUE].",
 	//  source1->objectString(source1->objects.begin()+object1,tmpstr1,false,false).c_str(),
 	//  source2->objectString(source2->objects.begin()+object2,tmpstr2,false,false).c_str());
 	return true;
@@ -1977,7 +1978,7 @@ bool cQuestionAnswering::checkParticularPartIdentical(cSource* source1, cSource*
 		if (where1 < 0 || where2 < 0) return false;
 	if (source1->m[where1].getObject() < 0 && source2->m[where2].getObject() < 0)
 	{
-		lplog(LOG_WHERE, L"cas1:%d:%s cas2:%d:%s", where1, source1->m[where1].word->first.c_str(), where2, source2->m[where2].word->first.c_str());
+		lplog(LOG_WHERE, u"cas1:%d:%s cas2:%d:%s", where1, source1->m[where1].word->first.c_str(), where2, source2->m[where2].word->first.c_str());
 		return source1->m[where1].word == source2->m[where2].word;
 	}
 	if (source1->m[where1].getObject() < 0 || source2->m[where2].getObject() < 0)
@@ -2017,8 +2018,8 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 	LFS
 		if (parentSource->m[parentWhere].queryForm(commonProfessionForm) < 0 && parentSource->m[parentWhere].getMainEntry()->second.query(commonProfessionForm) < 0)
 			return CONFIDENCE_NOMATCH;
-	unordered_map<wstring, cSemanticMatchInfo>::iterator csmpi;
-	wstring childObjectString;
+	unordered_map<lpwstring, cSemanticMatchInfo>::iterator csmpi;
+	lpwstring childObjectString;
 	if ((csmpi = questionGroupMap.find(childSource->whereString(childSource->objects[childObject].originalLocation, childObjectString, true))) != questionGroupMap.end())
 	{
 		synonym = csmpi->second.synonym;
@@ -2028,33 +2029,33 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 	// Does child belong to a group?
 	// get rdfTypes
 	vector <cTreeCat*> rdfTypes;
-	unordered_map <wstring, int > topHierarchyClassIndexes;
-	childSource->getExtendedRDFTypesMaster(childSource->objects[childObject].originalLocation, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__));
-	wstring tmpstr, tmpstr2, pw = parentSource->m[parentWhere].word->first, tmpstr3;
+	unordered_map <lpwstring, int > topHierarchyClassIndexes;
+	childSource->getExtendedRDFTypesMaster(childSource->objects[childObject].originalLocation, -1, rdfTypes, topHierarchyClassIndexes, LP_TEXT(__func__));
+	lpwstring tmpstr, tmpstr2, pw = parentSource->m[parentWhere].word->first, tmpstr3;
 	transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
-	wstring pwme = parentSource->m[parentWhere].getMainEntry()->first;
-	unordered_set <wstring> parentSynonyms;
+	lpwstring pwme = parentSource->m[parentWhere].getMainEntry()->first;
+	unordered_set <lpwstring> parentSynonyms;
 	parentSource->getSynonyms(pw, parentSynonyms, NOUN);
 	parentSource->getSynonyms(pwme, parentSynonyms, NOUN);
-	//logQuestionDetail= (tmpstr2.find(L"George W Bush")!=wstring::npos);
+	//logQuestionDetail= (tmpstr2.find(u"George W Bush")!=lpwstring::npos);
 	if (true)
 	{
-		unordered_map <wstring, int > associationMap;
-		childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, TEXT(__FUNCTION__), fileCaching);
-		wstring associations;
-		for (unordered_map <wstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
-			associations += ami->first + L" ";
-		lplog(LOG_WHERE, L"checkParentGroup ld parent:%s[%s]\n  child:%s\n  parentSynonyms:%s\n  childRdfTypeAssociations %s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-			childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, L"|").c_str(), associations.c_str());
+		unordered_map <lpwstring, int > associationMap;
+		childSource->getAssociationMapMaster(childSource->objects[childObject].originalLocation, -1, associationMap, LP_TEXT(__func__), fileCaching);
+		lpwstring associations;
+		for (unordered_map <lpwstring, int >::iterator ami = associationMap.begin(), amiEnd = associationMap.end(); ami != amiEnd; ami++)
+			associations += ami->first + u" ";
+		lplog(LOG_WHERE, u"checkParentGroup ld parent:%s[%s]\n  child:%s\n  parentSynonyms:%s\n  childRdfTypeAssociations %s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+			childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, u"|").c_str(), associations.c_str());
 	}
 	int confidenceMatch = CONFIDENCE_NOMATCH;
-	wstring rdfInfoPrinted;
+	lpwstring rdfInfoPrinted;
 	// first professions
 	for (unsigned int r = 0; r < rdfTypes.size(); r++)
 	{
 		if (logQuestionDetail)
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch))
-				rdfTypes[r]->logIdentity(LOG_WHERE, L"checkParentGroup", false, rdfInfoPrinted);
+				rdfTypes[r]->logIdentity(LOG_WHERE, u"checkParentGroup", false, rdfInfoPrinted);
 		for (unsigned int p = 0; p < rdfTypes[r]->professionLinks.size(); p++)
 		{
 			// politician,businessman, etc
@@ -2075,13 +2076,13 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 					}
 					if (firstNewLevel = soi->empty())
 						continue;
-					wstring wsoi;
+					lpwstring wsoi;
 					mTW(*soi, wsoi);
 					if (parentSynonyms.find(wsoi) != parentSynonyms.end())
 					{
 						synonym = true;
-						lplog(LOG_WHERE, L"checkParentGroup 1 parent:%s[%s] child:%s parentSynonyms:%s %s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-							childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, L"|").c_str(), wsoi.c_str());
+						lplog(LOG_WHERE, u"checkParentGroup 1 parent:%s[%s] child:%s parentSynonyms:%s %s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+							childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, u"|").c_str(), wsoi.c_str());
 						tmpstr.clear();
 						tmpstr2.clear();
 						tmpstr3.clear();
@@ -2089,22 +2090,22 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 					}
 					if (pw == wsoi || pwme == wsoi)
 					{
-						lplog(LOG_WHERE, L"checkParentGroup 2 parent:%s[%s] child:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+						lplog(LOG_WHERE, u"checkParentGroup 2 parent:%s[%s] child:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
 							childSource->whereString(childWhere, tmpstr2, false).c_str());
 						tmpstr.clear();
 						tmpstr2.clear();
 						confidenceMatch = min(confidenceMatch, CONFIDENCE_NOMATCH / 4);
 					}
-					unordered_set <wstring> professionSynonyms;
+					unordered_set <lpwstring> professionSynonyms;
 					parentSource->getSynonyms(wsoi, professionSynonyms, NOUN);
 					if (logQuestionDetail)
-						lplog(LOG_WHERE, L"checkParentGroup ld parent:%s[%s] child:%s profession:%s[%s] professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-							childSource->whereString(childWhere, tmpstr2, false).c_str(), rdfTypes[r]->professionLinks[p].c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, L"|").c_str());
+						lplog(LOG_WHERE, u"checkParentGroup ld parent:%s[%s] child:%s profession:%s[%s] professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+							childSource->whereString(childWhere, tmpstr2, false).c_str(), rdfTypes[r]->professionLinks[p].c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, u"|").c_str());
 					if (professionSynonyms.find(pw) != professionSynonyms.end() || professionSynonyms.find(pwme) != professionSynonyms.end())
 					{
 						synonym = true;
-						lplog(LOG_WHERE, L"checkParentGroup 3 parent:%s[%s] child:%s profession:%s[%s] professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-							childSource->whereString(childWhere, tmpstr2, false).c_str(), rdfTypes[r]->professionLinks[p].c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, L"|").c_str());
+						lplog(LOG_WHERE, u"checkParentGroup 3 parent:%s[%s] child:%s profession:%s[%s] professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+							childSource->whereString(childWhere, tmpstr2, false).c_str(), rdfTypes[r]->professionLinks[p].c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, u"|").c_str());
 						confidenceMatch = min(confidenceMatch, CONFIDENCE_NOMATCH / 2);
 						tmpstr.clear();
 						tmpstr2.clear();
@@ -2120,7 +2121,7 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 		vector < vector <string> > kindOfObjects;
 		if (pw == childSource->objects[childObject].name.hon->first || pwme == childSource->objects[childObject].name.hon->first)
 		{
-			lplog(LOG_WHERE, L"checkParentGroup 4 parent:%s[%s] child:%s profession:%s [honorific original]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+			lplog(LOG_WHERE, u"checkParentGroup 4 parent:%s[%s] child:%s profession:%s [honorific original]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
 				childSource->whereString(childWhere, tmpstr2, false).c_str(), childSource->objects[childObject].name.hon->first.c_str());
 			confidenceMatch = CONFIDENCE_NOMATCH / 4;
 		}
@@ -2141,32 +2142,32 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 				}
 				if (firstNewLevel = soi->empty())
 					continue;
-				wstring wsoi;
+				lpwstring wsoi;
 				mTW(*soi, wsoi);
 				if (parentSynonyms.find(wsoi) != parentSynonyms.end())
 				{
-					lplog(LOG_WHERE, L"checkParentGroup 5 parent:%s[%s] child:%s parentSynonyms:%s %s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-						childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, L"|").c_str(), wsoi.c_str());
+					lplog(LOG_WHERE, u"checkParentGroup 5 parent:%s[%s] child:%s parentSynonyms:%s %s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+						childSource->whereString(childWhere, tmpstr2, false).c_str(), setString(parentSynonyms, tmpstr3, u"|").c_str(), wsoi.c_str());
 					synonym = true;
 					confidenceMatch = CONFIDENCE_NOMATCH / 2;
 					break;
 				}
 				if (pw == wsoi || pwme == wsoi)
 				{
-					lplog(LOG_WHERE, L"checkParentGroup 6 parent:%s[%s] child:%s profession:%s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+					lplog(LOG_WHERE, u"checkParentGroup 6 parent:%s[%s] child:%s profession:%s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
 						childSource->whereString(childWhere, tmpstr2, false).c_str(), wsoi.c_str());
 					confidenceMatch = CONFIDENCE_NOMATCH / 4;
 					break;
 				}
-				unordered_set <wstring> professionSynonyms;
+				unordered_set <lpwstring> professionSynonyms;
 				parentSource->getSynonyms(wsoi, professionSynonyms, NOUN);
 				if (logQuestionDetail)
-					lplog(LOG_WHERE, L"checkParentGroup ld parent:%s[%s] child:%s profession:%s professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-						childSource->whereString(childWhere, tmpstr2, false).c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, L"|").c_str());
+					lplog(LOG_WHERE, u"checkParentGroup ld parent:%s[%s] child:%s profession:%s professionSynonyms:%s", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+						childSource->whereString(childWhere, tmpstr2, false).c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, u"|").c_str());
 				if (professionSynonyms.find(pw) != professionSynonyms.end() || professionSynonyms.find(pwme) != professionSynonyms.end())
 				{
-					lplog(LOG_WHERE, L"checkParentGroup 7 parent:%s[%s] child:%s profession:%s professionSynonyms:%s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
-						childSource->whereString(childWhere, tmpstr2, false).c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, L"|").c_str());
+					lplog(LOG_WHERE, u"checkParentGroup 7 parent:%s[%s] child:%s profession:%s professionSynonyms:%s [honorific]", pw.c_str(), parentSource->whereString(parentWhere, tmpstr, false).c_str(),
+						childSource->whereString(childWhere, tmpstr2, false).c_str(), wsoi.c_str(), setString(professionSynonyms, tmpstr3, u"|").c_str());
 					synonym = true;
 					confidenceMatch = CONFIDENCE_NOMATCH / 2;
 					break;
@@ -2200,48 +2201,48 @@ int cQuestionAnswering::checkParentGroup(cSource* parentSource, int parentWhere,
 //    When was Darrell Hammond born?
 //    will have 'in' added to it:
 //    When was Darrell Hammond born in - so the web search query will be 'Darrell Hammond born in ' - and the answer will be the object of the preposition 'in' which did not exist before the transformation.
-void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationGroup* destinationQuestionSRI, cPattern* originalQuestionPattern, cPattern* destinationQuestionPattern, unordered_map <int, int>& transformSourceToQuestionSourceMap, unordered_map <wstring, wstring>& parseVariables)
+void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationGroup* destinationQuestionSRI, cPattern* originalQuestionPattern, cPattern* destinationQuestionPattern, unordered_map <int, int>& transformSourceToQuestionSourceMap, unordered_map <lpwstring, lpwstring>& parseVariables)
 {
 	LFS
 		transformSourceToQuestionSourceMap[-1] = -1;
-	wstring phrase;
+	lpwstring phrase;
 	transformSource->phraseString(destinationQuestionSRI->printMin, destinationQuestionSRI->printMax + 1, phrase, false);
 	if (destinationQuestionSRI->transformedPrep >= 0)
-		phrase += L" " + transformSource->m[destinationQuestionSRI->transformedPrep].word->first;
-	lplog(LOG_WHERE | LOG_INFO, L"*** copying transformation pattern %s, with these variables:", phrase.c_str());
+		phrase += u" " + transformSource->m[destinationQuestionSRI->transformedPrep].word->first;
+	lplog(LOG_WHERE | LOG_INFO, u"*** copying transformation pattern %s, with these variables:", phrase.c_str());
 	for (int I = destinationQuestionSRI->printMin; I < destinationQuestionSRI->printMax + 1 && I < (signed)transformSource->m.size(); I++)
 	{
-		unordered_map < int, wstring >::iterator ivMap = destinationQuestionPattern->locationToVariableMap.find(I);
+		unordered_map < int, lpwstring >::iterator ivMap = destinationQuestionPattern->locationToVariableMap.find(I);
 		if (ivMap != destinationQuestionPattern->locationToVariableMap.end())
-			lplog(LOG_WHERE | LOG_INFO, L"      %d:variable %s", ivMap->first, ivMap->second.c_str());
+			lplog(LOG_WHERE | LOG_INFO, u"      %d:variable %s", ivMap->first, ivMap->second.c_str());
 	}
 	for (int I = destinationQuestionSRI->printMin; I < destinationQuestionSRI->printMax + 1 && I < (signed)transformSource->m.size(); I++)
 	{
-		unordered_map < int, wstring >::iterator ivMap = destinationQuestionPattern->locationToVariableMap.find(I);
-		wstring temp;
+		unordered_map < int, lpwstring >::iterator ivMap = destinationQuestionPattern->locationToVariableMap.find(I);
+		lpwstring temp;
 		// does a variable exist in the destination pattern?
 		if (ivMap == destinationQuestionPattern->locationToVariableMap.end())
 		{
-			lplog(LOG_WHERE, L"[%s] location %d (mapped to %d) not found in pattern %d for variable.", transformSource->getOriginalWord(I, temp, false, false), I, questionSource->m.size(), originalQuestionPattern->num);
+			lplog(LOG_WHERE, u"[%s] location %d (mapped to %d) not found in pattern %d for variable.", transformSource->getOriginalWord(I, temp, false, false), I, questionSource->m.size(), originalQuestionPattern->num);
 			questionSource->copyChildrenIntoParent(transformSource, I, transformSourceToQuestionSourceMap, true);
 		}
 		else
 		{
 			// if so, look up the variable (ivmap->second) within originalQuestionPattern
-			unordered_map < wstring, int >::iterator ilMap = originalQuestionPattern->variableToLocationMap.find(ivMap->second);
-			unordered_map < wstring, int >::iterator ilenMap = originalQuestionPattern->variableToLengthMap.find(ivMap->second);
-			if ((ivMap->second != L"$" || parseVariables.find(L"$") == parseVariables.end()) && (ilMap == originalQuestionPattern->variableToLocationMap.end() || ilenMap == originalQuestionPattern->variableToLengthMap.end()))
+			unordered_map < lpwstring, int >::iterator ilMap = originalQuestionPattern->variableToLocationMap.find(ivMap->second);
+			unordered_map < lpwstring, int >::iterator ilenMap = originalQuestionPattern->variableToLengthMap.find(ivMap->second);
+			if ((ivMap->second != u"$" || parseVariables.find(u"$") == parseVariables.end()) && (ilMap == originalQuestionPattern->variableToLocationMap.end() || ilenMap == originalQuestionPattern->variableToLengthMap.end()))
 			{
 				// carry forward where answer should be to inform location of whereQuestionTypeObject.
-				if (ivMap->second == L"A") // Answer - where the answer should be located! (He earns A), the destination answer to How much does he earn?
+				if (ivMap->second == u"A") // Answer - where the answer should be located! (He earns A), the destination answer to How much does he earn?
 				{
-					lplog(LOG_WHERE | LOG_ERROR, L"%d:variable %s [Desired Answer Position] found in question transformation.  Setting whereQuestionTypeObject=%d in destination question relation.", I, ivMap->second.c_str(), I);
+					lplog(LOG_WHERE | LOG_ERROR, u"%d:variable %s [Desired Answer Position] found in question transformation.  Setting whereQuestionTypeObject=%d in destination question relation.", I, ivMap->second.c_str(), I);
 					destinationQuestionSRI->whereQuestionTypeObject = I;
 				}
 				else
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE | LOG_ERROR, L"%d:variable %s not found in question transformation, pushing word [%s (elements=%s) (suggestedElements=%s)].", I,
+					lpwstring tmpstr;
+					lplog(LOG_WHERE | LOG_ERROR, u"%d:variable %s not found in question transformation, pushing word [%s (elements=%s) (suggestedElements=%s)].", I,
 						ivMap->second.c_str(), transformSource->getOriginalWord(I, temp, false, false), transformSource->m[I].patternWinnerFormString(tmpstr).c_str(), parseVariables[ivMap->second].c_str());
 				}
 				transformSourceToQuestionSourceMap[I] = questionSource->m.size();
@@ -2251,9 +2252,9 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 				continue;
 			}
 			int where, length;
-			if (ivMap->second == L"$")
+			if (ivMap->second == u"$")
 			{
-				int previousAnswerObject = _wtoi(parseVariables[L"$"].c_str());
+				int previousAnswerObject = lp_wtoi(parseVariables[u"$"].c_str());
 				where = questionSource->objects[previousAnswerObject].begin;
 				length = questionSource->objects[previousAnswerObject].end - questionSource->objects[previousAnswerObject].begin;
 			}
@@ -2265,7 +2266,7 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 			// copy from the originalQuestionPattern source (questionSource), to destinationPattern (also in questionSource)
 			for (int w = where; w < where + length; w++)
 			{
-				::lplog(LOG_WHERE, L"[%s] location %d (mapped to %d) used variable %s.  Mapping %d in transformSource to %d in questionSource and marking %d in questionSource with sameSourceCopy.",
+				::lplog(LOG_WHERE, u"[%s] location %d (mapped to %d) used variable %s.  Mapping %d in transformSource to %d in questionSource and marking %d in questionSource with sameSourceCopy.",
 					questionSource->getOriginalWord(w, temp, false, false), w, questionSource->m.size(), ivMap->second.c_str(), I, questionSource->m.size(), questionSource->m.size());
 				transformSourceToQuestionSourceMap[I] = questionSource->m.size(); // do not change to w!
 				questionSource->m.push_back(questionSource->m[w]);
@@ -2273,18 +2274,18 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 				questionSource->m[questionSource->m.size() - 1].adjustReferences(questionSource->m.size() - 1, questionSource->m.size() - 1 - w);
 				if (questionSource->m[questionSource->m.size() - 1].objectMatches.size() > 0)
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE, L"%d: copied location still has %d object matches:%s", questionSource->m.size() - 1, questionSource->m[questionSource->m.size() - 1].objectMatches.size(), questionSource->whereString(questionSource->m.size() - 1, tmpstr, false).c_str());
+					lpwstring tmpstr;
+					lplog(LOG_WHERE, u"%d: copied location still has %d object matches:%s", questionSource->m.size() - 1, questionSource->m[questionSource->m.size() - 1].objectMatches.size(), questionSource->whereString(questionSource->m.size() - 1, tmpstr, false).c_str());
 				}
 				if (w == where + length - 1 && (questionSource->m[questionSource->m.size() - 1].flags & cWordMatch::flagNounOwner))
 				{
 					questionSource->m[questionSource->m.size() - 1].flags &= ~(cWordMatch::flagNounOwner | cWordMatch::flagAdjectivalObject);
 					questionSource->getOriginalWord(questionSource->m.size() - 1, temp, false, false);
-					lplog(LOG_WHERE | LOG_ERROR, L"%d: copySource: word transformed %s", questionSource->m.size() - 1, temp.c_str());
+					lplog(LOG_WHERE | LOG_ERROR, u"%d: copySource: word transformed %s", questionSource->m.size() - 1, temp.c_str());
 				}
 				if (questionSource->m[w].getObject() >= 0 || questionSource->m[w].objectMatches.size() > 0 || length == 1)
 				{
-					::lplog(LOG_WHERE, L"Inserting whereQuestionInformationSourceObject using variable %d:%s in originalQuestionPattern to position %d:%s",
+					::lplog(LOG_WHERE, u"Inserting whereQuestionInformationSourceObject using variable %d:%s in originalQuestionPattern to position %d:%s",
 						ivMap->first, ivMap->second.c_str(), I, questionSource->m[questionSource->m.size() - 1].word->first.c_str());
 					destinationQuestionSRI->whereQuestionInformationSourceObjects.insert(I);
 				}
@@ -2293,8 +2294,8 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 	}
 	if (destinationQuestionSRI->transformedPrep >= 0)
 	{
-		wstring temp;
-		lplog(LOG_WHERE, L"[%s] location %d (mapped to %d) transformPrep", transformSource->getOriginalWord(destinationQuestionSRI->transformedPrep, temp, false, false), destinationQuestionSRI->transformedPrep, questionSource->m.size(), originalQuestionPattern->num);
+		lpwstring temp;
+		lplog(LOG_WHERE, u"[%s] location %d (mapped to %d) transformPrep", transformSource->getOriginalWord(destinationQuestionSRI->transformedPrep, temp, false, false), destinationQuestionSRI->transformedPrep, questionSource->m.size(), originalQuestionPattern->num);
 		questionSource->copyChildrenIntoParent(transformSource, destinationQuestionSRI->transformedPrep, transformSourceToQuestionSourceMap, false);
 	}
 	// adjust all referenced locations
@@ -2307,7 +2308,7 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 			questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
 			if (questionSource->m[pair.second].getObject() < -1000)
 			{// see copyChildrenIntoParent
-				lplog(LOG_WHERE, L"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
+				lplog(LOG_WHERE, u"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
 				questionSource->m[pair.second].setObject(-questionSource->m[pair.second].getObject() - 1000);
 			}
 			else
@@ -2317,29 +2318,29 @@ void cQuestionAnswering::copySource(cSource* questionSource, cSyntacticRelationG
 		else
 			questionSource->m[pair.second].sameSourceCopy = -1;
 	}
-	lplog(LOG_WHERE | LOG_INFO, L"*** END copying transformation pattern %s:", phrase.c_str());
+	lplog(LOG_WHERE | LOG_INFO, u"*** END copying transformation pattern %s:", phrase.c_str());
 }
 
 // Info-box shortcut for the transformed "When was X born?" (unknownQTFlag +
 // verb "born"). Creates a time object from birthDate, attaches it to the prep
 // object, and pushes a finalAnswer cAS with matchSum 1000. Returns true if the
 // pattern matched (caller should stop).
-bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring birthDate)
+bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, lpwstring birthDate)
 {
 	// question type must be "when"
 	// verb must be "born"
 	// this is in reference to 'When was {X} born?' in questionTransforms.txt
-	if ((ssri->questionType & typeQTMask) == unknownQTFlag && ssri->whereVerb >= 0 && questionSource->m[ssri->whereVerb].word->first == L"born")
+	if ((ssri->questionType & typeQTMask) == unknownQTFlag && ssri->whereVerb >= 0 && questionSource->m[ssri->whereVerb].word->first == u"born")
 	{
-		wstring ps;
+		lpwstring ps;
 		questionSource->prepPhraseToString(ssri->wherePrep, ps);
-		questionSource->printSRG(L":analyzeRDFTypeBirthDate ", ssri, -1, ssri->whereSubject, ssri->whereObject, ps, false, -1, L"analyzeRDFTypeBirthDate", (ssri->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
+		questionSource->printSRG(u":analyzeRDFTypeBirthDate ", ssri, -1, ssri->whereSubject, ssri->whereObject, ps, false, -1, u"analyzeRDFTypeBirthDate", (ssri->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
 		cOM object = questionSource->createObject(derivation, birthDate, NON_GENDERED_GENERAL_OBJECT_CLASS);
 		questionSource->objects[object.object].setIsTimeObject(true);
-		// cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
+		// cAS(lpwstring _sourceType, cSource *_source, int _confidence, int _matchSum, lpwstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, lpwstring _tableNum, lpwstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
 		if (ssri->wherePrepObject >= 0)
 			questionSource->m[ssri->wherePrepObject].objectMatches.push_back(object);
-		answerSRGs.push_back(cAS(L"wikipediaInfoBox", questionSource, 1, 1000, L"[wikipediaInfoBox]", ssri, 0, 0, 0, ssri->wherePrep, true, false, L"", L"", 0, 0, 0, NULL));
+		answerSRGs.push_back(cAS(u"wikipediaInfoBox", questionSource, 1, 1000, u"[wikipediaInfoBox]", ssri, 0, 0, 0, ssri->wherePrep, true, false, u"", u"", 0, 0, 0, NULL));
 		answerSRGs[answerSRGs.size() - 1].finalAnswer = true;
 		maxAnswer = max(maxAnswer, 1000);
 		return true;
@@ -2350,24 +2351,24 @@ bool cQuestionAnswering::analyzeRDFTypeBirthDate(cSource* questionSource, cSynta
 // Info-box shortcut for the transformed "What is M's profession?" ("works" +
 // prep-object "profession"). Splits occupation on commas; each becomes a
 // finalAnswer cAS (matchSum 1000) attached to the prep object.
-bool cQuestionAnswering::analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, wstring occupation)
+bool cQuestionAnswering::analyzeRDFTypeOccupation(cSource* questionSource, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, lpwstring occupation)
 {
 	// question type must be "what"
 	// This is in reference to 'What is {M} profession?' which transforms to '{Y} works as a {A=profession:commonProfession,noun}', both in questionTransforms.txt
-	if ((ssri->questionType & typeQTMask) == unknownQTFlag && ssri->whereVerb >= 0 && questionSource->m[ssri->whereVerb].word->first == L"works" && ssri->wherePrepObject >= 0 && questionSource->m[ssri->wherePrepObject].word->first == L"profession")
+	if ((ssri->questionType & typeQTMask) == unknownQTFlag && ssri->whereVerb >= 0 && questionSource->m[ssri->whereVerb].word->first == u"works" && ssri->wherePrepObject >= 0 && questionSource->m[ssri->wherePrepObject].word->first == u"profession")
 	{
-		for (auto& occ : splitString(occupation, L','))
+		for (auto& occ : splitString(occupation, u','))
 		{
 			cOM object = questionSource->createObject(derivation, occ, NON_GENDERED_GENERAL_OBJECT_CLASS);
-			// cAS(wstring _sourceType, cSource *_source, int _confidence, int _matchSum, wstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, wstring _tableNum, wstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
+			// cAS(lpwstring _sourceType, cSource *_source, int _confidence, int _matchSum, lpwstring _matchInfo, cSyntacticRelationGroup* _sri, int _equivalenceClass, int _ws, int _wo, int _wp, bool _fromTable, lpwstring _tableNum, lpwstring _tableName, int _columnIndex, int _rowIndex, int _entryIndex, cColumn::cEntry *_entry)
 			questionSource->m[ssri->wherePrepObject].objectMatches.push_back(object);
-			answerSRGs.push_back(cAS(L"wikipediaInfoBox", questionSource, 1, 1000, L"[wikipediaInfoBox]", ssri, 0, 0, ssri->wherePrepObject, 0, true, false, L"", L"", 0, 0, 0, NULL));
+			answerSRGs.push_back(cAS(u"wikipediaInfoBox", questionSource, 1, 1000, u"[wikipediaInfoBox]", ssri, 0, 0, ssri->wherePrepObject, 0, true, false, u"", u"", 0, 0, 0, NULL));
 			answerSRGs[answerSRGs.size() - 1].finalAnswer = true;
 			answerSRGs[answerSRGs.size() - 1].object = object.object;
 		}
-		wstring ps;
+		lpwstring ps;
 		questionSource->prepPhraseToString(ssri->wherePrep, ps);
-		questionSource->printSRG(L":analyzeRDFTypeOccupation ", ssri, -1, ssri->whereSubject, ssri->whereObject, ps, false, -1, L"analyzeRDFTypeOccupation", (ssri->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
+		questionSource->printSRG(u":analyzeRDFTypeOccupation ", ssri, -1, ssri->whereSubject, ssri->whereObject, ps, false, -1, u"analyzeRDFTypeOccupation", (ssri->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
 		maxAnswer = max(maxAnswer, 1000);
 		return true;
 	}
@@ -2380,36 +2381,36 @@ bool cQuestionAnswering::analyzeRDFTypeOccupation(cSource* questionSource, cSynt
 // analyzeQuestionThroughAbstractAndWikipediaFromRDFType. Returns true when
 // every information-source object was skipped (null / no preferred type) so
 // the caller can log that web search is the only remaining path.
-bool cQuestionAnswering::analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup* ssri, wstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool subQueryFlag)
+bool cQuestionAnswering::analyzeRDFTypes(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup* ssri, lpwstring derivation, vector < cAS >& answerSRGs, int& maxAnswer, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap, bool subQueryFlag)
 {
-	wchar_t sqderivation[1024];
-	wstring tmpstr;
+	lpchar_t sqderivation[1024];
+	lpwstring tmpstr;
 	bool whereQuestionInformationSourceObjectsSkipped = true;
 	for (set <int>::iterator si = ssri->whereQuestionInformationSourceObjects.begin(), siEnd = ssri->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 	{
 		if (*si >= questionSource->m.size())
 		{
-			lplog(LOG_WHERE | LOG_FATAL_ERROR, L"%s: Illegal whereQuestionInformationSourceObject - %d!", derivation.c_str(), *si);
+			lplog(LOG_WHERE | LOG_FATAL_ERROR, u"%s: Illegal whereQuestionInformationSourceObject - %d!", derivation.c_str(), *si);
 			continue;
 		}
 		if (questionSource->m[*si].getObject() < 0 && questionSource->m[*si].objectMatches.empty())
 		{
-			lplog(LOG_WHERE, L"%s: Information Source Object is null!", derivation.c_str());
+			lplog(LOG_WHERE, u"%s: Information Source Object is null!", derivation.c_str());
 			continue;
 		}
 		vector <cTreeCat*> rdfTypes;
-		unordered_map <wstring, int > topHierarchyClassIndexes;
-		questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), -1, fileCaching);
+		unordered_map <lpwstring, int > topHierarchyClassIndexes;
+		questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, LP_TEXT(__func__), -1, fileCaching);
 		if (rdfTypes.empty() && srg->wherePrep >= 0)
 		{
-			questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 1, fileCaching);
+			questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, LP_TEXT(__func__), 1, fileCaching);
 			if (rdfTypes.empty() && srg->wherePrep >= 0 && questionSource->m[srg->wherePrep].relPrep >= 0)
-				questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__), 2, fileCaching);
+				questionSource->getExtendedRDFTypesMaster(*si, -1, rdfTypes, topHierarchyClassIndexes, LP_TEXT(__func__), 2, fileCaching);
 		}
 		cOntology::setPreferred(topHierarchyClassIndexes, rdfTypes);
-		set<wstring> preferredTypes;
-		set <wstring> wikipediaLinksAlreadyScanned;
-		wstring rdfInfoPrinted;
+		set<lpwstring> preferredTypes;
+		set <lpwstring> wikipediaLinksAlreadyScanned;
+		lpwstring rdfInfoPrinted;
 		// birthdate, occupation and other infobox info are copied to every rdfType, therefore only examining the first one.
 		if (rdfTypes.size() > 0 && !rdfTypes[0]->birthDate.empty() && analyzeRDFTypeBirthDate(questionSource, ssri, derivation, answerSRGs, maxAnswer, rdfTypes[0]->birthDate))
 			return true;
@@ -2420,23 +2421,23 @@ bool cQuestionAnswering::analyzeRDFTypes(cSource* questionSource, cSyntacticRela
 			if ((rdfTypes[r]->preferred || rdfTypes[r]->preferredUnknownClass || rdfTypes[r]->exactMatch) && preferredTypes.find(rdfTypes[r]->typeObject) == preferredTypes.end())
 			{
 				preferredTypes.insert(rdfTypes[r]->typeObject);
-				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueries" : L"answerAllQuestionsInSource", false, rdfInfoPrinted);
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? u"subQueries" : u"answerAllQuestionsInSource", false, rdfInfoPrinted);
 				// find subject or object without question
 				int numWords;
-				wstring tmpstr2;
-				StringCbPrintf(sqderivation, 1024 * sizeof(wchar_t), L"%s:%06d: informationSourceObject %s:rdfType %u:%s:", derivation.c_str(), ssri->where, questionSource->whereString(*si, tmpstr, false, 6, L" ", numWords).c_str(), r, rdfTypes[r]->toString(tmpstr2).c_str());
+				lpwstring tmpstr2;
+				lp_snprintf(sqderivation, 1024 * sizeof(lpchar_t), u"%s:%06d: informationSourceObject %s:rdfType %u:%s:", derivation.c_str(), ssri->where, questionSource->whereString(*si, tmpstr, false, 6, u" ", numWords).c_str(), r, rdfTypes[r]->toString(tmpstr2).c_str());
 				analyzeQuestionThroughAbstractAndWikipediaFromRDFType(questionSource, sqderivation, *si, ssri, rdfTypes[r], false, answerSRGs, maxAnswer, wikiTableMap, wikipediaLinksAlreadyScanned);
 				whereQuestionInformationSourceObjectsSkipped = false;
 			}
 			else
-				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? L"subQueriesNP" : L"processQuestionSourceNP", false, rdfInfoPrinted);
+				rdfTypes[r]->logIdentity(LOG_WHERE, (subQueryFlag) ? u"subQueriesNP" : u"processQuestionSourceNP", false, rdfInfoPrinted);
 		}
 		if (preferredTypes.empty() && rdfTypes.size() > 0)
 		{
-			lplog(LOG_WHERE, L"%s:SKIPPED - NO PREFERRED RDF TYPES (%d)", sqderivation, rdfTypes.size());
+			lplog(LOG_WHERE, u"%s:SKIPPED - NO PREFERRED RDF TYPES (%d)", sqderivation, rdfTypes.size());
 			for (unsigned int r = 0; r < rdfTypes.size(); r++)
 				if (rdfTypes[r]->cli->first != SEPARATOR)
-					rdfTypes[r]->logIdentity(LOG_WHERE, L"NO PREFERRED RDF:", false, rdfInfoPrinted);
+					rdfTypes[r]->logIdentity(LOG_WHERE, u"NO PREFERRED RDF:", false, rdfInfoPrinted);
 		}
 		if (!cOntology::cacheRdfTypes)
 			for (unsigned int r = 0; r < rdfTypes.size(); r++)
@@ -2475,15 +2476,15 @@ bool cQuestionAnswering::analyzeRDFTypes(cSource* questionSource, cSyntacticRela
 // mapPatternAnswer [input] - used for meta transformation of answers 
 // mapPatternQuestion [input] - used for meta transformation of questions
 // useParallelQuery [input] - will the web sources be parsed in parallel or not
-int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivation, cSource* childSource, int& anySemanticMismatch, bool& subQueryNoMatch, vector <cSyntacticRelationGroup>& subQueries,
+int	cQuestionAnswering::matchSubQueries(cSource* questionSource, lpwstring derivation, cSource* childSource, int& anySemanticMismatch, bool& subQueryNoMatch, vector <cSyntacticRelationGroup>& subQueries,
 	int whereChildCandidateAnswer, int whereChildCandidateAnswerEnd, int numConsideredParentAnswer, int semMatchValue, bool useParallelQuery)
 {
 	LFS
 		if (childSource->m[whereChildCandidateAnswer].objectMatches.size() > 0)
 		{
-			lplog(LOG_FATAL_ERROR, L"%d:whereChildCandidateAnswer has %d object matches.  Ambiguous.", whereChildCandidateAnswer, childSource->m[whereChildCandidateAnswer].objectMatches.size());
+			lplog(LOG_FATAL_ERROR, u"%d:whereChildCandidateAnswer has %d object matches.  Ambiguous.", whereChildCandidateAnswer, childSource->m[whereChildCandidateAnswer].objectMatches.size());
 		}
-	wstring childWhereString;
+	lpwstring childWhereString;
 	int numWords = 0;
 	if (whereChildCandidateAnswerEnd < 0)
 		whereChildCandidateAnswerEnd = childSource->m[whereChildCandidateAnswer].endObjectPosition + childSource->numWordsOfDirectlyAttachedPrepositionalPhrases(whereChildCandidateAnswer);
@@ -2493,12 +2494,12 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 	{
 		anySemanticMismatch = childCandidateAnswerMap[childWhereString].anySemanticMismatch;
 		subQueryNoMatch = childCandidateAnswerMap[childWhereString].subQueryNoMatch;
-		lplog(LOG_WHERE, L"parent considered answer %d:child subject=%s CACHED [%d]", numConsideredParentAnswer, childWhereString.c_str(), childCandidateAnswerMap[childWhereString].confidence);
+		lplog(LOG_WHERE, u"parent considered answer %d:child subject=%s CACHED [%d]", numConsideredParentAnswer, childWhereString.c_str(), childCandidateAnswerMap[childWhereString].confidence);
 		return childCandidateAnswerMap[childWhereString].confidence;
 	}
 	anySemanticMismatch = 0;
 	subQueryNoMatch = false;
-	//if (childWhereString==L"Prince of Asturias Awards in Social Sciences")
+	//if (childWhereString==u"Prince of Asturias Awards in Social Sciences")
 	//{
 	//	logQuestionProfileTime=1;
 	//	logSynonymDetail=1;
@@ -2506,23 +2507,23 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 	//	equivalenceLogDetail=1;
 	//	logQuestionDetail=1;
 	//}
-	wstring tmpstr;
+	lpwstring tmpstr;
 	bool allSubQueriesMatch = true, headerPrinted = false;
 	for (vector <cSyntacticRelationGroup>::iterator sqi = subQueries.begin(), sqiEnd = subQueries.end(); sqi != sqiEnd; sqi++)
 	{
 		// add the answer as a point of interest.
 		// copy the answer into the parent
 		if (subQueries.size() > 1)
-			lplog(LOG_WHERE, L"%s:subquery %d:child subject=%s", derivation.c_str(), sqi - subQueries.begin(), childWhereString.c_str());
+			lplog(LOG_WHERE, u"%s:subquery %d:child subject=%s", derivation.c_str(), sqi - subQueries.begin(), childWhereString.c_str());
 		else
-			lplog(LOG_WHERE, L"%s:subquery child subject=%s", derivation.c_str(), childWhereString.c_str());
+			lplog(LOG_WHERE, u"%s:subquery child subject=%s", derivation.c_str(), childWhereString.c_str());
 		unordered_map <int, int> transformSourceToQuestionSourceMap;
 		if (childSource->m[whereChildCandidateAnswer].getObject() < 0)
-			lplog(LOG_FATAL_ERROR, L"Subject not object!");
+			lplog(LOG_FATAL_ERROR, u"Subject not object!");
 		for (int I = childSource->m[whereChildCandidateAnswer].beginObjectPosition; I < whereChildCandidateAnswerEnd; I++)
 			questionSource->copyChildrenIntoParent(childSource, I, transformSourceToQuestionSourceMap, true);
 		if (transformSourceToQuestionSourceMap.find(whereChildCandidateAnswer) == transformSourceToQuestionSourceMap.end())
-			lplog(LOG_FATAL_ERROR, L"Subject not found in translation map!");
+			lplog(LOG_FATAL_ERROR, u"Subject not found in translation map!");
 		sqi->whereSubject = transformSourceToQuestionSourceMap[whereChildCandidateAnswer];
 		for (auto& pair : transformSourceToQuestionSourceMap)
 		{
@@ -2533,7 +2534,7 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 				questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
 				if (questionSource->m[pair.second].getObject() < -1000)
 				{// see copyChildrenIntoParent
-					lplog(LOG_WHERE, L"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
+					lplog(LOG_WHERE, u"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
 					questionSource->m[pair.second].setObject(-questionSource->m[pair.second].getObject() - 1000);
 				}
 				else
@@ -2546,18 +2547,18 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 		for (auto& pair : transformSourceToQuestionSourceMap)
 		{
 			if (questionSource->m[pair.second].getObject() < -1000) // see copyChildrenIntoParent
-				lplog(LOG_FATAL_ERROR, L"Negative object survivor after adjust references - %d->%d!", pair.first, pair.second);
+				lplog(LOG_FATAL_ERROR, u"Negative object survivor after adjust references - %d->%d!", pair.first, pair.second);
 		}
 		set<int> saveQISO = sqi->whereQuestionInformationSourceObjects;
 		sqi->whereQuestionInformationSourceObjects.insert(sqi->whereSubject);
 		sqi->subQuery = true;
 		vector < cAS > answerSRGs;
 		int maxAnswer = -1;
-		wstring ps, tmpMatchInfo;
+		lpwstring ps, tmpMatchInfo;
 		questionSource->prepPhraseToString(sqi->wherePrep, ps);
-		wchar_t sqderivation[1024];
-		lplog(LOG_WHERE, L"parent considered answer %d:child subject=%s BEGIN", numConsideredParentAnswer, childWhereString.c_str());
-		StringCbPrintf(sqderivation, 1024 * sizeof(wchar_t), L"%s:SUBQUERY #%d", derivation.c_str(), (int)(sqi - subQueries.begin()));
+		lpchar_t sqderivation[1024];
+		lplog(LOG_WHERE, u"parent considered answer %d:child subject=%s BEGIN", numConsideredParentAnswer, childWhereString.c_str());
+		lp_snprintf(sqderivation, 1024 * sizeof(lpchar_t), u"%s:SUBQUERY #%d", derivation.c_str(), (int)(sqi - subQueries.begin()));
 		questionSource->printSRG(sqderivation, &(*sqi), 0, sqi->whereSubject, sqi->whereObject, ps, false, -1, tmpMatchInfo);
 		unordered_map <int, cWikipediaTableCandidateAnswers* > wikiTableMap;
 		bool whereQuestionInformationSourceObjectsSkipped = analyzeRDFTypes(questionSource, &(*sqi), &(*sqi), derivation, answerSRGs, maxAnswer, wikiTableMap, true);
@@ -2565,55 +2566,55 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 		// cWikipediaTableCandidateAnswers entries analyzeRDFTypes allocated into it before it goes out of scope.
 		for (auto& wikiTableEntry : wikiTableMap)
 			delete wikiTableEntry.second;
-		lplog(LOG_WHERE, L"%s:SEARCHING WEB%s ************************************************************", derivation.c_str(), (whereQuestionInformationSourceObjectsSkipped) ? L" (SKIPPED ALL informationSourceObjects)" : L"");
+		lplog(LOG_WHERE, u"%s:SEARCHING WEB%s ************************************************************", derivation.c_str(), (whereQuestionInformationSourceObjectsSkipped) ? u" (SKIPPED ALL informationSourceObjects)" : u"");
 		sqi->whereQuestionInformationSourceObjects = saveQISO;
-		vector <wstring> webSearchQueryStrings;
+		vector <lpwstring> webSearchQueryStrings;
 		getWebSearchQueries(questionSource, &(*sqi), webSearchQueryStrings);
 		for (int webSearchOffset = 0; webSearchOffset < (signed)webSearchQueryStrings.size(); webSearchOffset++)
 		{
 			if (useParallelQuery)
-				webSearchForQueryParallel(questionSource, (wchar_t*)derivation.c_str(), &(*sqi), false, answerSRGs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset);
+				webSearchForQueryParallel(questionSource, (lpchar_t*)derivation.c_str(), &(*sqi), false, answerSRGs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset);
 			else
-				webSearchForQuerySerial(questionSource, (wchar_t*)derivation.c_str(), &(*sqi), false, answerSRGs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset);
+				webSearchForQuerySerial(questionSource, (lpchar_t*)derivation.c_str(), &(*sqi), false, answerSRGs, maxAnswer, 10, 1, true, webSearchQueryStrings, webSearchOffset);
 		}
 		bool anyMatch = false;
 		for (unsigned int I = 0; I < answerSRGs.size(); I++)
 		{
 			if (answerSRGs[I].matchSum == maxAnswer || answerSRGs[I].matchSum >= 18)
 			{
-				StringCbPrintf(sqderivation, 1024 * sizeof(wchar_t), L"%s:SUBQUERY #%d answer #%u", derivation.c_str(), (int)(sqi - subQueries.begin()), I);
-				int semanticMismatch = (answerSRGs[I].matchInfo.find(L"WIKI_OTHER_ANSWER") != wstring::npos) ? 12 : 0;
-				bool match = answerSRGs[I].matchInfo.find(L"ANSWER_MATCH[") != wstring::npos;
-				const wchar_t* wm = L"";
+				lp_snprintf(sqderivation, 1024 * sizeof(lpchar_t), u"%s:SUBQUERY #%d answer #%u", derivation.c_str(), (int)(sqi - subQueries.begin()), I);
+				int semanticMismatch = (answerSRGs[I].matchInfo.find(u"WIKI_OTHER_ANSWER") != lpwstring::npos) ? 12 : 0;
+				bool match = answerSRGs[I].matchInfo.find(u"ANSWER_MATCH[") != lpwstring::npos;
+				const lpchar_t* wm = u"";
 				if (semanticMismatch)
-					wm = L"MISMATCH";
+					wm = u"MISMATCH";
 				if (match)
-					wm = L"MATCH";
+					wm = u"MATCH";
 				ps.clear();
 				answerSRGs[I].source->prepPhraseToString(answerSRGs[I].wp, ps);
-				answerSRGs[I].source->printSRG(L"[" + wstring(sqderivation) + L"]", answerSRGs[I].srg, 0, answerSRGs[I].ws, answerSRGs[I].wo, ps, false, answerSRGs[I].matchSum, answerSRGs[I].matchInfo);
-				wstring tmpstr2;
+				answerSRGs[I].source->printSRG(u"[" + lpwstring(sqderivation) + u"]", answerSRGs[I].srg, 0, answerSRGs[I].ws, answerSRGs[I].wo, ps, false, answerSRGs[I].matchSum, answerSRGs[I].matchInfo);
+				lpwstring tmpstr2;
 				if (!headerPrinted)
-					lplog(LOG_WHERE, L"%s:SUBQUERY ANSWER LIST %s ************************************************************", derivation.c_str(), answerSRGs[I].source->whereString(answerSRGs[I].srg->whereObject, tmpstr2, false).c_str());
+					lplog(LOG_WHERE, u"%s:SUBQUERY ANSWER LIST %s ************************************************************", derivation.c_str(), answerSRGs[I].source->whereString(answerSRGs[I].srg->whereObject, tmpstr2, false).c_str());
 				if (questionSource->inObject(sqi->whereObject, sqi->whereQuestionType))
-					lplog(LOG_WHERE, L"[subquery answer %d]:%s OBJECT expected child answer=%s (source=%s).", I, wm, questionSource->whereString(sqi->whereObject, tmpstr, false).c_str(), answerSRGs[I].source->sourcePath.c_str());
+					lplog(LOG_WHERE, u"[subquery answer %d]:%s OBJECT expected child answer=%s (source=%s).", I, wm, questionSource->whereString(sqi->whereObject, tmpstr, false).c_str(), answerSRGs[I].source->sourcePath.c_str());
 				else if (questionSource->inObject(sqi->wherePrepObject, sqi->whereQuestionType))
-					lplog(LOG_WHERE, L"[subquery answer %d]:%s PREPOBJECT expected child answer=%s (source=%s).", I, wm, questionSource->whereString(sqi->wherePrepObject, tmpstr, false).c_str(), answerSRGs[I].source->sourcePath.c_str());
+					lplog(LOG_WHERE, u"[subquery answer %d]:%s PREPOBJECT expected child answer=%s (source=%s).", I, wm, questionSource->whereString(sqi->wherePrepObject, tmpstr, false).c_str(), answerSRGs[I].source->sourcePath.c_str());
 				else
-					lplog(LOG_WHERE, L"[subquery answer %d]:NOT OBJECT OR PREPOBJECT %s (answer source=%s).", I, wm, answerSRGs[I].source->sourcePath.c_str());
+					lplog(LOG_WHERE, u"[subquery answer %d]:NOT OBJECT OR PREPOBJECT %s (answer source=%s).", I, wm, answerSRGs[I].source->sourcePath.c_str());
 				headerPrinted = true;
 				anyMatch |= match;
 				anySemanticMismatch |= semanticMismatch;
 			}
 		}
 		if (!anyMatch)
-			lplog(LOG_WHERE, L"%s:NO SUBQUERY ANSWERS FOUND", sqderivation);
+			lplog(LOG_WHERE, u"%s:NO SUBQUERY ANSWERS FOUND", sqderivation);
 		allSubQueriesMatch = allSubQueriesMatch && anyMatch;
 		answerSRGs.clear();
-		lplog(LOG_WHERE, L"parent considered answer %d:child subject=%s [%d] END",
+		lplog(LOG_WHERE, u"parent considered answer %d:child subject=%s [%d] END",
 			numConsideredParentAnswer, childWhereString.c_str(), (allSubQueriesMatch) ? semMatchValue : CONFIDENCE_NOMATCH);
 	}
-	//if (childWhereString==L"Prince of Asturias Awards in Social Sciences")
+	//if (childWhereString==u"Prince of Asturias Awards in Social Sciences")
 	//{
 	//	logQuestionProfileTime=0;
 	//	logSynonymDetail=0;
@@ -2632,10 +2633,10 @@ int	cQuestionAnswering::matchSubQueries(cSource* questionSource, wstring derivat
 // 1 on a definite yes, CONFIDENCE_NOMATCH on a definite no (with a reason
 // code in semanticMismatch 2-9), or CONFIDENCE_NOMATCH/2 if undecided.
 // questionType here is the *unmasked* type nibble, not the packed qtf word.
-int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSource, __int64 questionType, int childWhere, int childObjectIndex, int& semanticMismatch)
+int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSource, int64_t questionType, int childWhere, int childObjectIndex, int& semanticMismatch)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	auto childObject = questionSource->objects.begin() + childObjectIndex;
 	int oc = childObject->objectClass;
 	if (oc == PRONOUN_OBJECT_CLASS ||
@@ -2689,7 +2690,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 			// if object of [location preposition]
 			if (questionSource->m[childWhere].relPrep >= 0)
 			{
-				wstring prep = questionSource->m[questionSource->m[childWhere].relPrep].word->first;
+				lpwstring prep = questionSource->m[questionSource->m[childWhere].relPrep].word->first;
 				if (questionSource->prepTypesMap[prep] == tprNEAR || questionSource->prepTypesMap[prep] == tprIN || questionSource->prepTypesMap[prep] == tprSPAT)
 					return 1;
 			}
@@ -2755,7 +2756,7 @@ int cQuestionAnswering::checkParticularPartQuestionTypeCheck(cSource* questionSo
 // whom/where/wikiBusiness/wikiWork/when, then run
 // checkParticularPartQuestionTypeCheck on the candidate. Returns
 // CONFIDENCE_NOMATCH if the type is not one we can check.
-int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch, bool& unableToDoQuestionTypeCheck)
+int cQuestionAnswering::questionTypeCheck(cSource* questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch, bool& unableToDoQuestionTypeCheck)
 {
 	LFS
 		unableToDoQuestionTypeCheck = true;
@@ -2764,23 +2765,23 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 		bool destinationTransformationPatternMatched = (parentSRG->associatedPattern->matchPatternPosition(*questionSource, parentSRG->where, false, questionSource->debugTrace));
 		if (logQuestionDetail)
 		{
-			parentSRG->associatedPattern->lplogShort(L"questionTypeCheck", LOG_WHERE);
-			lplog(LOG_WHERE, L"questionTypeCheck: destinationTransformationPatternMatched=%s", (destinationTransformationPatternMatched) ? L"true" : L"false");
+			parentSRG->associatedPattern->lplogShort(u"questionTypeCheck", LOG_WHERE);
+			lplog(LOG_WHERE, u"questionTypeCheck: destinationTransformationPatternMatched=%s", (destinationTransformationPatternMatched) ? u"true" : u"false");
 		}
 	}
 	// attempt to realign question type (does question require a person, a place, a business, a book album or song, or a time)?
 	int qt = parentSRG->questionType & typeQTMask;
 	if ((qt == whatQTFlag || qt == whichQTFlag) && (parentSRG->questionType & QTAFlag) && parentSRG->whereQuestionTypeObject > 0)
 	{
-		if (questionSource->matchChildSourcePositionSynonym(Words.query(L"person"), questionSource, parentSRG->whereQuestionTypeObject))
+		if (questionSource->matchChildSourcePositionSynonym(Words.query(u"person"), questionSource, parentSRG->whereQuestionTypeObject))
 			qt = whomQTFlag;
-		else if (questionSource->matchChildSourcePositionSynonym(Words.query(L"place"), questionSource, parentSRG->whereQuestionTypeObject))
+		else if (questionSource->matchChildSourcePositionSynonym(Words.query(u"place"), questionSource, parentSRG->whereQuestionTypeObject))
 			qt = whereQTFlag;
-		else if (questionSource->matchChildSourcePositionSynonym(Words.query(L"business"), questionSource, parentSRG->whereQuestionTypeObject))
+		else if (questionSource->matchChildSourcePositionSynonym(Words.query(u"business"), questionSource, parentSRG->whereQuestionTypeObject))
 			qt = wikiBusinessQTFlag;
-		else if (questionSource->matchChildSourcePositionSynonym(Words.query(L"book"), questionSource, parentSRG->whereQuestionTypeObject) ||
-			questionSource->matchChildSourcePositionSynonym(Words.query(L"album"), questionSource, parentSRG->whereQuestionTypeObject) ||
-			questionSource->matchChildSourcePositionSynonym(Words.query(L"song"), questionSource, parentSRG->whereQuestionTypeObject))
+		else if (questionSource->matchChildSourcePositionSynonym(Words.query(u"book"), questionSource, parentSRG->whereQuestionTypeObject) ||
+			questionSource->matchChildSourcePositionSynonym(Words.query(u"album"), questionSource, parentSRG->whereQuestionTypeObject) ||
+			questionSource->matchChildSourcePositionSynonym(Words.query(u"song"), questionSource, parentSRG->whereQuestionTypeObject))
 			qt = wikiWorkQTFlag;
 		else if ((questionSource->m[parentSRG->whereQuestionTypeObject].word->second.timeFlags & T_UNIT))
 			qt = whenQTFlag;
@@ -2805,14 +2806,14 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 	}
 	// compare candidate answer to question type (if we are asking for a person, is the childCAS candidate answer a person or gendered object?)
 	int confidence = checkParticularPartQuestionTypeCheck(childCAS.source, qt, childWhere, childObject, semanticMismatch);
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (logQuestionDetail)
-		lplog(LOG_WHERE, L"checkParticularPartQuestionTypeCheck: %d compared with %s yields matchValue %d", qt, childCAS.source->objectString(childObject, tmpstr, false).c_str(), confidence);
+		lplog(LOG_WHERE, u"checkParticularPartQuestionTypeCheck: %d compared with %s yields matchValue %d", qt, childCAS.source->objectString(childObject, tmpstr, false).c_str(), confidence);
 	if (semanticMismatch)
 	{
-		wstring ps;
+		lpwstring ps;
 		childCAS.source->prepPhraseToString(childCAS.wp, ps);
-		childCAS.source->printSRG(L"questionTypeCheck semanticMismatch", childCAS.srg, 0, childCAS.ws, childCAS.wo, ps, false, -1, L"");
+		childCAS.source->printSRG(u"questionTypeCheck semanticMismatch", childCAS.srg, 0, childCAS.ws, childCAS.wo, ps, false, -1, u"");
 	}
 	return confidence;
 }
@@ -2823,12 +2824,12 @@ int cQuestionAnswering::questionTypeCheck(cSource* questionSource, wstring deriv
 // may compare the suggested pattern form instead. Returns the
 // checkParticularPartSemanticMatch value, or CONFIDENCE_NOMATCH if no slot
 // contains the WH-word.
-int cQuestionAnswering::semanticMatch(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch)
+int cQuestionAnswering::semanticMatch(cSource* questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cAS& childCAS, int& semanticMismatch)
 {
 	LFS
 		int semMatchValue = 1;
 	bool synonym = false;
-	if (childCAS.matchInfo == L"META_PATTERN" || childCAS.matchInfo == L"SEMANTIC_MAP")
+	if (childCAS.matchInfo == u"META_PATTERN" || childCAS.matchInfo == u"SEMANTIC_MAP")
 	{
 		parentSRG->whereQuestionTypeObject = parentSRG->whereSubject;
 		if (!childCAS.srg->nonSemanticSubjectTotalMatch)
@@ -2851,13 +2852,13 @@ int cQuestionAnswering::semanticMatch(cSource* questionSource, wstring derivatio
 				// What was Curveball (commonProfession)
 				if (!(parentSRG->questionType & QTAFlag) && parentSRG->whereSubject >= 0 && (questionSource->m[parentSRG->whereSubject].objectRole & IS_OBJECT_ROLE))
 				{
-					wstring tmpstr;
+					lpwstring tmpstr;
 					if (questionSource->m[parentSRG->whereObject].questionTransformationSuggestedPattern.length())
 					{
 						semanticMismatch = (childCAS.source->m[childCAS.srg->whereObject].queryForm(questionSource->m[parentSRG->whereObject].questionTransformationSuggestedPattern) == -1) ? 14 : 0;
 						if (logQuestionDetail)
-							lplog(LOG_WHERE, L"semanticMismatch %s questionTransformationSuggestedPattern=%d:%s [form %s]",
-								(semanticMismatch) ? L"NO MATCH" : L"MATCH", childCAS.srg->whereObject, childCAS.source->whereString(childCAS.srg->whereObject, tmpstr, false).c_str(), questionSource->m[parentSRG->whereObject].questionTransformationSuggestedPattern.c_str());
+							lplog(LOG_WHERE, u"semanticMismatch %s questionTransformationSuggestedPattern=%d:%s [form %s]",
+								(semanticMismatch) ? u"NO MATCH" : u"MATCH", childCAS.srg->whereObject, childCAS.source->whereString(childCAS.srg->whereObject, tmpstr, false).c_str(), questionSource->m[parentSRG->whereObject].questionTransformationSuggestedPattern.c_str());
 					}
 					else
 						semMatchValue = questionSource->checkParticularPartSemanticMatch(LOG_WHERE, parentSRG->whereSubject, childCAS.source, childCAS.whereChildCandidateAnswer, -1, synonym, semanticMismatch, fileCaching);
@@ -2894,12 +2895,12 @@ int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering& qa, cSynta
 			int parentSemanticMismatch = 0, adjectivalMatch = -1;
 			// President George W . Bush[President George W Bush [509][name][M][H1:President F:George M1:W L:Bush [91]][WikiPerson]]
 			{
-				wstring tmpstr;
+				lpwstring tmpstr;
 				childSource->whereString(childWhere2, tmpstr, false);
 				static int cttmp = 0;
-				//if (tmpstr.find(L"President Bush")==0 && cttmp<10) //  && tmpstr.find(L"Person")!=wstring::npos
+				//if (tmpstr.find(u"President Bush")==0 && cttmp<10) //  && tmpstr.find(u"Person")!=lpwstring::npos
 				//{
-				//	lplog(LOG_WHERE,L"%d:%s",parentSRG->whereSubject,tmpstr.c_str());
+				//	lplog(LOG_WHERE,u"%d:%s",parentSRG->whereSubject,tmpstr.c_str());
 				//	cttmp++;
 					//logSynonymDetail=logTableDetail=equivalenceLogDetail=logQuestionDetail=1;
 				//}
@@ -2914,7 +2915,7 @@ int cProximityMap::cProximityEntry::semanticCheck(cQuestionAnswering& qa, cSynta
 				return confidenceSE = CONFIDENCE_NOMATCH;
 			if (parentSemanticMismatch)
 				return confidenceSE = CONFIDENCE_NOMATCH;
-			//		confidence=parentSource->semanticMatchSingle(L"accumulateProximityEntry",parentSRG,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
+			//		confidence=parentSource->semanticMatchSingle(u"accumulateProximityEntry",parentSRG,childSource,childWhere2,childObject,semanticMismatch,subQueryNoMatch,subQueries,-1,mapPatternAnswer,mapPatternQuestion);
 		}
 	return confidenceSE = CONFIDENCE_NOMATCH;
 }
@@ -2951,16 +2952,16 @@ cProximityMap::cProximityEntry::cProximityEntry(cQuestionAnswering& qa, cSource*
 	lastChildSourcePath = childSource->sourcePath;
 	childWhere2 = childSourceIndex;
 	childSource->objectString(childObject, fullDescriptor, true, false);
-	if (fullDescriptor[fullDescriptor.length() - 1] != L'|')
-		fullDescriptor += L"|";
-	fullDescriptor += L"&";
+	if (fullDescriptor[fullDescriptor.length() - 1] != u'|')
+		fullDescriptor += u"|";
+	fullDescriptor += u"&";
 	for (int f = childSource->objects[childObject].begin; f < childSource->objects[childObject].end; f++)
 	{
-		wstring formWinnerStr;
+		lpwstring formWinnerStr;
 		fullDescriptor += childSource->m[f].winnerFormString(formWinnerStr);
-		fullDescriptor += L"&";
+		fullDescriptor += u"&";
 	}
-	wstring principalWhereOffset;
+	lpwstring principalWhereOffset;
 	itos(childWhere2 - childSource->objects[childObject].begin, principalWhereOffset);
 	fullDescriptor = principalWhereOffset;
 }
@@ -2976,7 +2977,7 @@ int cQuestionAnswering::verbTenseMatch(cSource* questionSource, cSyntacticRelati
 	int questionVerbSense = questionSource->m[parentSRG->whereVerb].verbSense & ~(VT_EXTENDED | VT_PASSIVE | VT_POSSIBLE | VT_VERB_CLAUSE), childVerbSense = childCAS.source->m[childCAS.srg->whereVerb].verbSense & ~(VT_EXTENDED | VT_PASSIVE | VT_POSSIBLE | VT_VERB_CLAUSE);
 	int tenseMatchReason = 0;
 	if ((questionVerbSense & VT_NEGATION) ^ (childVerbSense & VT_NEGATION))
-		childCAS.rejectAnswer += (questionVerbSense & VT_NEGATION) ? L"[question is negated and child is not]" : L"[question is not negated and child is negated]";
+		childCAS.rejectAnswer += (questionVerbSense & VT_NEGATION) ? u"[question is negated and child is not]" : u"[question is not negated and child is negated]";
 	// VT_PRESENT/VT_PAST/VT_PRESENT_PERFECT/VT_PAST_PERFECT/VT_FUTURE/VT_FUTURE_PERFECT
 	// if child and parent are matched in tense
 	else if ((parentSRG->isConstructedRelative) ? childVerbSense == VT_PAST : questionVerbSense == childVerbSense)
@@ -2993,26 +2994,26 @@ int cQuestionAnswering::verbTenseMatch(cSource* questionSource, cSyntacticRelati
 		tenseMatchReason = 4;
 	// PARENT: what     [S Darrell Hammond]  featured   on [PO Comedy Central program[12-15][14][nongen][N]]?
 	// CHILD: [S Darrell Hammond]  was [O a featured cast member[67-71][70][nongen][N]] on   [PO Saturday Night Live[72-75][72][ngname][N][WikiWork]].
-	else if (childCAS.matchInfo.find(L"MOVED_VERB_TO_OBJECT") != wstring::npos)
+	else if (childCAS.matchInfo.find(u"MOVED_VERB_TO_OBJECT") != lpwstring::npos)
 		tenseMatchReason = 5;
 	else
 	{
-		wstring tmpstr1, tmpstr2;
-		lplog(LOG_WHERE, L"tense mismatch between parent=%d:%s and child=%d:%s.",
+		lpwstring tmpstr1, tmpstr2;
+		lplog(LOG_WHERE, u"tense mismatch between parent=%d:%s and child=%d:%s.",
 			parentSRG->whereVerb, senseString(tmpstr1, questionSource->m[parentSRG->whereVerb].verbSense).c_str(), childCAS.srg->whereVerb, senseString(tmpstr2, childCAS.source->m[childCAS.srg->whereVerb].verbSense).c_str());
-		wstring questionVerbSenseString, childVerbSenseString;
+		lpwstring questionVerbSenseString, childVerbSenseString;
 		if (parentSRG->isConstructedRelative)
-			childCAS.rejectAnswer += L"[QuestionIsConstructedRelative]";
-		childCAS.rejectAnswer += (questionSource->sourceInPast) ? L"[question source in past]" : L"";
-		childCAS.rejectAnswer += (childCAS.source->sourceInPast) ? L"[child source in past]" : L"";
-		childCAS.rejectAnswer += L"[questionVerbSense=" + senseString(questionVerbSenseString, questionVerbSense) + L" childVerbSense=" + senseString(childVerbSenseString, childVerbSense) + L"]";
+			childCAS.rejectAnswer += u"[QuestionIsConstructedRelative]";
+		childCAS.rejectAnswer += (questionSource->sourceInPast) ? u"[question source in past]" : u"";
+		childCAS.rejectAnswer += (childCAS.source->sourceInPast) ? u"[child source in past]" : u"";
+		childCAS.rejectAnswer += u"[questionVerbSense=" + senseString(questionVerbSenseString, questionVerbSense) + u" childVerbSense=" + senseString(childVerbSenseString, childVerbSense) + u"]";
 	}
 	return tenseMatchReason;
 }
 
 // Re-parse 'path' and log the SRG (or the raw SUBJ/VERB/OBJECT links) at
 // 'where'. Used only from proximity-map dump helpers.
-void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa, int logType, cSource* parentSource, wstring& path, int where)
+void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa, int logType, cSource* parentSource, lpwstring& path, int where)
 {
 	LFS
 		if (qa.processPath(parentSource, path.c_str(), childSource, cSource::WEB_SEARCH_SOURCE_TYPE, 1, false) >= 0)
@@ -3020,21 +3021,21 @@ void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa
 			vector <cSyntacticRelationGroup>::iterator srg = childSource->findSyntacticRelationGroup(where);
 			if (srg == childSource->syntacticRelationGroups.end() || srg->printMin > where || srg->printMax < where)
 			{
-				wstring tmpstr, tmpstr2, tmpstr3;
-				::lplog(logType, L"%s:%d:SM %s:SUBJ[%s] VERB[%s] OBJECT[%s]", path.c_str(), where, childSource->m[where].word->first.c_str(),
-					(childSource->m[where].relSubject >= 0) ? childSource->whereString(childSource->m[where].relSubject, tmpstr, true).c_str() : L"",
-					(childSource->m[where].getRelVerb() >= 0) ? childSource->whereString(childSource->m[where].getRelVerb(), tmpstr2, true).c_str() : L"",
-					(childSource->m[where].getRelObject() >= 0) ? childSource->whereString(childSource->m[where].getRelObject(), tmpstr3, true).c_str() : L"");
+				lpwstring tmpstr, tmpstr2, tmpstr3;
+				::lplog(logType, u"%s:%d:SM %s:SUBJ[%s] VERB[%s] OBJECT[%s]", path.c_str(), where, childSource->m[where].word->first.c_str(),
+					(childSource->m[where].relSubject >= 0) ? childSource->whereString(childSource->m[where].relSubject, tmpstr, true).c_str() : u"",
+					(childSource->m[where].getRelVerb() >= 0) ? childSource->whereString(childSource->m[where].getRelVerb(), tmpstr2, true).c_str() : u"",
+					(childSource->m[where].getRelObject() >= 0) ? childSource->whereString(childSource->m[where].getRelObject(), tmpstr3, true).c_str() : u"");
 			}
 			else
-				childSource->printSRG(path.c_str(), &(*srg), 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, L"DIRECT_RELATION", logType | LOG_QCHECK);
+				childSource->printSRG(path.c_str(), &(*srg), 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, u"DIRECT_RELATION", logType | LOG_QCHECK);
 		}
 }
 
 // semanticMatch against the question subject, then (if subQueries is non-empty)
 // matchSubQueries. Returns the subquery confidence when subqueries exist,
 // otherwise the subject semantic-match value.
-int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, wstring derivation, cSyntacticRelationGroup* parentSRG, cSource* childSource, int whereChild, int childObject, int& semanticMismatch, bool& subQueryNoMatch,
+int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cSource* childSource, int whereChild, int childObject, int& semanticMismatch, bool& subQueryNoMatch,
 	vector <cSyntacticRelationGroup>& subQueries, int numConsideredParentAnswer, bool useParallelQuery)
 {
 	LFS
@@ -3044,11 +3045,11 @@ int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, wstring der
 	if (subQueries.empty())
 		return semMatchValue;
 	int subQueryConfidenceMatch = matchSubQueries(questionSource, derivation, childSource, semanticMismatch, subQueryNoMatch, subQueries, whereChild, -1, numConsideredParentAnswer, semMatchValue, useParallelQuery);
-	wstring tmpstr1, tmpstr2;
+	lpwstring tmpstr1, tmpstr2;
 	int numWords = 0;
-	lplog(LOG_WHERE, L"%d:subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d (3)", numConsideredParentAnswer - 1,
-		parentSRG->whereQuestionTypeObject, questionSource->whereString(parentSRG->whereQuestionTypeObject, tmpstr1, false).c_str(), whereChild, childSource->whereString(whereChild, tmpstr2, false, 6, L" ", numWords).c_str(),
-		semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", subQueryConfidenceMatch);
+	lplog(LOG_WHERE, u"%d:subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d (3)", numConsideredParentAnswer - 1,
+		parentSRG->whereQuestionTypeObject, questionSource->whereString(parentSRG->whereQuestionTypeObject, tmpstr1, false).c_str(), whereChild, childSource->whereString(whereChild, tmpstr2, false, 6, u" ", numWords).c_str(),
+		semanticMismatch, (subQueryNoMatch) ? u"true" : u"false", subQueryConfidenceMatch);
 	return subQueryConfidenceMatch;
 }
 
@@ -3082,16 +3083,16 @@ void cQuestionAnswering::setWhereChildCandidateAnswer(cSource* questionSource, c
 		qt = parentSRG->whereQuestionTypeObject;
 	if (qt < 0)
 	{
-		lplog(LOG_WHERE, L"cannot set whereChildCandidateAnswer: whereQuestionType and whereQuestionTypeObject negative!", childCAS.whereChildCandidateAnswer, qt);
+		lplog(LOG_WHERE, u"cannot set whereChildCandidateAnswer: whereQuestionType and whereQuestionTypeObject negative!", childCAS.whereChildCandidateAnswer, qt);
 		return;
 	}
-	wstring cps, pps;
+	lpwstring cps, pps;
 	childCAS.source->prepPhraseToString(childCAS.wp, cps);
-	childCAS.source->printSRG(L"CHILD", childCAS.srg, 0, childCAS.ws, childCAS.wo, cps, false, -1, L"setWhereChildCandidateAnswer", LOG_WHERE);
+	childCAS.source->printSRG(u"CHILD", childCAS.srg, 0, childCAS.ws, childCAS.wo, cps, false, -1, u"setWhereChildCandidateAnswer", LOG_WHERE);
 	questionSource->prepPhraseToString(parentSRG->wherePrep, pps);
-	questionSource->printSRG(L"PARENT", parentSRG, 0, parentSRG->whereSubject, parentSRG->whereObject, pps, false, -1, L"setWhereChildCandidateAnswer", LOG_WHERE);
+	questionSource->printSRG(u"PARENT", parentSRG, 0, parentSRG->whereSubject, parentSRG->whereObject, pps, false, -1, u"setWhereChildCandidateAnswer", LOG_WHERE);
 	childCAS.whereChildCandidateAnswer = -1;
-	if (childCAS.matchInfo == L"META_PATTERN" || childCAS.matchInfo == L"SEMANTIC_MAP")
+	if (childCAS.matchInfo == u"META_PATTERN" || childCAS.matchInfo == u"SEMANTIC_MAP")
 		childCAS.whereChildCandidateAnswer = childCAS.ws;
 	else if (questionSource->inObject(parentSRG->whereSubject, qt))
 		childCAS.whereChildCandidateAnswer = childCAS.srg->whereSubject;
@@ -3111,7 +3112,7 @@ void cQuestionAnswering::setWhereChildCandidateAnswer(cSource* questionSource, c
 	}
 	else if (parentSRG->whereSecondaryPrep >= 0 && questionSource->inObject(questionSource->m[parentSRG->whereSecondaryPrep].getRelObject(), qt))
 		childCAS.whereChildCandidateAnswer = questionSource->m[parentSRG->whereSecondaryPrep].getRelObject();
-	lplog(LOG_WHERE, L"setWhereChildCandidateAnswer: set to %d from whereQuestionType=%d, whereQuestionTypeObject=%d.", childCAS.whereChildCandidateAnswer, parentSRG->whereQuestionType, parentSRG->whereQuestionTypeObject);
+	lplog(LOG_WHERE, u"setWhereChildCandidateAnswer: set to %d from whereQuestionType=%d, whereQuestionTypeObject=%d.", childCAS.whereChildCandidateAnswer, parentSRG->whereQuestionType, parentSRG->whereQuestionTypeObject);
 }
 
 // The noun the WH-word modifies ("which prize" -> prize). Cached on
@@ -3139,14 +3140,14 @@ int cQuestionAnswering::getWhereQuestionTypeObject(cSource* questionSource, cSyn
 		collectionWhere = questionSource->m[srg->whereSecondaryPrep].getRelObject();
 	if (collectionWhere < 0)
 	{
-		lplog(LOG_WHERE | LOG_INFO, L"Unable to map whereQuestionType %d: S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
+		lplog(LOG_WHERE | LOG_INFO, u"Unable to map whereQuestionType %d: S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
 			srg->whereQuestionType, srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject, (srg->whereSecondaryPrep >= 0) ? questionSource->m[srg->whereSecondaryPrep].getRelObject() : -1);
-		wstring phrase;
+		lpwstring phrase;
 		lplog(LOG_WHERE | LOG_INFO, questionSource->phraseString(srg->printMin, srg->printMax, phrase, false).c_str());
 	}
 	else
 	{
-		lplog(LOG_WHERE | LOG_INFO, L"Successfully mapped getWhereQuestionTypeObject to %d: QuestionType[%d:%s] S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
+		lplog(LOG_WHERE | LOG_INFO, u"Successfully mapped getWhereQuestionTypeObject to %d: QuestionType[%d:%s] S=%d, O=%d, PO=%d, SO=%d, SPO=%d",
 			collectionWhere,
 			srg->whereQuestionType, questionSource->m[srg->whereQuestionType].word->first.c_str(),
 			srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject, (srg->whereSecondaryPrep >= 0) ? questionSource->m[srg->whereSecondaryPrep].getRelObject() : -1);
@@ -3158,7 +3159,7 @@ int cQuestionAnswering::getWhereQuestionTypeObject(cSource* questionSource, cSyn
 // tokenize through resolveFirstSecondPersonPronouns, then write the binary
 // cache. Shares the question's MySQL handle and multi-word tables. Returns
 // false if the file produced no tokens.
-bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wchar_t* path, cSource*& source)
+bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const lpchar_t* path, cSource*& source)
 {
 	LFS
 		source = new cSource(&questionSource->mysql, cSource::PATTERN_TRANSFORM_TYPE, 0);
@@ -3168,13 +3169,13 @@ bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wch
 	source->multiWordStrings = questionSource->multiWordStrings;
 	source->multiWordObjects = questionSource->multiWordObjects;
 	int repeatStart = 0;
-	wprintf(L"\nParsing pattern file %s...\n", path);
+	lp_wprintf(u"\nParsing pattern file %s...\n", path);
 	unsigned int unknownCount = 0, quotationExceptions = 0, totalQuotations = 0;
 	int globalOverMatchedPositionsTotal = 0;
 	// id, path, start, repeatStart, etext, author, title from sources 
 	//char *sqlrow[]={ "1", (char *)cPath.c_str(), "~~BEGIN","1","","",(char *)cPath.c_str() };
-	wstring wpath = path, start = L"~~BEGIN", title, etext;
-	source->tokenize(title, etext, wpath, L"", start, repeatStart, unknownCount);
+	lpwstring wpath = path, start = u"~~BEGIN", title, etext;
+	source->tokenize(title, etext, wpath, u"", start, repeatStart, unknownCount);
 	source->doQuotesOwnershipAndContractions(totalQuotations);
 	source->printSentences(false, unknownCount, quotationExceptions, totalQuotations, globalOverMatchedPositionsTotal);
 	source->addWNExtensions();
@@ -3186,8 +3187,8 @@ bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wch
 	vector <int> secondaryQuotesResolutions;
 	source->resolveSpeakers(secondaryQuotesResolutions);
 	source->resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
-	source->write(path, false, false, L"");
-	source->writeWords(path, L"");
+	source->write(path, false, false, u"");
+	source->writeWords(path, u"");
 	source->writePatternUsage(path, true);
 	return !source->m.empty();
 }
@@ -3199,17 +3200,17 @@ bool cQuestionAnswering::processPathToPattern(cSource* questionSource, const wch
 // Subsequent calls no-op once transformationPatternMap is non-empty.
 // process source\lists\questionTransforms.txt
 // create transformationMatchPatterns
-void cQuestionAnswering::initializeTransformations(cSource* questionSource, unordered_map <wstring, wstring>& parseVariables)
+void cQuestionAnswering::initializeTransformations(cSource* questionSource, unordered_map <lpwstring, lpwstring>& parseVariables)
 {
 	LFS
 		if (transformationPatternMap.size())
 			return;
-	wstring currentPatternName;
-	parseVariables[L"$"] = L"noun|answer";
+	lpwstring currentPatternName;
+	parseVariables[u"$"] = u"noun|answer";
 	vector <cPattern*> sourcePatterns, transformPatterns, linkPatterns;
 	vector <cSyntacticRelationGroup*> linkSyntacticRelationGroups;
 	int patternNum = 0, existingReferences = patternReferences.size(), patternNumInGroup = 0;
-	if (processPathToPattern(questionSource, L"source\\lists\\questionTransforms.txt", transformSource))
+	if (processPathToPattern(questionSource, u"source\\lists\\questionTransforms.txt", transformSource))
 	{
 		for (int* I = transformSource->sentenceStarts.begin(); I != transformSource->sentenceStarts.end(); I++)
 		{
@@ -3220,8 +3221,8 @@ void cQuestionAnswering::initializeTransformations(cSource* questionSource, unor
 			bool inQuestion = (srg->whereSubject >= 0 && (transformSource->m[srg->whereSubject].flags & cWordMatch::flagInQuestion)) || (srg->whereObject >= 0 && (transformSource->m[srg->whereObject].flags & cWordMatch::flagInQuestion));
 			if (!inQuestion && srg->whereVerb >= 0)
 				transformSource->getQuestionTypeAndQuestionInformationSourceObjects(srg->whereVerb, srg->whereControllingEntity, srg->questionType, srg->whereQuestionType, srg->whereQuestionInformationSourceObjects);
-			transformSource->printSRG(L"initializeTransformations", &(*srg), -1, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, L"", LOG_INFO);
-			cPattern* pattern = cPattern::create(transformSource, L"", patternNum++, *I, *(I + 1) - 1, parseVariables);
+			transformSource->printSRG(u"initializeTransformations", &(*srg), -1, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, u"", LOG_INFO);
+			cPattern* pattern = cPattern::create(transformSource, u"", patternNum++, *I, *(I + 1) - 1, parseVariables);
 			pattern->metaPattern = transformSource->m[*I].t.traceQuestionPatternMap;
 			for (int w = *I; w < *(I + 1) - 1; w++)
 			{
@@ -3233,7 +3234,7 @@ void cQuestionAnswering::initializeTransformations(cSource* questionSource, unor
 				if (pattern->getElement(w - *I)->variable.size() > 0)
 				{
 					pattern->locationToVariableMap[w] = pattern->getElement(w - *I)->variable;
-					//::lplog(LOG_WHERE, L"pattern %s[%s] mapped location %d to variable %s", pattern->name.c_str(),pattern->differentiator.c_str(), w, pattern->getElement(w - *I)->variable.c_str());
+					//::lplog(LOG_WHERE, u"pattern %s[%s] mapped location %d to variable %s", pattern->name.c_str(),pattern->differentiator.c_str(), w, pattern->getElement(w - *I)->variable.c_str());
 				}
 			}
 			pattern->name = currentPatternName;
@@ -3265,30 +3266,30 @@ void cQuestionAnswering::initializeTransformations(cSource* questionSource, unor
 // new cSyntacticRelationGroup (caller owns the result and is responsible for
 // freeing it, or its eventual replacement, once done — see followQuestionLink
 // and transformQuestion), and log INPUT / ORIGINAL / OUTPUT. Always returns true.
-bool cQuestionAnswering::processTransformQuestionPattern(cSource* questionSource, wstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* destinationPattern, cSyntacticRelationGroup* destinationSyntacticRelationGroup, unordered_map <wstring, wstring>& parseVariables)
+bool cQuestionAnswering::processTransformQuestionPattern(cSource* questionSource, lpwstring patternType, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& lssri, cPattern* sourcePattern, cPattern* destinationPattern, cSyntacticRelationGroup* destinationSyntacticRelationGroup, unordered_map <lpwstring, lpwstring>& parseVariables)
 {
 	unordered_map <int, int> transformSourceToQuestionSourceMap;
 	// copy transformation destination space relation to questionSource
-	//void cQuestionAnswering::copySource(cSource * questionSource, cSyntacticRelationGroup * destinationQuestionSRI, cPattern * originalQuestionPattern, cPattern * destinationQuestionPattern, unordered_map <int, int> & transformSourceToQuestionSourceMap, unordered_map <wstring, wstring> & parseVariables)
+	//void cQuestionAnswering::copySource(cSource * questionSource, cSyntacticRelationGroup * destinationQuestionSRI, cPattern * originalQuestionPattern, cPattern * destinationQuestionPattern, unordered_map <int, int> & transformSourceToQuestionSourceMap, unordered_map <lpwstring, lpwstring> & parseVariables)
 	copySource(questionSource, destinationSyntacticRelationGroup, sourcePattern, destinationPattern, transformSourceToQuestionSourceMap, parseVariables);
 	for (auto& tsqm : transformSourceToQuestionSourceMap)
 		if (tsqm.first >= 0)
-			lplog(LOG_INFO | LOG_WHERE, L"LINK %s[%s] transformSourceToQuestionSourceMap %d:%s %d:%s", destinationPattern->name.c_str(), destinationPattern->differentiator.c_str(), tsqm.first, transformSource->m[tsqm.first].word->first.c_str(), tsqm.second, questionSource->m[tsqm.second].word->first.c_str());
+			lplog(LOG_INFO | LOG_WHERE, u"LINK %s[%s] transformSourceToQuestionSourceMap %d:%s %d:%s", destinationPattern->name.c_str(), destinationPattern->differentiator.c_str(), tsqm.first, transformSource->m[tsqm.first].word->first.c_str(), tsqm.second, questionSource->m[tsqm.second].word->first.c_str());
 	lssri = new cSyntacticRelationGroup(destinationSyntacticRelationGroup, transformSourceToQuestionSourceMap);
 	lssri->transformedPrep = -1;
 	questionSource->getSRIMinMax(lssri);
-	wstring psi;
+	lpwstring psi;
 	transformSource->prepPhraseToString(destinationSyntacticRelationGroup->wherePrep, psi);
-	wstring tq = patternType + destinationPattern->name + L"[" + destinationPattern->differentiator + L"]";
-	transformSource->printSRG(tq + L" TransformQuestion - INPUT", destinationSyntacticRelationGroup, 0, destinationSyntacticRelationGroup->whereSubject, destinationSyntacticRelationGroup->whereObject, psi, false, -1, L"", LOG_INFO | LOG_WHERE);
-	wstring ps;
+	lpwstring tq = patternType + destinationPattern->name + u"[" + destinationPattern->differentiator + u"]";
+	transformSource->printSRG(tq + u" TransformQuestion - INPUT", destinationSyntacticRelationGroup, 0, destinationSyntacticRelationGroup->whereSubject, destinationSyntacticRelationGroup->whereObject, psi, false, -1, u"", LOG_INFO | LOG_WHERE);
+	lpwstring ps;
 	questionSource->prepPhraseToString(srg->wherePrep, ps);
-	questionSource->printSRG(tq + L" TransformQuestion - ORIGINAL", srg, 0, srg->whereSubject, srg->whereObject, ps, false, -1, L"", LOG_INFO | LOG_WHERE);
-	wstring pss;
+	questionSource->printSRG(tq + u" TransformQuestion - ORIGINAL", srg, 0, srg->whereSubject, srg->whereObject, ps, false, -1, u"", LOG_INFO | LOG_WHERE);
+	lpwstring pss;
 	questionSource->prepPhraseToString(lssri->wherePrep, pss);
-	questionSource->printSRG(tq + L" TransformQuestion - OUTPUT", lssri, 0, lssri->whereSubject, lssri->whereObject, pss, false, -1, L"", LOG_INFO | LOG_WHERE);
-	sourcePattern->lplogShort(L"SourcePattern", LOG_WHERE);
-	destinationPattern->lplogShort(L"DestinationPattern", LOG_WHERE);
+	questionSource->printSRG(tq + u" TransformQuestion - OUTPUT", lssri, 0, lssri->whereSubject, lssri->whereObject, pss, false, -1, u"", LOG_INFO | LOG_WHERE);
+	sourcePattern->lplogShort(u"SourcePattern", LOG_WHERE);
+	destinationPattern->lplogShort(u"DestinationPattern", LOG_WHERE);
 	return true;
 }
 
@@ -3296,16 +3297,16 @@ bool cQuestionAnswering::processTransformQuestionPattern(cSource* questionSource
 // object, transform, answerQuestionInSource, and push destination answers
 // onto ancestorAnswers. Returns true when link is past the end (base case)
 // or after exploring. Always returns true.
-bool cQuestionAnswering::followQuestionLink(int link, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <wstring, wstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers)
+bool cQuestionAnswering::followQuestionLink(int link, vector <cPattern*>& linkPatterns, cSource* questionSource, cSyntacticRelationGroup* srg, cPattern* sourcePattern, vector <cSyntacticRelationGroup*>& linkSyntacticRelationGroups, unordered_map <lpwstring, lpwstring>& parseVariables, bool parseOnly, bool useParallelQuery, bool disableWebSearch, vector < cTrackDescendantAnswers>& ancestorAnswers)
 {
 	if (link >= linkPatterns.size())
 		return true;
 	cPattern* linkPattern = linkPatterns[link];
 	cTrackDescendantAnswers ancestorAnswer = ancestorAnswers[ancestorAnswers.size() - 1];
-	wstring temp;
-	parseVariables[L"$"] = itos(ancestorAnswer.inputAnswerObject, temp);
+	lpwstring temp;
+	parseVariables[u"$"] = itos(ancestorAnswer.inputAnswerObject, temp);
 	cSyntacticRelationGroup* lssri;
-	processTransformQuestionPattern(questionSource, L"LINK", srg, lssri, sourcePattern, linkPattern, linkSyntacticRelationGroups[link], parseVariables);
+	processTransformQuestionPattern(questionSource, u"LINK", srg, lssri, sourcePattern, linkPattern, linkSyntacticRelationGroups[link], parseVariables);
 	cSyntacticRelationGroup* originalLssri = lssri;
 	vector < cTrackDescendantAnswers> descendantAnswers;
 	if (answerQuestionInSource(questionSource, parseOnly, useParallelQuery, lssri, lssri, descendantAnswers, disableWebSearch) >= 0)
@@ -3314,9 +3315,9 @@ bool cQuestionAnswering::followQuestionLink(int link, vector <cPattern*>& linkPa
 		{
 			if (wpa.destinationAnswer)
 			{
-				wstring outputAnswer;
+				lpwstring outputAnswer;
 				questionSource->objectString(wpa.inputAnswerObject, outputAnswer, true);
-				ancestorAnswers.push_back(cTrackDescendantAnswers(wpa.inputAnswerObject, ancestorAnswer.ancestorAnswersTrackingString + L"|" + outputAnswer, link, false));
+				ancestorAnswers.push_back(cTrackDescendantAnswers(wpa.inputAnswerObject, ancestorAnswer.ancestorAnswersTrackingString + u"|" + outputAnswer, link, false));
 				followQuestionLink(link + 1, linkPatterns, questionSource, srg, sourcePattern, linkSyntacticRelationGroups, parseVariables, parseOnly, useParallelQuery, disableWebSearch, ancestorAnswers);
 			}
 		}
@@ -3371,7 +3372,7 @@ int cQuestionAnswering::findMetanamePatterns(cSource* questionSource, cSyntactic
 int cQuestionAnswering::transformQuestion(cSource* questionSource, cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& tsrg, vector < cTrackDescendantAnswers>& descendantAnswers, bool parseOnly, bool useParallelQuery, bool disableWebSearch)
 {
 	LFS
-		unordered_map <wstring, wstring> parseVariables;
+		unordered_map <lpwstring, lpwstring> parseVariables;
 	initializeTransformations(questionSource, parseVariables);
 	bool transformProcessed = false;
 	vector < cTrackDescendantAnswers> finalAnswers;
@@ -3385,20 +3386,20 @@ int cQuestionAnswering::transformQuestion(cSource* questionSource, cSyntacticRel
 		{
 			if (questionSource->matchPattern(ip, srg->printMin, srg->printMin + 2, false))
 			{
-				descendantAnswers.push_back(cTrackDescendantAnswers(-1, L"", -1, false));
+				descendantAnswers.push_back(cTrackDescendantAnswers(-1, u"", -1, false));
 				followQuestionLink(0, itPM.second.linkPatterns, questionSource, srg, ip, itPM.second.linkSyntacticRelationGroups, parseVariables, parseOnly, useParallelQuery, disableWebSearch, descendantAnswers);
 				for (auto& answer : descendantAnswers)
 				{
 					if (answer.link == itPM.second.linkPatterns.size() - 1)
 					{
-						wstring tmpstr;
-						parseVariables[L"$"] = itos(answer.inputAnswerObject, tmpstr);
+						lpwstring tmpstr;
+						parseVariables[u"$"] = itos(answer.inputAnswerObject, tmpstr);
 						// free the previous DESTINATION rewrite (if any) before processTransformQuestionPattern
 						// replaces tsrg with a new one; the very last one is left for the caller to own/free
 						// (see answerQuestionInSourceInitialize / followQuestionLink).
 						if (tsrg != srg)
 							delete tsrg;
-						processTransformQuestionPattern(questionSource, L"DESTINATION", srg, tsrg, ip, destinationPattern, &(*itPM.first), parseVariables);
+						processTransformQuestionPattern(questionSource, u"DESTINATION", srg, tsrg, ip, destinationPattern, &(*itPM.first), parseVariables);
 						tsrg->questionType = true;
 						if (tsrg->whereQuestionType < 0)
 							tsrg->whereQuestionType = tsrg->whereQuestionTypeObject;
@@ -3409,9 +3410,9 @@ int cQuestionAnswering::transformQuestion(cSource* questionSource, cSyntacticRel
 						{
 							if (wpa.destinationAnswer)
 							{
-								wstring outputAnswer;
+								lpwstring outputAnswer;
 								questionSource->objectString(wpa.inputAnswerObject, outputAnswer, true);
-								finalAnswers.push_back(cTrackDescendantAnswers(wpa.inputAnswerObject, answer.ancestorAnswersTrackingString + L"|" + outputAnswer, itPM.second.linkPatterns.size(), true));
+								finalAnswers.push_back(cTrackDescendantAnswers(wpa.inputAnswerObject, answer.ancestorAnswersTrackingString + u"|" + outputAnswer, itPM.second.linkPatterns.size(), true));
 							}
 						}
 						transformProcessed = true;
@@ -3421,15 +3422,15 @@ int cQuestionAnswering::transformQuestion(cSource* questionSource, cSyntacticRel
 		}
 	}
 	descendantAnswers.insert(descendantAnswers.end(), finalAnswers.begin(), finalAnswers.end());
-	wstring question;
+	lpwstring question;
 	if (!transformProcessed)
 	{
-		lplog(LOG_WHERE, L"transform failed pattern match for %s", questionSource->phraseString(srg->printMin, srg->printMax + 1, question, true).c_str());
+		lplog(LOG_WHERE, u"transform failed pattern match for %s", questionSource->phraseString(srg->printMin, srg->printMax + 1, question, true).c_str());
 		return -1;
 	}
 	else
 	{
-		lplog(LOG_WHERE, L"transform pattern match %s resulted in %d answers.", questionSource->phraseString(srg->printMin, srg->printMax + 1, question, true).c_str(), finalAnswers.size());
+		lplog(LOG_WHERE, u"transform pattern match %s resulted in %d answers.", questionSource->phraseString(srg->printMin, srg->printMax + 1, question, true).c_str(), finalAnswers.size());
 		return finalAnswers.size();
 	}
 }
@@ -3529,7 +3530,7 @@ bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRe
 	int maxEnd;
 	if (srg->whereQuestionType < 0)
 		return false;
-	if (questionSource->queryPattern(srg->whereQuestionType, L"_Q2", maxEnd) != -1 && questionSource->queryPattern(srg->whereQuestionType + 1, L"_Q1PASSIVE", maxEnd) != -1)
+	if (questionSource->queryPattern(srg->whereQuestionType, u"_Q2", maxEnd) != -1 && questionSource->queryPattern(srg->whereQuestionType + 1, u"_Q1PASSIVE", maxEnd) != -1)
 	{
 		set <int> relPreps;
 		questionSource->getAllPreps(&(*srg), relPreps);
@@ -3538,10 +3539,10 @@ bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRe
 			nearestObject = srg->whereSubject;
 		for (set <int>::iterator rp = relPreps.begin(), rpEnd = relPreps.end(); rp != rpEnd; rp++)
 		{
-			lplog(LOG_WHERE, L"%d:SUBST %d nearestObject=%d whereVerb=%d", srg->where, *rp, nearestObject, srg->whereVerb);
+			lplog(LOG_WHERE, u"%d:SUBST %d nearestObject=%d whereVerb=%d", srg->where, *rp, nearestObject, srg->whereVerb);
 			if (questionSource->m[*rp].getRelObject() > 0 && nearestObject < *rp && *rp < srg->whereVerb)
 				nearestObject = questionSource->m[*rp].getRelObject();
-			if (questionSource->m[*rp].word->first == L"by")
+			if (questionSource->m[*rp].word->first == u"by")
 				subclausePrep = *rp;
 		}
 		if (subclausePrep < 0)
@@ -3553,7 +3554,7 @@ bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRe
 		ssrg->isConstructedRelative = true;
 		ssrg->changeStateAdverb = false;
 		ssrg->whereQuestionInformationSourceObjects = srg->whereQuestionInformationSourceObjects;
-		questionSource->printSRG(L"SUBSTITUTE", ssrg, 0, ssrg->whereSubject, ssrg->whereObject, L"", false, -1, L"");
+		questionSource->printSRG(u"SUBSTITUTE", ssrg, 0, ssrg->whereSubject, ssrg->whereObject, u"", false, -1, u"");
 	}
 	// What are titles of albums featuring Jay-Z? --> what albums featured Jay-Z?
 	/*
@@ -3566,15 +3567,15 @@ bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRe
 	~~~ jay-z: relSubject='albums' relVerb='featuring'
 	*/
 	int verbPhraseElement = -1, relVerb = -1, relPrep = -1, relObjectOfPrep = -1, whereSubject = srg->whereSubject, whereTransformedObject = -1;
-	if (questionSource->queryPatternDiff(srg->whereQuestionType, L"_Q2", L"F") != -1 &&
+	if (questionSource->queryPatternDiff(srg->whereQuestionType, u"_Q2", u"F") != -1 &&
 		whereSubject >= 0 && (relVerb = questionSource->m[whereSubject].getRelVerb()) >= 0 &&
 		questionSource->m[relVerb].queryWinnerForm(isForm) >= 0 &&
 		(relPrep = questionSource->m[whereSubject].relPrep) >= 0 &&
 		(relObjectOfPrep = questionSource->m[relPrep].getRelObject()) >= 0 && //// albums
 		(whereTransformedObject = questionSource->m[relObjectOfPrep].getRelObject()) >= 0 && //// Jay-Z
-		(verbPhraseElement = questionSource->m[relObjectOfPrep].pma.queryPatternDiff(L"__NOUN", L"F")) != -1 &&
-		(questionSource->m[whereSubject].getMainEntry()->first == L"name" || questionSource->m[whereSubject].getMainEntry()->first == L"title") &&
-		questionSource->m[relPrep].word->first == L"of" && relObjectOfPrep > whereSubject)
+		(verbPhraseElement = questionSource->m[relObjectOfPrep].pma.queryPatternDiff(u"__NOUN", u"F")) != -1 &&
+		(questionSource->m[whereSubject].getMainEntry()->first == u"name" || questionSource->m[whereSubject].getMainEntry()->first == u"title") &&
+		questionSource->m[relPrep].word->first == u"of" && relObjectOfPrep > whereSubject)
 	{
 		//cSyntacticRelationGroup(int _where,int _o,int _whereControllingEntity,int _whereSubject,int _whereVerb,int _wherePrep,int _whereObject,
 		//             int _wherePrepObject,int _movingRelativeTo,int _relationType,
@@ -3588,7 +3589,7 @@ bool cQuestionAnswering::isQuestionPassive(cSource* questionSource, cSyntacticRe
 		ssrg->isConstructedRelative = true;
 		ssrg->changeStateAdverb = false;
 		ssrg->whereQuestionInformationSourceObjects = srg->whereQuestionInformationSourceObjects;
-		questionSource->printSRG(L"SUBSTITUTE", ssrg, 0, ssrg->whereSubject, ssrg->whereObject, L"", false, -1, L"");
+		questionSource->printSRG(u"SUBSTITUTE", ssrg, 0, ssrg->whereSubject, ssrg->whereObject, u"", false, -1, u"");
 	}
 	return true;
 }
@@ -3609,7 +3610,7 @@ void cQuestionAnswering::detectSubQueries(cSource* questionSource, cSyntacticRel
 	int rh = questionSource->m[collectionWhere].endObjectPosition, relVerb = -1, relPrep = -1, relObject = -1;
 	if (rh >= 0 && (((questionSource->m[rh].flags & cWordMatch::flagRelativeHead) && (relVerb = questionSource->m[rh].getRelVerb()) >= 0) || questionSource->detectAttachedPhrase(srg, relVerb) >= 0))
 	{
-		questionSource->printSRG(L"[collecting subqueries of]:", &(*srg), 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, L"");
+		questionSource->printSRG(u"[collecting subqueries of]:", &(*srg), 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, -1, u"");
 		// old man ran in the Olympics
 		// prize originating in Spain
 		relPrep = questionSource->m[relVerb].relPrep;
@@ -3634,9 +3635,9 @@ void cQuestionAnswering::detectSubQueries(cSource* questionSource, cSyntacticRel
 		questionSource->testQuestionType(questionSource->m[rh].getRelVerb() - 2, csr.whereQuestionType, whereQuestionTypeFlags, 0, csr.whereQuestionInformationSourceObjects);
 		if (csr.whereQuestionInformationSourceObjects.size() > 0)
 			csr.whereQuestionType = *csr.whereQuestionInformationSourceObjects.begin();
-		wstring ps;
+		lpwstring ps;
 		questionSource->prepPhraseToString(csr.wherePrep, ps);
-		questionSource->printSRG(L"collected subquery:", &csr, 0, csr.whereSubject, csr.whereObject, ps, false, -1, L"");
+		questionSource->printSRG(u"collected subquery:", &csr, 0, csr.whereSubject, csr.whereObject, ps, false, -1, u"");
 		subQueries.push_back(csr);
 	}
 }
@@ -3676,7 +3677,7 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 	LFS
 		if (maxAnswer <= 14)
 			return 0;
-	lplog(LOG_WHERE, L"(maxCertainty=%d):", maxAnswer);
+	lplog(LOG_WHERE, u"(maxCertainty=%d):", maxAnswer);
 	int lowestConfidence = 1000000;
 	int highestIdenticalAnswers = -1;
 	int lowestSourceConfidence = 1000000;
@@ -3693,8 +3694,8 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 		{
 			bool unableToDoQuestionTypeCheck = true;
 			int semanticMismatch = 0;
-			wchar_t derivation[1024];
-			StringCbPrintf(derivation, 1024 * sizeof(wchar_t), L"PW %06d:child answerSRG %d", srg->where, as->srg->where);
+			lpchar_t derivation[1024];
+			lp_snprintf(derivation, 1024 * sizeof(lpchar_t), u"PW %06d:child answerSRG %d", srg->where, as->srg->where);
 			as->confidence = questionTypeCheck(questionSource, derivation, &(*srg), *as, semanticMismatch, unableToDoQuestionTypeCheck);
 			// if questionTypeCheck said:
 			// CONFIDENCE_NOMATCH: no chance this could be the answer
@@ -3715,21 +3716,21 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 					if (as->object < 0 && as->source->m[as->whereChildCandidateAnswer].objectMatches.size()>1)
 					{
 						as->object = as->source->m[as->whereChildCandidateAnswer].objectMatches[0].object;
-						lplog(LOG_ERROR, L"***Answer is not split!");
+						lplog(LOG_ERROR, u"***Answer is not split!");
 					}
-					wstring tmpstr1, tmpstr2;
+					lpwstring tmpstr1, tmpstr2;
 					int numWords = 0;
-					lplog(LOG_WHERE, L"%d:subquery comparison whereChildCandidateAnswer=%d:%s moved to %d:%s", I,
-						as->whereChildCandidateAnswer, as->source->whereString(as->whereChildCandidateAnswer, tmpstr1, false, 6, L" ", numWords).c_str(),
-						as->source->objects[as->object].originalLocation, as->source->whereString(as->source->objects[as->object].originalLocation, tmpstr2, false, 6, L" ", numWords).c_str());
+					lplog(LOG_WHERE, u"%d:subquery comparison whereChildCandidateAnswer=%d:%s moved to %d:%s", I,
+						as->whereChildCandidateAnswer, as->source->whereString(as->whereChildCandidateAnswer, tmpstr1, false, 6, u" ", numWords).c_str(),
+						as->source->objects[as->object].originalLocation, as->source->whereString(as->source->objects[as->object].originalLocation, tmpstr2, false, 6, u" ", numWords).c_str());
 					as->whereChildCandidateAnswer = as->source->objects[as->object].originalLocation;
 				}
 				as->confidence = matchSubQueries(questionSource, derivation, as->source, semanticMismatch, subQueryNoMatch, subQueries, as->whereChildCandidateAnswer, -1, I, as->confidence, useParallelQuery);
-				wstring tmpstr1, tmpstr2;
+				lpwstring tmpstr1, tmpstr2;
 				int numWords = 0;
-				lplog(LOG_WHERE, L"%d:subquery comparison whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d (1)", I,
-					as->whereChildCandidateAnswer, as->source->whereString(as->whereChildCandidateAnswer, tmpstr2, false, 6, L" ", numWords).c_str(),
-					semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", as->confidence);
+				lplog(LOG_WHERE, u"%d:subquery comparison whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d (1)", I,
+					as->whereChildCandidateAnswer, as->source->whereString(as->whereChildCandidateAnswer, tmpstr2, false, 6, u" ", numWords).c_str(),
+					semanticMismatch, (subQueryNoMatch) ? u"true" : u"false", as->confidence);
 			}
 			int tenseMatchReason = verbTenseMatch(questionSource, &(*srg), *as);
 			if (isModifiedGeneric(*as))
@@ -3742,29 +3743,29 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 				lowestSourceConfidence = min(lowestSourceConfidence, as->source->sourceConfidence);
 				highestIdenticalAnswers = max(highestIdenticalAnswers, as->numIdenticalAnswers);
 				maxRecomputedAnswer = max(maxRecomputedAnswer, as->matchSum);
-				lplog(LOG_WHERE, L"(maxRecomputedAnswer=%d [%d %d %d %d %d %s %s %d]):", maxRecomputedAnswer, answerSRGs.size(), as->confidence, tenseMatchReason, as->confidence, as->matchSum, (semanticMismatch) ? L"semanticMismatch" : L"", (subQueryNoMatch) ? L"subQueryNoMatch" : L"", tenseMatchReason);
+				lplog(LOG_WHERE, u"(maxRecomputedAnswer=%d [%d %d %d %d %d %s %s %d]):", maxRecomputedAnswer, answerSRGs.size(), as->confidence, tenseMatchReason, as->confidence, as->matchSum, (semanticMismatch) ? u"semanticMismatch" : u"", (subQueryNoMatch) ? u"subQueryNoMatch" : u"", tenseMatchReason);
 			}
 			else
 			{
-				if (as->matchSum <= 16) as->rejectAnswer += L"[matchSum too low]";
-				as->rejectAnswer += (srg->questionType & QTAFlag) ? L"[adjectival]" : L"[not adjectival]";
-				as->rejectAnswer += (srg->questionType == unknownQTFlag) ? L"[unknown QT]" : L"[known QT]";
-				as->rejectAnswer += (tenseMatchReason) ? L"[tense Match]" : L"[tense mismatch]";
-				as->rejectAnswer += (semanticMismatch) ? L"[semantic Mismatch]" : L"[semantic match]";
-				as->rejectAnswer += (subQueryNoMatch) ? L"[subQuery NoMatch]" : L"[subQuery match]";
+				if (as->matchSum <= 16) as->rejectAnswer += u"[matchSum too low]";
+				as->rejectAnswer += (srg->questionType & QTAFlag) ? u"[adjectival]" : u"[not adjectival]";
+				as->rejectAnswer += (srg->questionType == unknownQTFlag) ? u"[unknown QT]" : u"[known QT]";
+				as->rejectAnswer += (tenseMatchReason) ? u"[tense Match]" : u"[tense mismatch]";
+				as->rejectAnswer += (semanticMismatch) ? u"[semantic Mismatch]" : u"[semantic match]";
+				as->rejectAnswer += (subQueryNoMatch) ? u"[subQuery NoMatch]" : u"[subQuery match]";
 				maxAlternativeAnswer = max(maxAlternativeAnswer, as->matchSum);
-				lplog(LOG_WHERE, L"(maxAlternativeAnswer=%d [%d %d %d %d %d %s %s]):", maxAlternativeAnswer, answerSRGs.size(), as->confidence, tenseMatchReason, as->confidence, as->matchSum, (semanticMismatch) ? L"semanticMismatch" : L"", (subQueryNoMatch) ? L"subQueryNoMatch" : L"");
+				lplog(LOG_WHERE, u"(maxAlternativeAnswer=%d [%d %d %d %d %d %s %s]):", maxAlternativeAnswer, answerSRGs.size(), as->confidence, tenseMatchReason, as->confidence, as->matchSum, (semanticMismatch) ? u"semanticMismatch" : u"", (subQueryNoMatch) ? u"subQueryNoMatch" : u"");
 			}
 		}
 		else
 		{
 			if (maxAnswer > as->matchSum)
 				maxAlternativeAnswer = max(maxAlternativeAnswer, as->matchSum);
-			as->rejectAnswer += L"[matchSum too low]";
-			lplog(LOG_WHERE, L"(maxAlternativeAnswer (2)=%d [%d]):", maxAlternativeAnswer, answerSRGs.size());
+			as->rejectAnswer += u"[matchSum too low]";
+			lplog(LOG_WHERE, u"(maxAlternativeAnswer (2)=%d [%d]):", maxAlternativeAnswer, answerSRGs.size());
 		}
 	}
-	lplog(LOG_WHERE, L"(final maxRecomputedAnswer=%d [%d]):", maxRecomputedAnswer, answerSRGs.size());
+	lplog(LOG_WHERE, u"(final maxRecomputedAnswer=%d [%d]):", maxRecomputedAnswer, answerSRGs.size());
 	if (maxRecomputedAnswer < 0)
 		return 0;
 	bool highCertaintyAnswer = false;
@@ -3803,19 +3804,19 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 				finalAnswers.push_back(I);
 			}
 			else
-				as->rejectAnswer += L"identical final answer ";
+				as->rejectAnswer += u"identical final answer ";
 		}
 		else
 		{
-			wstring tmpstr1, tmpstr2;
+			lpwstring tmpstr1, tmpstr2;
 			if (as->numIdenticalAnswers < highestIdenticalAnswers)
-				as->rejectAnswer += L"low identical answers " + itos(as->numIdenticalAnswers, tmpstr1) + L"<" + itos(highestIdenticalAnswers, tmpstr2) + L" ";
+				as->rejectAnswer += u"low identical answers " + itos(as->numIdenticalAnswers, tmpstr1) + u"<" + itos(highestIdenticalAnswers, tmpstr2) + u" ";
 			if (as->confidence > lowestConfidence)
-				as->rejectAnswer += L"confidence " + itos(as->confidence, tmpstr1) + L">" + itos(lowestConfidence, tmpstr2) + L" ";
+				as->rejectAnswer += u"confidence " + itos(as->confidence, tmpstr1) + u">" + itos(lowestConfidence, tmpstr2) + u" ";
 			if (as->matchSum < maxRecomputedAnswer)
-				as->rejectAnswer += L"match low " + itos(as->matchSum, tmpstr1) + L"<" + itos(maxRecomputedAnswer, tmpstr2) + L" ";
+				as->rejectAnswer += u"match low " + itos(as->matchSum, tmpstr1) + u"<" + itos(maxRecomputedAnswer, tmpstr2) + u" ";
 			if (as->source->sourceConfidence > lowestSourceConfidence)
-				as->rejectAnswer += L"source confidence " + itos(as->source->sourceConfidence, tmpstr1) + L">" + itos(lowestSourceConfidence, tmpstr2) + L" ";
+				as->rejectAnswer += u"source confidence " + itos(as->source->sourceConfidence, tmpstr1) + u">" + itos(lowestSourceConfidence, tmpstr2) + u" ";
 		}
 	}
 	return numFinalAnswers;
@@ -3826,7 +3827,7 @@ int cQuestionAnswering::determineBestAnswers(cSource* questionSource, cSyntactic
 bool cQuestionAnswering::isModifiedGeneric(cAS& as)
 {
 	if (as.srg != 0 && as.whereChildCandidateAnswer >= 0 && as.source->m[as.whereChildCandidateAnswer].objectMatches.empty() &&
-		as.source->m[as.whereChildCandidateAnswer].beginObjectPosition >= 0 && as.source->m[as.source->m[as.whereChildCandidateAnswer].beginObjectPosition].word->first == L"a")
+		as.source->m[as.whereChildCandidateAnswer].beginObjectPosition >= 0 && as.source->m[as.source->m[as.whereChildCandidateAnswer].beginObjectPosition].word->first == u"a")
 		return true;
 	return false;
 }
@@ -3839,23 +3840,23 @@ int cQuestionAnswering::printAnswers(cSyntacticRelationGroup* srg, vector < cAS 
 		int numFinalAnswers = 0;
 	if (answerSRGs.size() > 0)
 	{
-		lplog(LOG_WHERE, L"P%06d:ANSWER LIST  ************************************************************", srg->where);
+		lplog(LOG_WHERE, u"P%06d:ANSWER LIST  ************************************************************", srg->where);
 		for (unsigned int J = 0; J < answerSRGs.size(); J++)
 		{
 			vector <cAS>::iterator as = answerSRGs.begin() + J;
 			if (as->finalAnswer)
 			{
-				lplog(LOG_WHERE | LOG_QCHECK, L"    ANSWER %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d", J, answerSRGs[J].numIdenticalAnswers, answerSRGs[J].confidence, as->sourceType.c_str(), as->source->sourceConfidence);
+				lplog(LOG_WHERE | LOG_QCHECK, u"    ANSWER %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d", J, answerSRGs[J].numIdenticalAnswers, answerSRGs[J].confidence, as->sourceType.c_str(), as->source->sourceConfidence);
 				if (as->srg && !as->fromWikipediaInfoBox)
 				{
-					wstring ps;
+					lpwstring ps;
 					as->source->prepPhraseToString(as->wp, ps);
-					as->source->printSRG(L"        ", as->srg, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE | LOG_QCHECK);
+					as->source->printSRG(u"        ", as->srg, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE | LOG_QCHECK);
 				}
 				else if (as->fromTable)
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE | LOG_QCHECK, L"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin + as->entry.numWords, tmpstr, true).c_str());
+					lpwstring tmpstr;
+					lplog(LOG_WHERE | LOG_QCHECK, u"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin + as->entry.numWords, tmpstr, true).c_str());
 				}
 				numFinalAnswers++;
 			}
@@ -3865,24 +3866,24 @@ int cQuestionAnswering::printAnswers(cSyntacticRelationGroup* srg, vector < cAS 
 			vector <cAS>::iterator as = answerSRGs.begin() + J;
 			if (!as->finalAnswer)
 			{
-				lplog(LOG_WHERE, L"  REJECTED (%s%s) %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d",
+				lplog(LOG_WHERE, u"  REJECTED (%s%s) %d:Identical Answers:%d:Object Match Confidence:%d:Source:%s:Source Confidence:%d",
 					as->rejectAnswer.c_str(), as->matchInfo.c_str(), J, as->numIdenticalAnswers, as->confidence, as->sourceType.c_str(), as->source->sourceConfidence);
 				if (as->srg && !as->fromWikipediaInfoBox)
 				{
-					wstring ps;
+					lpwstring ps;
 					as->source->prepPhraseToString(as->wp, ps);
-					as->source->printSRG(L"      ", as->srg, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE);
+					as->source->printSRG(u"      ", as->srg, 0, as->ws, as->wo, ps, false, as->matchSum, as->matchInfo, LOG_WHERE);
 				}
 				else if (as->fromTable)
 				{
-					wstring tmpstr;
-					lplog(LOG_WHERE, L"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin + as->entry.numWords, tmpstr, true).c_str());
+					lpwstring tmpstr;
+					lplog(LOG_WHERE, u"       [TABLE %s %s:%d:%d:%d] %d:%s", as->tableNum.c_str(), as->tableName.c_str(), as->columnIndex, as->rowIndex, as->entryIndex, as->ws, as->source->phraseString(as->entry.begin, as->entry.begin + as->entry.numWords, tmpstr, true).c_str());
 				}
 			}
 		}
 	}
 	else
-		lplog(LOG_WHERE, L"P%06d:ANSWER LIST EMPTY! ************************************************************", srg->where);
+		lplog(LOG_WHERE, u"P%06d:ANSWER LIST EMPTY! ************************************************************", srg->where);
 	return numFinalAnswers;
 }
 
@@ -3894,14 +3895,14 @@ int cQuestionAnswering::printAnswers(cSyntacticRelationGroup* srg, vector < cAS 
 // Returns -1 if no tables, 0 otherwise. wikiTableMap entries (heap-allocated
 // in analyzeQuestionThroughAbstractAndWikipediaFromRDFType) are owned and
 // freed by the caller's local map, not by this function.
-int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* srg, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap,
+int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, lpchar_t derivation[1024], cSyntacticRelationGroup* srg, unordered_map <int, cWikipediaTableCandidateAnswers* >& wikiTableMap,
 	vector <cSyntacticRelationGroup>& subQueries, vector < cAS >& answerSRGs, int& minConfidence, bool useParallelQuery)
 {
 	LFS
 		// look for the questionType object and its synonyms in the freebase properties of the questionInformationSourceObject.
 		int whereQuestionTypeObject = srg->whereQuestionTypeObject, numConsideredParentAnswer = 0;
 	if (whereQuestionTypeObject < 0) return -1;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	int numTableAttempts = 0, numWords, maxAnswer = -1;
 	unordered_map <int, cWikipediaTableCandidateAnswers* > ::iterator wtmi;
 	for (set <int>::iterator si = srg->whereQuestionInformationSourceObjects.begin(), siEnd = srg->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
@@ -3915,18 +3916,18 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 			}
 		}
 		if (logTableDetail)
-			lplog(LOG_WHERE, L"*No tables for answer matching %s:", questionSource->whereString(*si, tmpstr, true).c_str());
+			lplog(LOG_WHERE, u"*No tables for answer matching %s:", questionSource->whereString(*si, tmpstr, true).c_str());
 	}
 	if (!numTableAttempts)
 	{
 		for (unordered_map <int, cWikipediaTableCandidateAnswers* >::iterator wm = wikiTableMap.begin(), wmEnd = wikiTableMap.end(); wm != wmEnd; wm++)
-			lplog(LOG_WHERE, L"*No answers for table mapping to whereQuestionInformationSourceObject %s", questionSource->whereString(wm->first, tmpstr, true).c_str());
+			lplog(LOG_WHERE, u"*No answers for table mapping to whereQuestionInformationSourceObject %s", questionSource->whereString(wm->first, tmpstr, true).c_str());
 		return -1;
 	}
-	lplog(LOG_WHERE, L"*Searching %d tables for answer:", numTableAttempts);
-	wstring ps;
+	lplog(LOG_WHERE, u"*Searching %d tables for answer:", numTableAttempts);
+	lpwstring ps;
 	questionSource->prepPhraseToString(srg->wherePrep, ps);
-	questionSource->printSRG(L"", &(*srg), 0, srg->whereSubject, srg->whereObject, ps, false, -1, L"");
+	questionSource->printSRG(u"", &(*srg), 0, srg->whereSubject, srg->whereObject, ps, false, -1, u"");
 	int numTableAttemptsTotal = numTableAttempts, lastProgressPercent = 0, startTime = clock();
 	numTableAttempts = 0;
 	// which prize did Paul Krugman win?
@@ -3940,17 +3941,17 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 			for (vector < cSourceTable >::iterator tableIterator = wtmi->second->wikiQuestionTypeObjectAnswers.begin(), wtviEnd = wtmi->second->wikiQuestionTypeObjectAnswers.end(); tableIterator != wtviEnd; tableIterator++)
 			{
 				int answersFromOneEntry = 0, whereLastEntryEnd = -1;
-				wstring tableTitle = wtmi->second->wikipediaSource->phraseString(tableIterator->tableTitleEntry.begin, tableIterator->tableTitleEntry.begin + tableIterator->tableTitleEntry.numWords, tmpstr, false);
+				lpwstring tableTitle = wtmi->second->wikipediaSource->phraseString(tableIterator->tableTitleEntry.begin, tableIterator->tableTitleEntry.begin + tableIterator->tableTitleEntry.numWords, tmpstr, false);
 				tableIterator->tableTitleEntry.logEntry(LOG_WHERE, tableIterator->num.c_str(), -1, -1, tableIterator->source);
 				// for each column in table
 				for (vector <cColumn>::iterator columnIterator = tableIterator->columns.begin(), wtciEnd = tableIterator->columns.end(); columnIterator != wtciEnd; columnIterator++)
 				{
 					if (columnIterator->coherencyPercentage < 50)
 					{
-						columnIterator->logColumn(LOG_WHERE, L"REJECTED - COHERENCY", tableTitle.c_str());
+						columnIterator->logColumn(LOG_WHERE, u"REJECTED - COHERENCY", tableTitle.c_str());
 						continue;
 					}
-					columnIterator->logColumn(LOG_WHERE, L"INITIALIZE", tableTitle);
+					columnIterator->logColumn(LOG_WHERE, u"INITIALIZE", tableTitle);
 					for (vector < cColumn::cRow >::iterator rowIterator = columnIterator->rows.begin(), wtriEnd = columnIterator->rows.end(); rowIterator != wtriEnd; rowIterator++)
 					{
 						if (rowIterator == columnIterator->rows.begin())
@@ -3959,7 +3960,7 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 						}
 						for (vector <cColumn::cEntry>::iterator entryIterator = rowIterator->entries.begin(), wtiEnd = rowIterator->entries.end(); entryIterator != wtiEnd; entryIterator++)
 						{
-							wstring tmpstr1, tmpstr2, tmpstr3;
+							lpwstring tmpstr1, tmpstr2, tmpstr3;
 							int whereChildCandidateAnswer = entryIterator->begin;
 							whereLastEntryEnd = entryIterator->begin + entryIterator->numWords;
 							if (whereChildCandidateAnswer < 0)
@@ -3973,16 +3974,16 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 							if ((int)(++numTableAttempts * 100 / numTableAttemptsTotal) > lastProgressPercent)
 							{
 								lastProgressPercent = (int)numTableAttempts * 100 / numTableAttemptsTotal;
-								wprintf(L"PROGRESS: %03d%% table targets with %d seconds elapsed \r", lastProgressPercent, (int)((clock() - startTime) / CLOCKS_PER_SEC));
+								lp_wprintf(u"PROGRESS: %03d%% table targets with %d seconds elapsed \r", lastProgressPercent, (int)((clock() - startTime) / CLOCKS_PER_SEC));
 							}
 							bool synonym = false;
 							int semanticMismatch = 0;
-							lplog(LOG_WHERE, L"processing table %s: Q%d %s semantic comparison START whereChildCandidateAnswer=%d:%s:",
-								tableIterator->num.c_str(), numConsideredParentAnswer, (tableIterator->tableTitleEntry.lastWordFoundInTitleSynonyms) ? L" [matches question object]" : L"", whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str());
+							lplog(LOG_WHERE, u"processing table %s: Q%d %s semantic comparison START whereChildCandidateAnswer=%d:%s:",
+								tableIterator->num.c_str(), numConsideredParentAnswer, (tableIterator->tableTitleEntry.lastWordFoundInTitleSynonyms) ? u" [matches question object]" : u"", whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str());
 							entryIterator->logEntry(LOG_WHERE, tableIterator->num.c_str(), (int)(rowIterator - columnIterator->rows.begin()), (int)(entryIterator - rowIterator->entries.begin()), tableIterator->source);
 							int confidence = CONFIDENCE_NOMATCH;
 							if (logQuestionDetail)
-								lplog(LOG_WHERE, L"processing table %s: Q%d	maxTitleFound=%d, entry RDFTypeSimplifiedToWordFoundInTitleSynonyms=%d entry lastWordFoundInTitleSynonyms=%d numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow=%d, numLastWordsFoundInTitleSynonymsInRow=%d, numSimplifiedRDFTypesFoundForRow=%d", tableIterator->num.c_str(), numConsideredParentAnswer,
+								lplog(LOG_WHERE, u"processing table %s: Q%d	maxTitleFound=%d, entry RDFTypeSimplifiedToWordFoundInTitleSynonyms=%d entry lastWordFoundInTitleSynonyms=%d numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow=%d, numLastWordsFoundInTitleSynonymsInRow=%d, numSimplifiedRDFTypesFoundForRow=%d", tableIterator->num.c_str(), numConsideredParentAnswer,
 									rowIterator->maxTitleFound, entryIterator->RDFTypeSimplifiedToWordFoundInTitleSynonyms, entryIterator->lastWordFoundInTitleSynonyms,
 									rowIterator->numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow, rowIterator->numLastWordsFoundInTitleSynonymsInRow, rowIterator->numSimplifiedRDFTypesFoundForRow);
 							/*
@@ -3991,42 +3992,42 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 									if (rows[row].numLastWordOrSimplifiedRDFTypesFoundInTitleSynonymsInRow > 1 && rows[row].numLastWordsFoundInTitleSynonymsInRow > 0)
 										rows[row].entries[entry].lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms = rows[row].entries[entry].lastWordFoundInTitleSynonyms;
 							*/
-							wstring matchInfo;
+							lpwstring matchInfo;
 							if (tableIterator->tableTitleEntry.matchedQuestionObject.size() || tableIterator->tableTitleEntry.synonymMatchedQuestionObject.size())
 							{
 								if (tableIterator->tableTitleEntry.matchedQuestionObject.size())
 								{
-									matchInfo += L"[title matches desired answer]";
+									matchInfo += u"[title matches desired answer]";
 									confidence = 3;
 								}
 								else if (tableIterator->tableTitleEntry.synonymMatchedQuestionObject.size())
 								{
-									matchInfo += L"[title matches desired answer synonym]";
+									matchInfo += u"[title matches desired answer synonym]";
 									confidence = 4;
 								};
 								if (entryIterator->RDFTypeSimplifiedToWordFoundInTitleSynonyms)
 								{
-									matchInfo += L"[RDF type of entry matches title synonym]";
+									matchInfo += u"[RDF type of entry matches title synonym]";
 									confidence--;
 								}
 								if (entryIterator->lastWordFoundInTitleSynonyms)
 								{
-									matchInfo += L"[last word of entry matches title synonym]";
+									matchInfo += u"[last word of entry matches title synonym]";
 									confidence--;
 								}
 							}
 							else if (tableIterator->tableTitleEntry.begin < 0)
 							{
-								matchInfo += L"[no table title - matching against desired answer]";
+								matchInfo += u"[no table title - matching against desired answer]";
 								// make it less confident than if we know the title of the table
 								confidence = questionSource->checkParticularPartSemanticMatch(LOG_WHERE, whereQuestionTypeObject, wtmi->second->wikipediaSource, whereChildCandidateAnswer, -1, synonym, semanticMismatch, fileCaching) + 4;
 							}
-							lplog(LOG_WHERE, L"processing table %s: Q%d semantic comparison FINISHED between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields confidence %d [%d] [title entry=%s].",
+							lplog(LOG_WHERE, u"processing table %s: Q%d semantic comparison FINISHED between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields confidence %d [%d] [title entry=%s].",
 								tableIterator->num.c_str(), numConsideredParentAnswer++, whereQuestionTypeObject, questionSource->whereString(whereQuestionTypeObject, tmpstr1, false).c_str(), whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str(), confidence, answersFromOneEntry, tableIterator->tableTitleEntry.sprint(tableIterator->source, tmpstr3).c_str());
 							bool secondarySentencePosition = (answersFromOneEntry > 1 && (wtmi->second->wikipediaSource->m[whereChildCandidateAnswer].objectRole & (OBJECT_ROLE | PREP_OBJECT_ROLE)));
 							if (secondarySentencePosition)
 							{
-								matchInfo += L"[secondary sentence position]";
+								matchInfo += u"[secondary sentence position]";
 								confidence += CONFIDENCE_NOMATCH / 2;
 							}
 							if (confidence < CONFIDENCE_NOMATCH)
@@ -4041,7 +4042,7 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 								}
 								if (wtmi->second->wikipediaSource->m[whereChildCandidateAnswer].objectMatches.size() > 0)
 									wtmi->second->wikipediaSource->m[whereChildCandidateAnswer].objectMatches.clear();
-								cAS as(L"TABLE", wtmi->second->wikipediaSource, confidence, 1, matchInfo, NULL, 1, whereChildCandidateAnswer, 0, 0, false, true, tableIterator->num, tableTitle, (int)(columnIterator - tableIterator->columns.begin()), rowIterator - columnIterator->rows.begin(), (int)(entryIterator - rowIterator->entries.begin()), &(*entryIterator));
+								cAS as(u"TABLE", wtmi->second->wikipediaSource, confidence, 1, matchInfo, NULL, 1, whereChildCandidateAnswer, 0, 0, false, true, tableIterator->num, tableTitle, (int)(columnIterator - tableIterator->columns.begin()), rowIterator - columnIterator->rows.begin(), (int)(entryIterator - rowIterator->entries.begin()), &(*entryIterator));
 								if (subQueries.empty())
 								{
 									minConfidence = min(minConfidence, confidence);
@@ -4050,8 +4051,8 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 								}
 								semanticMismatch = 0;
 								bool subQueryNoMatch = false;
-								wchar_t sqDerivation[2048];
-								StringCbPrintf(sqDerivation, 2048 * sizeof(wchar_t), L"%s whereQuestionInformationSourceObject(%d:%s) wikiQuestionTypeObjectAnswer(%d:%s)", derivation, *si, questionSource->whereString(*si, tmpstr2, true, 6, L" ", numWords).c_str(),
+								lpchar_t sqDerivation[2048];
+								lp_snprintf(sqDerivation, 2048 * sizeof(lpchar_t), u"%s whereQuestionInformationSourceObject(%d:%s) wikiQuestionTypeObjectAnswer(%d:%s)", derivation, *si, questionSource->whereString(*si, tmpstr2, true, 6, u" ", numWords).c_str(),
 									whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr3, false).c_str());
 								// run a subquery which substitutes the value for the object in a part of the sentence.
 								matchSubQueries(questionSource, sqDerivation, wtmi->second->wikipediaSource, semanticMismatch, subQueryNoMatch, subQueries, whereChildCandidateAnswer, whereLastEntryEnd, numConsideredParentAnswer, confidence, useParallelQuery);
@@ -4060,13 +4061,13 @@ int	cQuestionAnswering::searchTableForAnswer(cSource* questionSource, wchar_t de
 								if (subQueryNoMatch)
 								{
 									confidence = as.confidence += 1000;
-									as.matchInfo += L"[subQueryNoMatch +1000]";
+									as.matchInfo += u"[subQueryNoMatch +1000]";
 								}
 								if (secondarySentencePosition)
-									as.matchInfo += L"[secondarySentencePosition[" + itos(answersFromOneEntry, tmpstr) + L"+" + itos(CONFIDENCE_NOMATCH / 2, tmpstr2) + L"]";
-								lplog(LOG_WHERE, L"%d:table subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d[%s]", numConsideredParentAnswer - 1,
+									as.matchInfo += u"[secondarySentencePosition[" + itos(answersFromOneEntry, tmpstr) + u"+" + itos(CONFIDENCE_NOMATCH / 2, tmpstr2) + u"]";
+								lplog(LOG_WHERE, u"%d:table subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d[%s]", numConsideredParentAnswer - 1,
 									whereQuestionTypeObject, questionSource->whereString(whereQuestionTypeObject, tmpstr1, false).c_str(), whereChildCandidateAnswer, wtmi->second->wikipediaSource->phraseString(whereChildCandidateAnswer, whereLastEntryEnd, tmpstr2, false).c_str(),
-									semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", confidence, as.matchInfo.c_str());
+									semanticMismatch, (subQueryNoMatch) ? u"true" : u"false", confidence, as.matchInfo.c_str());
 								minConfidence = min(minConfidence, confidence);
 								enterAnswerAccumulatingIdenticalAnswers(questionSource, srg, as, maxAnswer, answerSRGs);
 							}
@@ -4088,52 +4089,52 @@ int cQuestionAnswering::findConstrainedAnswers(cSource* questionSource, vector <
 {
 	LFS
 		int whereChild = -1;
-	set <wstring> constrainedAnswers;
+	set <lpwstring> constrainedAnswers;
 	for (vector < cAS >::iterator as = answerSRGs.begin(), asEnd = answerSRGs.end(); as != asEnd; as++)
 	{
 		if (as->finalAnswer)
 		{
-			wstring tmpstr;
+			lpwstring tmpstr;
 			cAS* transferAS = 0;
 			int numWords;
-			wstring kind;
+			lpwstring kind;
 			if (as->srg)
-				kind = L"";
+				kind = u"";
 			else if (as->fromTable)
-				kind = L"TABLE ";
+				kind = u"TABLE ";
 			else
-				kind = L"DB ";
+				kind = u"DB ";
 			whereChild = (as->srg) ? as->whereChildCandidateAnswer : as->ws;
 			for (cOM o : as->source->m[whereChild].objectMatches)
 			{
 				as->source->objectString(o.object, tmpstr, true);
 				if (constrainedAnswers.find(tmpstr) == constrainedAnswers.end())
 				{
-					lplog(LOG_WHERE | LOG_QCHECK, L"    CONSTRAINED %sANSWER Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
+					lplog(LOG_WHERE | LOG_QCHECK, u"    CONSTRAINED %sANSWER Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
 					transferAS = &(*as);
 					constrainedAnswers.insert(tmpstr);
 				}
 				else
-					lplog(LOG_WHERE | LOG_QCHECK, L"    CONSTRAINED %sDUPLICATE Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
+					lplog(LOG_WHERE | LOG_QCHECK, u"    CONSTRAINED %sDUPLICATE Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
 			}
 			if (as->source->m[whereChild].objectMatches.empty())
 			{
-				as->source->whereString(whereChild, tmpstr, false, 6, L" ", numWords);
+				as->source->whereString(whereChild, tmpstr, false, 6, u" ", numWords);
 				if (constrainedAnswers.find(tmpstr) == constrainedAnswers.end())
 				{
-					lplog(LOG_WHERE | LOG_QCHECK, L"    CONSTRAINED %sANSWER Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
+					lplog(LOG_WHERE | LOG_QCHECK, u"    CONSTRAINED %sANSWER Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
 					transferAS = &(*as);
 					constrainedAnswers.insert(tmpstr);
 				}
 				else
-					lplog(LOG_WHERE | LOG_QCHECK, L"    CONSTRAINED %sDUPLICATE Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
+					lplog(LOG_WHERE | LOG_QCHECK, u"    CONSTRAINED %sDUPLICATE Source:%s:Source Confidence:%d: %s", kind.c_str(), as->sourceType.c_str(), as->source->sourceConfidence, tmpstr.c_str());
 			}
 			if (transferAS)
 			{
 				unordered_map <int, int> transformSourceToQuestionSourceMap;
 				if (as->source->m[whereChild].objectMatches.empty() && transferAS->source->m[whereChild].getObject() >= 0)
 				{
-					descendantAnswers.push_back(cTrackDescendantAnswers(transferAS->source->m[whereChild].getObject(), L"", -1, true));
+					descendantAnswers.push_back(cTrackDescendantAnswers(transferAS->source->m[whereChild].getObject(), u"", -1, true));
 					for (int I = transferAS->source->m[whereChild].beginObjectPosition; I < transferAS->source->m[whereChild].endObjectPosition; I++)
 					{
 						questionSource->copyChildrenIntoParent(transferAS->source, I, transformSourceToQuestionSourceMap, false);
@@ -4144,14 +4145,14 @@ int cQuestionAnswering::findConstrainedAnswers(cSource* questionSource, vector <
 					for (cOM o : as->source->m[whereChild].objectMatches)
 					{
 						int wo = transferAS->source->objects[o.object].originalLocation;
-						descendantAnswers.push_back(cTrackDescendantAnswers(o.object, L"", -1, true));
+						descendantAnswers.push_back(cTrackDescendantAnswers(o.object, u"", -1, true));
 						for (int I = transferAS->source->m[wo].beginObjectPosition; I < transferAS->source->m[wo].endObjectPosition; I++)
 							questionSource->copyChildrenIntoParent(transferAS->source, I, transformSourceToQuestionSourceMap, false);
 					}
 				}
 				else
 				{
-					lplog(LOG_FATAL_ERROR, L"constrained answer object not found!");
+					lplog(LOG_FATAL_ERROR, u"constrained answer object not found!");
 					//for (int wpa : questionSource->copyChildrenIntoParent(transferAS->source, whereChild, transformSourceToQuestionSourceMap, false))
 					//	wherePossibleAnswers.insert(wherePossibleAnswers.end(), wpa);
 				}
@@ -4164,7 +4165,7 @@ int cQuestionAnswering::findConstrainedAnswers(cSource* questionSource, vector <
 						questionSource->m[pair.second].adjustReferences(pair.second, false, transformSourceToQuestionSourceMap);
 						if (questionSource->m[pair.second].getObject() < -1000)
 						{// see copyChildrenIntoParent
-							lplog(LOG_WHERE, L"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
+							lplog(LOG_WHERE, u"Setting negative object positive in adjust references - %d->%d object %d->%d!", pair.first, pair.second, questionSource->m[pair.second].getObject(), -questionSource->m[pair.second].getObject() - 1000); // SON[setObjectNegative]
 							questionSource->m[pair.second].setObject(-questionSource->m[pair.second].getObject() - 1000);
 						}
 						else
@@ -4191,7 +4192,7 @@ bool cQuestionAnswering::matchParticularAnswer(cSource* questionSource, cSyntact
 	bool legalReference = false, notAlreadySelected = true, objectClass = true;
 	int semanticMismatch = 0;
 	int oc;
-	wstring tmpstr, tmpstr2, tmpstr3;
+	lpwstring tmpstr, tmpstr2, tmpstr3;
 	if ((legalReference = whereMatch >= 0 && questionSource->m[wherePossibleAnswer].getObject() >= 0) &&
 		(notAlreadySelected = !questionSource->objectContainedIn(wherePossibleAnswer, ssri->whereQuestionInformationSourceObjects) &&
 			!questionSource->objectContainedIn(wherePossibleAnswer, addWhereQuestionInformationSourceObjects)) &&
@@ -4199,15 +4200,15 @@ bool cQuestionAnswering::matchParticularAnswer(cSource* questionSource, cSyntact
 		//(confidenceMatch=checkParticularPartSemanticMatch(LOG_WHERE,whereMatch,this,wherePossibleAnswer,synonym,semanticMismatch)<CONFIDENCE_NOMATCH) && 
 		//!semanticMismatch)
 	{
-		lplog(LOG_WHERE, L"%d:MAOPQ matchParticularAnswer SUCCESS: Pushing object %s to location %d:%s.",
+		lplog(LOG_WHERE, u"%d:MAOPQ matchParticularAnswer SUCCESS: Pushing object %s to location %d:%s.",
 			ssri->where, questionSource->whereString(wherePossibleAnswer, tmpstr, true).c_str(), whereMatch, questionSource->whereString(whereMatch, tmpstr2, true).c_str());
 		questionSource->m[whereMatch].objectMatches.push_back(cOM(questionSource->m[wherePossibleAnswer].getObject(), 0));
 		addWhereQuestionInformationSourceObjects.insert(whereMatch);
 		return true;
 	}
 	else
-		lplog(LOG_WHERE, L"%d:MAOPQ matchParticularAnswer REJECTED (%s%s%s%s):  %d:%s  =  %d:%s?", ssri->where,
-			(legalReference) ? L"" : L"illegal", (notAlreadySelected) ? L"" : L"alreadySelected", (semanticMismatch) ? L"semanticMismatch" : L"", (objectClass) ? L"" : L"objectClass",
+		lplog(LOG_WHERE, u"%d:MAOPQ matchParticularAnswer REJECTED (%s%s%s%s):  %d:%s  =  %d:%s?", ssri->where,
+			(legalReference) ? u"" : u"illegal", (notAlreadySelected) ? u"" : u"alreadySelected", (semanticMismatch) ? u"semanticMismatch" : u"", (objectClass) ? u"" : u"objectClass",
 			whereMatch, questionSource->whereString(whereMatch, tmpstr2, true).c_str(),
 			wherePossibleAnswer, questionSource->whereString(wherePossibleAnswer, tmpstr3, true).c_str());
 	return false;
@@ -4222,7 +4223,7 @@ bool cQuestionAnswering::matchAnswerSourceMatch(cSource* questionSource, cSyntac
 		if (whereMatch < 0 || wherePossibleAnswer < 0 || questionSource->inObject(whereMatch, ssri->whereQuestionType))
 			return false;
 	bool legalReference = false, notAlreadySelected = true, wordMatch = true, objectClass = true;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	int oc;
 	if ((legalReference = whereMatch >= 0 && questionSource->m[wherePossibleAnswer].getObject() >= 0) &&
 		(notAlreadySelected = !questionSource->objectContainedIn(wherePossibleAnswer, ssri->whereQuestionInformationSourceObjects) &&
@@ -4231,17 +4232,17 @@ bool cQuestionAnswering::matchAnswerSourceMatch(cSource* questionSource, cSyntac
 	{
 		if (questionSource->m[wherePossibleAnswer].objectMatches.empty() && (objectClass = (oc = questionSource->objects[questionSource->m[wherePossibleAnswer].getObject()].objectClass) == NAME_OBJECT_CLASS || oc == GENDERED_DEMONYM_OBJECT_CLASS || oc == NON_GENDERED_BUSINESS_OBJECT_CLASS || oc == NON_GENDERED_NAME_OBJECT_CLASS))
 		{
-			lplog(LOG_WHERE, L"%d:MAOPQ matchAnswerSourceMatch SUCCESS: Pushing object %s to location %d:%s.", ssri->where, questionSource->whereString(wherePossibleAnswer, tmpstr, true).c_str(), whereMatch, questionSource->m[whereMatch].word->first.c_str());
+			lplog(LOG_WHERE, u"%d:MAOPQ matchAnswerSourceMatch SUCCESS: Pushing object %s to location %d:%s.", ssri->where, questionSource->whereString(wherePossibleAnswer, tmpstr, true).c_str(), whereMatch, questionSource->m[whereMatch].word->first.c_str());
 			questionSource->m[whereMatch].objectMatches.push_back(cOM(questionSource->m[wherePossibleAnswer].getObject(), 0));
 		}
 		else
-			lplog(LOG_WHERE, L"%d:MAOPQ matchAnswerSourceMatch SUCCESS: Matched object %s.", ssri->where, questionSource->whereString(wherePossibleAnswer, tmpstr, true).c_str());
+			lplog(LOG_WHERE, u"%d:MAOPQ matchAnswerSourceMatch SUCCESS: Matched object %s.", ssri->where, questionSource->whereString(wherePossibleAnswer, tmpstr, true).c_str());
 		addWhereQuestionInformationSourceObjects.insert(whereMatch);
 		return true;
 	}
 	else
-		lplog(LOG_WHERE, L"%d:MAOPQ matchAnswerSourceMatch REJECTED (%s%s%s%s):%d:object=%s %s=%s?", ssri->where,
-			(legalReference) ? L"" : L"illegal", (notAlreadySelected) ? L"" : L"alreadySelected", (wordMatch) ? L"" : L"noWordMatch", (objectClass) ? L"" : L"objectClass",
+		lplog(LOG_WHERE, u"%d:MAOPQ matchAnswerSourceMatch REJECTED (%s%s%s%s):%d:object=%s %s=%s?", ssri->where,
+			(legalReference) ? u"" : u"illegal", (notAlreadySelected) ? u"" : u"alreadySelected", (wordMatch) ? u"" : u"noWordMatch", (objectClass) ? u"" : u"objectClass",
 			whereMatch, questionSource->whereString(wherePossibleAnswer, tmpstr2, true).c_str(), questionSource->m[whereMatch].word->first.c_str(), questionSource->m[wherePossibleAnswer].word->first.c_str());
 	return false;
 }
@@ -4255,10 +4256,10 @@ int cQuestionAnswering::matchAnswersOfPreviousQuestion(cSource* questionSource, 
 {
 	LFS
 		set <int> addWhereQuestionInformationSourceObjects;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (wherePossibleAnswers.empty())
 		return -1;
-	lplog(LOG_WHERE, L"%d:MAOPQ BEGIN matchAnswersOfPreviousQuestion (%s)", ssri->where, questionSource->whereString(wherePossibleAnswers, tmpstr).c_str());
+	lplog(LOG_WHERE, u"%d:MAOPQ BEGIN matchAnswersOfPreviousQuestion (%s)", ssri->where, questionSource->whereString(wherePossibleAnswers, tmpstr).c_str());
 	// match the general object that the answers were linked to
 	if (matchAnswerSourceMatch(questionSource, ssri, ssri->whereSubject, *wherePossibleAnswers.begin(), addWhereQuestionInformationSourceObjects))
 		for (int wpai : wherePossibleAnswers)
@@ -4271,11 +4272,11 @@ int cQuestionAnswering::matchAnswersOfPreviousQuestion(cSource* questionSource, 
 			matchParticularAnswer(questionSource, ssri, ssri->wherePrepObject, wpai, addWhereQuestionInformationSourceObjects);
 	if (addWhereQuestionInformationSourceObjects.size())
 	{
-		lplog(LOG_WHERE, L"%d:MAOPQ END matchAnswersOfPreviousQuestion adding: %s", ssri->where, questionSource->whereString(addWhereQuestionInformationSourceObjects, tmpstr).c_str());
+		lplog(LOG_WHERE, u"%d:MAOPQ END matchAnswersOfPreviousQuestion adding: %s", ssri->where, questionSource->whereString(addWhereQuestionInformationSourceObjects, tmpstr).c_str());
 		ssri->whereQuestionInformationSourceObjects.insert(addWhereQuestionInformationSourceObjects.begin(), addWhereQuestionInformationSourceObjects.end());
 	}
 	else
-		lplog(LOG_WHERE, L"%d:MAOPQ END matchAnswersOfPreviousQuestion no answers added", ssri->where, questionSource->whereString(addWhereQuestionInformationSourceObjects, tmpstr).c_str());
+		lplog(LOG_WHERE, u"%d:MAOPQ END matchAnswersOfPreviousQuestion no answers added", ssri->where, questionSource->whereString(addWhereQuestionInformationSourceObjects, tmpstr).c_str());
 	return -1;
 }
 
@@ -4283,13 +4284,13 @@ int cQuestionAnswering::matchAnswersOfPreviousQuestion(cSource* questionSource, 
 // determineBestAnswers. lastResultPage is set when fewer than 10 hits returned.
 // Returns the new numFinalAnswers.
 extern int limitProcessingForProfiling;
-int cQuestionAnswering::searchWebSearchQueries(cSource* questionSource, wchar_t derivation[1024], cSyntacticRelationGroup* ssri,
+int cQuestionAnswering::searchWebSearchQueries(cSource* questionSource, lpchar_t derivation[1024], cSyntacticRelationGroup* ssri,
 	vector <cSyntacticRelationGroup>& subQueries, vector < cAS >& answerSRGs,
-	vector <wstring>& webSearchQueryStrings, bool parseOnly, int& numFinalAnswers, int& maxAnswer, bool useParallelQuery, int& trySearchIndex,
+	vector <lpwstring>& webSearchQueryStrings, bool parseOnly, int& numFinalAnswers, int& maxAnswer, bool useParallelQuery, int& trySearchIndex,
 	bool useGoogleSearch, bool& lastResultPage)
 {
 	LFS
-		StringCbPrintf(derivation, 1024 * sizeof(wchar_t), L"PW %06d", ssri->where);
+		lp_snprintf(derivation, 1024 * sizeof(lpchar_t), u"PW %06d", ssri->where);
 	int webSearchQueryStringOffset = 0;
 	if (useParallelQuery)
 		lastResultPage = webSearchForQueryParallel(questionSource, derivation, ssri, parseOnly, answerSRGs, maxAnswer, 10, trySearchIndex, useGoogleSearch, webSearchQueryStrings, webSearchQueryStringOffset) < 10;
@@ -4305,7 +4306,7 @@ int cQuestionAnswering::searchWebSearchQueries(cSource* questionSource, wchar_t 
 void cQuestionAnswering::eraseSourcesMap()
 {
 	// memory optimization
-	for (unordered_map <wstring, cSource*>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end(); )
+	for (unordered_map <lpwstring, cSource*>::iterator smi = sourcesMap.begin(); smi != sourcesMap.end(); )
 	{
 		cSource* source = smi->second;
 		source->clearSource();
@@ -4328,7 +4329,7 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 {
 	// adjective, possessive determiner or _NAMEOWNER pattern, or SINGULAR_OWNER/PLURAL_OWNER inflection flag?
 	if (questionSource->m[si].queryWinnerForm(adjectiveForm) >= 0 || questionSource->m[si].queryWinnerForm(possessiveDeterminerForm) >= 0 ||
-		questionSource->queryPattern(si, L"_NAMEOWNER") != -1 || (questionSource->m[si].word->second.inflectionFlags & (SINGULAR_OWNER | PLURAL_OWNER)) != 0 &&
+		questionSource->queryPattern(si, u"_NAMEOWNER") != -1 || (questionSource->m[si].word->second.inflectionFlags & (SINGULAR_OWNER | PLURAL_OWNER)) != 0 &&
 		questionSource->m[si].principalWherePosition > si)
 	{
 		int principalWherePosition = questionSource->m[si].principalWherePosition;
@@ -4337,7 +4338,7 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 		// object class must be a type or group not a specific object or person.
 		if (objectClass == NAME_OBJECT_CLASS && !questionSource->objects[objectNum].neuter)
 			return 0;
-		set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare> localProximityMap;
+		set < unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare> localProximityMap;
 		unordered_map <int, cProximityMap*>::iterator msi = ssrg->proximityMaps.find(si);
 		if (msi != ssrg->proximityMaps.end())
 		{
@@ -4349,26 +4350,26 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 			onlyTopResults = 0;
 			for (auto sroi = msi->second->objectsSortedByProximityScore.begin(), sroiEnd = msi->second->objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 10; sroi++, onlyTopResults++)
 				localProximityMap.insert(*sroi);
-			wstring pw = questionSource->m[questionSource->m[si].principalWherePosition].word->first, tmpstr3;
+			lpwstring pw = questionSource->m[questionSource->m[si].principalWherePosition].word->first, tmpstr3;
 			transform(pw.begin(), pw.end(), pw.begin(), (int(*)(int)) tolower);
-			wstring pwme = questionSource->m[principalWherePosition].getMainEntry()->first;
-			unordered_set <wstring> parentSynonyms;
+			lpwstring pwme = questionSource->m[principalWherePosition].getMainEntry()->first;
+			unordered_set <lpwstring> parentSynonyms;
 			questionSource->getSynonyms(pw, parentSynonyms, NOUN);
 			if (pw != pwme)
 				questionSource->getSynonyms(pwme, parentSynonyms, NOUN);
-			wstring psStr;
-			lplog(LOG_WHERE, L"Ownership proximity looking for: %s:%s", pwme.c_str(), setString(parentSynonyms, psStr, L" ").c_str());
+			lpwstring psStr;
+			lplog(LOG_WHERE, u"Ownership proximity looking for: %s:%s", pwme.c_str(), setString(parentSynonyms, psStr, u" ").c_str());
 			for (auto& po : localProximityMap)
 			{
-				po->second.childObject = questionSource->createObject(L"proximity", po->first);
+				po->second.childObject = questionSource->createObject(u"proximity", po->first);
 				vector <cTreeCat*> rdfTypes;
-				unordered_map <wstring, int > topHierarchyClassIndexes;
-				questionSource->getExtendedRDFTypesMaster(questionSource->objects[po->second.childObject].originalLocation, -1, rdfTypes, topHierarchyClassIndexes, TEXT(__FUNCTION__));
+				unordered_map <lpwstring, int > topHierarchyClassIndexes;
+				questionSource->getExtendedRDFTypesMaster(questionSource->objects[po->second.childObject].originalLocation, -1, rdfTypes, topHierarchyClassIndexes, LP_TEXT(__func__));
 				po->second.confidenceSE = -1;
 				for (vector <cTreeCat*>::iterator ri = rdfTypes.begin(), riEnd = rdfTypes.end(); ri != riEnd; ri++)
 				{
 					if (logDetail)
-						(*ri)->lplogTC(LOG_WHERE, L"whereQuestionInformationSourceObjects");
+						(*ri)->lplogTC(LOG_WHERE, u"whereQuestionInformationSourceObjects");
 					int confidenceSE = -1;
 					if ((*ri)->cli->first == pwme)
 						confidenceSE = 1;
@@ -4381,7 +4382,7 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 						confidenceSE = 3;
 					}
 					// find intersection between parentSynonyms and super classes
-					vector <wstring> commonWords;
+					vector <lpwstring> commonWords;
 					if (parentSynonyms.size() < (*ri)->cli->second.superClasses.size())
 					{
 						for (auto& psw : parentSynonyms)
@@ -4401,7 +4402,7 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 						po->second.confidenceSE = confidenceSE;
 						auto p = proximityOwnedObjects.insert(po->second.childObject);
 						if (p.second)
-							lplog(LOG_WHERE, L"Ownership proximity FOUND [%d]: %s - %s", po->second.confidenceSE, pwme.c_str(), po->first.c_str());
+							lplog(LOG_WHERE, u"Ownership proximity FOUND [%d]: %s - %s", po->second.confidenceSE, pwme.c_str(), po->first.c_str());
 					}
 				}
 			}
@@ -4415,8 +4416,8 @@ int cQuestionAnswering::getProximateObjectsMatchingOwnedItemType(cSource* questi
 // for the plurality of the WH-noun. Sets webSearchOrWikipediaTableSuccess.
 void cQuestionAnswering::answerQuestionInSourceWebWikiSearch(cSource* questionSource,
 	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool &webSearchOrWikipediaTableSuccess, const bool disableWebSearch, bool& lastGoogleResultPage,
-	cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
-	int& numFinalAnswers, int& maxAnswer,	vector <wstring> &webSearchQueryStrings)
+	cSyntacticRelationGroup*& ssrg,	vector < cAS >& answerSRGs, lpchar_t* sqderivation, vector <cSyntacticRelationGroup> &subQueries, unordered_map <int, cWikipediaTableCandidateAnswers* > &wikiTableMap,
+	int& numFinalAnswers, int& maxAnswer,	vector <lpwstring> &webSearchQueryStrings)
 {
 	getWebSearchQueries(questionSource, ssrg, webSearchQueryStrings);
 	bool lastBINGResultPage = disableWebSearch;
@@ -4459,7 +4460,7 @@ void cQuestionAnswering::answerQuestionInSourceWebWikiSearch(cSource* questionSo
 				if (wikipediaTableAnswerSRIs[I].confidence == lowestConfidence)
 					atLeastOneFinalAnswer = wikipediaTableAnswerSRIs[I].finalAnswer = true;
 				else
-					wikipediaTableAnswerSRIs[I].rejectAnswer += L"[low confidence]";
+					wikipediaTableAnswerSRIs[I].rejectAnswer += u"[low confidence]";
 			if (webSearchOrWikipediaTableSuccess = atLeastOneFinalAnswer)
 			{
 				answerSRGs.insert(answerSRGs.end(), wikipediaTableAnswerSRIs.begin(), wikipediaTableAnswerSRIs.end());
@@ -4483,7 +4484,7 @@ void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* ques
 	// for each information object (ex. Darrell Hammond)
 	for (int si : ssrg->whereQuestionInformationSourceObjects)
 	{
-		set <wstring> proximityOwnedItems;
+		set <lpwstring> proximityOwnedItems;
 		// When a question information source object owns another object, disambiguate this by seeing 
 		// what objects matching the same type that are also very close and common to the question information source object, 
 		// and return all these matching objects.
@@ -4505,11 +4506,11 @@ void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* ques
 					replacementWhere = psrg.whereSecondaryObject;
 				else if (srg->whereSecondaryPrep >= 0 && questionSource->inObject(questionSource->m[srg->whereSecondaryPrep].getRelObject(), srg->whereQuestionType))
 				{
-					lplog(LOG_FATAL_ERROR, L"ProximityOwnershipQuery:Unable to replace this object to a secondary prep.");
+					lplog(LOG_FATAL_ERROR, u"ProximityOwnershipQuery:Unable to replace this object to a secondary prep.");
 				}
 				else
 				{
-					lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Cannot find owned item type %d in these fields: S=%d, O=%d, PO=%d, SO=%d",
+					lplog(LOG_WHERE | LOG_INFO, u"ProximityOwnershipQuery:Cannot find owned item type %d in these fields: S=%d, O=%d, PO=%d, SO=%d",
 						si, srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject);
 					continue;
 				}
@@ -4517,17 +4518,17 @@ void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* ques
 				questionSource->m[replacementWhere].objectMatches.push_back(cOM(proximityOwnedObject, 1000));
 				psrg.whereQuestionInformationSourceObjects.erase(si);
 				psrg.whereQuestionInformationSourceObjects.insert(questionSource->objects[proximityOwnedObject].originalLocation);
-				wstring tmpstr;
-				lplog(LOG_WHERE | LOG_INFO, L"ProximityOwnershipQuery:Successfully replaced owned item type at %d with specific object %s: S=%d, O=%d, PO=%d, SO=%d, whereQuestionTypeObject=%d",
+				lpwstring tmpstr;
+				lplog(LOG_WHERE | LOG_INFO, u"ProximityOwnershipQuery:Successfully replaced owned item type at %d with specific object %s: S=%d, O=%d, PO=%d, SO=%d, whereQuestionTypeObject=%d",
 					replacementWhere, questionSource->whereString(replacementWhere, tmpstr, true).c_str(), srg->whereSubject, srg->whereObject, srg->wherePrepObject, srg->whereSecondaryObject, srg->whereQuestionTypeObject);
-				questionSource->printSRG(L"ProximityOwnershipQuery", &psrg, 0, srg->whereSubject, srg->whereObject, psrg.wherePrep, false, -1, L"", LOG_WHERE);
+				questionSource->printSRG(u"ProximityOwnershipQuery", &psrg, 0, srg->whereSubject, srg->whereObject, psrg.wherePrep, false, -1, u"", LOG_WHERE);
 				if (answerQuestionInSource(questionSource, parseOnly, useParallelQuery, &psrg, ppsrg, descendantAnswers, disableWebSearch) >= 0)
 				{
 					for (auto& wpa : descendantAnswers)
 					{
-						wstring outputAnswer;
+						lpwstring outputAnswer;
 						questionSource->objectString(wpa.inputAnswerObject, outputAnswer, true);
-						answerSRGs.push_back(cAS(L"ProximityOwnershipQuery", questionSource, 1, 1000, outputAnswer, ppsrg, 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, false, L"", L"", 0, 0, 0, NULL));
+						answerSRGs.push_back(cAS(u"ProximityOwnershipQuery", questionSource, 1, 1000, outputAnswer, ppsrg, 0, srg->whereSubject, srg->whereObject, srg->wherePrep, false, false, u"", u"", 0, 0, 0, NULL));
 						answerSRGs[answerSRGs.size() - 1].object = wpa.inputAnswerObject;
 						webSearchOrWikipediaTableSuccess = true;
 					}
@@ -4546,11 +4547,11 @@ void cQuestionAnswering::answerQuestionInSourceOwnershipRetryQuery(cSource* ques
 // BING (lastBINGResultPage).
 void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* questionSource,
 	const bool parseOnly, const bool useParallelQuery, const bool answerPluralSpecification, bool& webSearchOrWikipediaTableSuccess, bool& lastGoogleResultPage,
-	cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, wchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
-	int& numFinalAnswers, int& maxAnswer, vector <wstring>& webSearchQueryStrings)
+	cSyntacticRelationGroup*& ssrg, vector < cAS >& answerSRGs, lpchar_t* sqderivation, vector <cSyntacticRelationGroup>& subQueries, 
+	int& numFinalAnswers, int& maxAnswer, vector <lpwstring>& webSearchQueryStrings)
 {
-	lplog(LOG_WHERE | LOG_QCHECK, L"    ***** proximity map");
-	wstring tmpstr;
+	lplog(LOG_WHERE | LOG_QCHECK, u"    ***** proximity map");
+	lpwstring tmpstr;
 	bool lastBINGResultPage = false;
 	for (set <int>::iterator si = ssrg->whereQuestionInformationSourceObjects.begin(), siEnd = ssrg->whereQuestionInformationSourceObjects.end(); si != siEnd; si++)
 	{
@@ -4559,11 +4560,11 @@ void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* qu
 		{
 			msi->second->sortByFrequencyAndProximity(*this, ssrg, questionSource);
 			msi->second->lplogFrequentOrProximateObjects(*this, LOG_WHERE, questionSource, false);
-			set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > frequentOrProximateObjects = msi->second->frequentOrProximateObjects;
-			for (set < unordered_map <wstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
+			set < unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare > frequentOrProximateObjects = msi->second->frequentOrProximateObjects;
+			for (set < unordered_map <lpwstring, cProximityMap::cProximityEntry>::iterator, cProximityMap::semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
 			{
 				vector < cAS > enhancedWebSearchAnswerSRIs;
-				vector <wstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;
+				vector <lpwstring> enhancedWebSearchQueryStrings = webSearchQueryStrings;
 				enhanceWebSearchQueries(enhancedWebSearchQueryStrings, (*sai)->first);
 				int trySearchIndex = 1;
 				// google
@@ -4588,7 +4589,7 @@ void cQuestionAnswering::answerQuestionInSourceProximityMapWebSearch(cSource* qu
 			}
 		}
 		else
-			lplog(LOG_WHERE | LOG_QCHECK, L"    No entries in proximity map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
+			lplog(LOG_WHERE | LOG_QCHECK, u"    No entries in proximity map for %s.", questionSource->whereString(*si, tmpstr, true).c_str());
 	}
 }
 
@@ -4600,7 +4601,7 @@ int cQuestionAnswering::answerQuestionInSourceInitialize(cSource* questionSource
 	const bool parseOnly, const bool useParallelQuery, 
 	cSyntacticRelationGroup* srg, cSyntacticRelationGroup*& ssrg, 
 	vector < cTrackDescendantAnswers>& descendantAnswers, const bool disableWebSearch, 
-	wstring& ps, wstring& parentNum)
+	lpwstring& ps, lpwstring& parentNum)
 {
 	eraseSourcesMap();
 	childCandidateAnswerMap.clear();
@@ -4619,13 +4620,13 @@ int cQuestionAnswering::answerQuestionInSourceInitialize(cSource* questionSource
 	// **************************************************************
 	// log question
 	// **************************************************************
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	itos(ssrg->where, parentNum);
 	//if (tsrg->where==69) 
 		//logDatabaseDetails = logQuestionProfileTime = logSynonymDetail = logTableDetail = equivalenceLogDetail = logQuestionDetail = logProximityMap = 1;
-	parentNum += L":Q ";
+	parentNum += u":Q ";
 	questionSource->prepPhraseToString(ssrg->wherePrep, ps);
-	questionSource->printSRG(parentNum, ssrg, -1, ssrg->whereSubject, ssrg->whereObject, ps, false, -1, L"QUESTION", (ssrg->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
+	questionSource->printSRG(parentNum, ssrg, -1, ssrg->whereSubject, ssrg->whereObject, ps, false, -1, u"QUESTION", (ssrg->questionType) ? LOG_WHERE | LOG_QCHECK : LOG_WHERE);
 	return 1;
 }
 
@@ -4639,14 +4640,14 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 {
 	if (!srg->questionType || srg->skip)
 		return -1;
-	wstring derivation, ps, parentNum;
+	lpwstring derivation, ps, parentNum;
 	if (!answerQuestionInSourceInitialize(questionSource, parseOnly, useParallelQuery, srg, ssrg, descendantAnswers, disableWebSearch, ps, parentNum))
 		return 0;
 	// **************************************************************
 	// check databases for answer.  
 	// **************************************************************
 	vector < cAS > answerSRGs;
-	wchar_t sqderivation[4096];
+	lpchar_t sqderivation[4096];
 	matchOwnershipDbQuery(questionSource, sqderivation, ssrg);
 	if (!dbSearchForQuery(questionSource, sqderivation, ssrg, answerSRGs))
 	{
@@ -4658,7 +4659,7 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 		analyzeRDFTypes(questionSource, srg, ssrg, derivation, answerSRGs, maxAnswer, wikiTableMap, false);
 		if (ssrg->whereQuestionTypeObject < 0)
 		{
-			lplog(LOG_WHERE, L"whereQuestionTypeObject is negative.  Skipping rest of answer processing.");
+			lplog(LOG_WHERE, u"whereQuestionTypeObject is negative.  Skipping rest of answer processing.");
 			for (auto& wikiTableEntry : wikiTableMap)
 				delete wikiTableEntry.second;
 			return -1;
@@ -4669,13 +4670,13 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 		vector <cSyntacticRelationGroup> subQueries;
 		if (&(*srg) == ssrg)
 		{
-			questionSource->printSRG(parentNum, &(*srg), 0, srg->whereSubject, srg->whereObject, ps, false, -1, L"");
+			questionSource->printSRG(parentNum, &(*srg), 0, srg->whereSubject, srg->whereObject, ps, false, -1, u"");
 			detectSubQueries(questionSource, srg, subQueries);
 		}
 		else
 		{
-			lplog(LOG_WHERE, L"Transformed:");
-			questionSource->printSRG(parentNum, ssrg, 0, ssrg->whereSubject, ssrg->whereObject, ps, false, -1, L"");
+			lplog(LOG_WHERE, u"Transformed:");
+			questionSource->printSRG(parentNum, ssrg, 0, ssrg->whereSubject, ssrg->whereObject, ps, false, -1, u"");
 		}
 		// **************************************************************
 		// determine best answer and print them.
@@ -4688,7 +4689,7 @@ int cQuestionAnswering::answerQuestionInSource(cSource* questionSource, bool par
 		if (numFinalAnswers <= 0 || (answerPluralSpecification && numFinalAnswers <= 1))
 		{
 			bool webSearchOrWikipediaTableSuccess = false, lastGoogleResultPage = disableWebSearch;
-			vector <wstring> webSearchQueryStrings;
+			vector <lpwstring> webSearchQueryStrings;
 			answerQuestionInSourceWebWikiSearch(questionSource, 
 				parseOnly, useParallelQuery, answerPluralSpecification, webSearchOrWikipediaTableSuccess, disableWebSearch, lastGoogleResultPage,
 				ssrg, answerSRGs,	sqderivation, subQueries, wikiTableMap,
@@ -4743,12 +4744,12 @@ int cQuestionAnswering::answerAllQuestionsInSource(cSource* questionSource, bool
 			delete ssri;
 		if ((where = (srg - questionSource->syntacticRelationGroups.begin()) * 100 / questionSource->syntacticRelationGroups.size()) > lastProgressPercent)
 		{
-			wprintf(L"PROGRESS: %03d%% questions processed with %04d seconds elapsed \r", where, clocksec());
+			lp_wprintf(u"PROGRESS: %03d%% questions processed with %04d seconds elapsed \r", where, clocksec());
 			lastProgressPercent = where;
 			questionProgress = lastProgressPercent;
 		}
 	}
-	wprintf(L"\n%d total sources processed", (int)sourcesMap.size());
+	lp_wprintf(u"\n%d total sources processed", (int)sourcesMap.size());
 	return 0;
 }
 

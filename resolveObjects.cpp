@@ -57,10 +57,14 @@
 		  tests quote flags only on quote positions.
 		- ownerWhere < -1 is a word-order code, not a missing owner.
 */
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -102,9 +106,9 @@ void cSource::resolveNameGender(int where, bool male, bool female)
 	}
 	if (debugTrace.traceSpeakerResolution && ambiguousGender)
 	{
-		wstring tmpstr;
-		lplog(LOG_RESOLUTION, L"%06d:Resolution of %s narrowed to %s", where, objectString(localObjects[onlyOneName].om, tmpstr, true).c_str(),
-			(male) ? L"male" : L"female");
+		lpwstring tmpstr;
+		lplog(LOG_RESOLUTION, u"%06d:Resolution of %s narrowed to %s", where, objectString(localObjects[onlyOneName].om, tmpstr, true).c_str(),
+			(male) ? u"male" : u"female");
 	}
 }
 
@@ -153,8 +157,8 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 				mostRecentMatch = lastWhere;
 				if (debugTrace.traceSpeakerResolution)
 				{
-					wstring tmpstr, tmpstr2;
-					lplog(LOG_RESOLUTION, L"%06d:Capitalization resolution mapped %s to (unknown) %s.", where,
+					lpwstring tmpstr, tmpstr2;
+					lplog(LOG_RESOLUTION, u"%06d:Capitalization resolution mapped %s to (unknown) %s.", where,
 						objectString(object, tmpstr, true).c_str(), objectString(o, tmpstr2, false).c_str());
 				}
 				return true;
@@ -170,7 +174,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 	int semanticMismatch = 0;
 	extern int logOntologyDetail;
 	if (genS->objectClass == NON_GENDERED_NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS &&
-		(m[object->begin].word->first == L"the" || (object->begin > 0 && m[object->begin - 1].word->first == L"the")) &&
+		(m[object->begin].word->first == u"the" || (object->begin > 0 && m[object->begin - 1].word->first == u"the")) &&
 		checkParticularPartSemanticMatch(LOG_RESOLUTION, object->originalLocation, this, genS->originalLocation, (int)(genS - objects.begin()), synonym, semanticMismatch, false) < CONFIDENCE_NOMATCH &&
 		(mostRecentMatch == -1 || mostRecentMatch < lastWhere))
 	{
@@ -180,8 +184,8 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 		mostRecentMatch = lastWhere;
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr, tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:Semantic resolution mapped %s to (unknown) %s.", where,
+			lpwstring tmpstr, tmpstr2;
+			lplog(LOG_RESOLUTION, u"%06d:Semantic resolution mapped %s to (unknown) %s.", where,
 				objectString(object, tmpstr, true).c_str(), objectString(o, tmpstr2, false).c_str());
 		}
 		return true;
@@ -192,7 +196,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 		// match from the first capitalized word to originalLocation
 		int begin = genS->originalLocation, begin2 = object->originalLocation;
 		bool match = false;
-		for (; begin < genS->end && m[begin].pma.queryPattern(L"_BUS_ABB") == -1 && (match = m[begin].word == m[begin2].word); begin++, begin2++);
+		for (; begin < genS->end && m[begin].pma.queryPattern(u"_BUS_ABB") == -1 && (match = m[begin].word == m[begin2].word); begin++, begin2++);
 		if (!match) return false;
 	}
 	// but match Esthonia Glassware with Esthonia Glassware Co.
@@ -201,7 +205,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 		// match from the first capitalized word to originalLocation
 		int begin = object->originalLocation, begin2 = genS->originalLocation;
 		bool match = false;
-		for (; begin < object->end && m[begin].pma.queryPattern(L"_BUS_ABB") == -1 && (match = m[begin].word == m[begin2].word); begin++, begin2++);
+		for (; begin < object->end && m[begin].pma.queryPattern(u"_BUS_ABB") == -1 && (match = m[begin].word == m[begin2].word); begin++, begin2++);
 		if (!match) return false;
 	}
 	// originalLocation is the first capitalized word in the object (for NON_GENDERED_NAME_OBJECT_CLASS)
@@ -221,7 +225,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 		(genS->objectClass == NAME_OBJECT_CLASS && object->objectClass == NON_GENDERED_GENERAL_OBJECT_CLASS))
 		return false;
 	if (genS->originalLocation - genS->begin > 0 &&
-		m[genS->begin].word->first != L"a" && m[genS->begin].word->first != L"the" &&
+		m[genS->begin].word->first != u"a" && m[genS->begin].word->first != u"the" &&
 		m[genS->begin].queryForm(demonstrativeDeterminerForm) < 0 &&
 		m[genS->begin].queryForm(possessiveDeterminerForm) < 0 &&
 		m[genS->begin].queryForm(quantifierForm) < 0 &&
@@ -239,8 +243,8 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 		mostRecentMatch = lastWhere;
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr, tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %s.", where,
+			lpwstring tmpstr, tmpstr2;
+			lplog(LOG_RESOLUTION, u"%06d:Unknown resolution mapped %s to (unknown) %s.", where,
 				objectString(object, tmpstr, true).c_str(), objectString(o, tmpstr2, false).c_str());
 		}
 	}
@@ -255,7 +259,7 @@ bool cSource::resolveNonGenderedGeneralObjectAgainstOneObject(int where, vector 
 // try harder to accurately group compound objects.
 // group preferentially by gender, whether the objects are numbers,plural, or 
 // if only 2 objects - if chain is not minimal (the first object endPosition!=coordinator [and]) and the first object is not an object of a preposition)
-unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstring& combinantStr)
+unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, lpwstring& combinantStr)
 {
 	LFS
 		unsigned int chainCount = 0;
@@ -362,15 +366,15 @@ unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstr
 	bool nonCombinant = (numNumberObjects != 0 && numNumberObjects != chainCount) || (numVerbObjects != 0 && numVerbObjects != chainCount);
 	// if only 2 objects - if chain is not minimal (the first object endPosition!=coordinator [and]) and the first object is not an object of a preposition)
 	nonCombinant |= (chainCount == 2 && minPosition >= 0 && m[minPosition].endObjectPosition >= 0 && m[minPosition].endObjectPosition < (signed)m.size() &&
-		m[m[minPosition].endObjectPosition].word->first != L"and" &&
+		m[m[minPosition].endObjectPosition].word->first != u"and" &&
 		m[minPosition].beginObjectPosition>0 && m[m[minPosition].beginObjectPosition - 1].queryWinnerForm(prepositionForm) >= 0);
 	int spread = maxPosition - minPosition;
 	combinantStr.clear();
-	wstring tmpstr;
-	combinantScore = 10000 * chainCount;                combinantStr += L"+OBJ_POS[" + itos(combinantScore, tmpstr) + L"]";
-	combinantScore += (nonCombinant) ? -10000 : 0;    if (nonCombinant) combinantStr += L"+NON_COM[" + itos(-10000, tmpstr) + L"]";
-	combinantScore += (mixedGender) ? -500 : 0;       if (mixedGender) combinantStr += L"+MIX_GEN[" + itos(-500, tmpstr) + L"]";
-	combinantScore += -spread;                        combinantStr += L"+SPREAD[" + itos(-(signed)spread, tmpstr) + L"]";
+	lpwstring tmpstr;
+	combinantScore = 10000 * chainCount;                combinantStr += u"+OBJ_POS[" + itos(combinantScore, tmpstr) + u"]";
+	combinantScore += (nonCombinant) ? -10000 : 0;    if (nonCombinant) combinantStr += u"+NON_COM[" + itos(-10000, tmpstr) + u"]";
+	combinantScore += (mixedGender) ? -500 : 0;       if (mixedGender) combinantStr += u"+MIX_GEN[" + itos(-500, tmpstr) + u"]";
+	combinantScore += -spread;                        combinantStr += u"+SPREAD[" + itos(-(signed)spread, tmpstr) + u"]";
 	return chainCount;
 }
 
@@ -380,7 +384,7 @@ unsigned int cSource::getNumCompoundObjects(int where, int& combinantScore, wstr
 // next sentence. Returns true only on the same-head path.
 bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	for (unsigned int s = 0; s < localObjects.size(); s++)
 	{
 		// Intended: skip narrator/audience. 
@@ -394,7 +398,7 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 			else
 				objectMatches.push_back(localObjects[s].om);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [plural mapping].", where,
+				lplog(LOG_RESOLUTION, u"%06d:Unknown resolution mapped %s to (unknown) %d:%s [plural mapping].", where,
 					objectString(object, tmpstr, true).c_str(), localObjects[s].lastWhere, objectString(objectMatches, tmpstr2, true).c_str());
 			return true;
 		}
@@ -403,8 +407,8 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 	// search for all local objects in a group matching the # of objects in the owner.
 	// if not found, search in the current and next sentence for the same.
 	int groupSize = -1, latest = -1, begin, end, len, combinantScore;
-	const wchar_t* fromWhere = L"";
-	wstring cstr;
+	const lpchar_t* fromWhere = u"";
+	lpwstring cstr;
 	if (object->getOwnerWhere() < 0 && (groupSize = mapNumeralCardinal(m[m[where].beginObjectPosition].word->first)) >= 1)
 	{
 		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
@@ -421,7 +425,7 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 				latest = m[latest].previousCompoundPartObject;
 			}
 		}
-		fromWhere = L"local";
+		fromWhere = u"local";
 	}
 	if (latest < 0)
 	{
@@ -430,7 +434,7 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 		for (I = where; numEOS <= 1 && I < (signed)m.size() && (getNumCompoundObjects(I, combinantScore, cstr) != groupSize || m[I].getObject() < 0 || !objects[m[I].getObject()].matchGenderIncludingNeuter(*object)); I++)
 			if (isEOS(I)) numEOS++;
 		if (numEOS <= 1 && I < (signed)m.size()) latest = I;
-		fromWhere = L"cata";
+		fromWhere = u"cata";
 	}
 	if (latest >= 0)
 	{
@@ -440,18 +444,18 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 			{
 				objectMatches.insert(objectMatches.end(), m[end].objectMatches.begin(), m[end].objectMatches.end());
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
+					lplog(LOG_RESOLUTION | LOG_SG, u"%d:Nongendered group mapped %s to %d:%s [%s].", where,
 						objectString(object, tmpstr, true).c_str(), end, objectString(m[end].objectMatches, tmpstr2, true).c_str(), fromWhere);
 			}
 			else if (m[end].getObject() >= 0)
 			{
 				objectMatches.push_back(cOM(m[end].getObject(), SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Nongendered group mapped %s to %d:%s [%s].", where,
+					lplog(LOG_RESOLUTION | LOG_SG, u"%d:Nongendered group mapped %s to %d:%s [%s].", where,
 						objectString(object, tmpstr, true).c_str(), end, objectString(m[end].getObject(), tmpstr2, true).c_str(), fromWhere);
 			}
 		}
-		if (m[begin = latest].pma.queryPattern(L"__MNOUN", len) != -1)
+		if (m[begin = latest].pma.queryPattern(u"__MNOUN", len) != -1)
 			end = begin + len;
 		for (int I = begin; I <= end; I++)
 		{
@@ -475,9 +479,9 @@ bool cSource::resolveNonGenderedGeneralObjectPlural(int where, vector <cObject>:
 // candidate that yields nothing falls through to the next localObjects slot).
 bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	// No. 27 - does it match an address?
-	if (m[m[where].beginObjectPosition].pma.queryPatternDiff(L"__NOUN", L"Q") != -1)
+	if (m[m[where].beginObjectPosition].pma.queryPatternDiff(u"__NOUN", u"Q") != -1)
 	{
 		tIWMM numWord = m[where].word;
 		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
@@ -495,7 +499,7 @@ bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObje
 						objectMatches = m[lsi->lastWhere].objectMatches;
 					else
 						objectMatches.push_back(lsi->om);
-					lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [num/address mapping].", where,
+					lplog(LOG_RESOLUTION, u"%06d:Unknown resolution mapped %s to (unknown) %d:%s [num/address mapping].", where,
 						objectString(object, tmpstr, true).c_str(), lsi->lastWhere, objectString(lsi->om, tmpstr2, true).c_str());
 				}
 			}
@@ -511,7 +515,7 @@ bool cSource::resolveNonGenderedGeneralObjectNumAddress(int where, vector <cObje
 						objectMatches.push_back(cOM(ro, SALIENCE_THRESHOLD));
 				}
 			if (debugTrace.traceSpeakerResolution && objectMatches.size())
-				lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %s [num/address mapping 2].", where,
+				lplog(LOG_RESOLUTION, u"%06d:Unknown resolution mapped %s to (unknown) %s [num/address mapping 2].", where,
 					objectString(object, tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
 			if (objectMatches.size() > 0)
 				return true; // after first om.object>1 candidate only
@@ -529,13 +533,13 @@ bool cSource::resolveNonGenderedGeneralObjectExpression(int where, vector <cObje
 		(m[where].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) == SUBJECT_ROLE &&
 		m[m[where].endObjectPosition].queryForm(prepositionForm) >= 0 &&
 		(ww = m[m[where].endObjectPosition + 1].principalWherePosition) >= 0 && m[ww].getObject() >= 0 &&
-		(m[ww].word->first == L"face" || (m[ww].word->second.mainEntry != wNULL && m[ww].word->second.mainEntry->first == L"eye")) &&
+		(m[ww].word->first == u"face" || (m[ww].word->second.mainEntry != wNULL && m[ww].word->second.mainEntry->first == u"eye")) &&
 		(ww = objects[m[ww].getObject()].getOwnerWhere()) >= 0 && m[ww].getObject() >= 0)
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		objectMatches.push_back(cOM(m[ww].getObject(), SALIENCE_THRESHOLD));
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Unknown resolution mapped %s to (unknown) %d:%s [expression].", where,
+			lplog(LOG_RESOLUTION, u"%06d:Unknown resolution mapped %s to (unknown) %d:%s [expression].", where,
 				objectString(object, tmpstr, true).c_str(), ww, objectString(m[ww].getObject(), tmpstr2, true).c_str());
 		return true;
 	}
@@ -564,7 +568,7 @@ void cSource::narrowClassToGenderedIfIsProfession(int where)
 // plural already in local focus (the last speaker's "pensionnats").
 void cSource::resolveNonGenderedGeneralObjectSingularToPlural(int where, vector <cObject>::iterator& object, vector <cOM>& objectMatches)
 {
-	if (m[object->begin].word->first == L"a" && (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[where].flags & cWordMatch::flagInQuestion))
+	if (m[object->begin].word->first == u"a" && (m[where].objectRole & IN_PRIMARY_QUOTE_ROLE) != 0 && (m[where].flags & cWordMatch::flagInQuestion))
 	{
 		tIWMM word = m[where].word;
 		// search in local objects for a plural of the word - covers cases that wouldn't be covered in normal match
@@ -572,10 +576,10 @@ void cSource::resolveNonGenderedGeneralObjectSingularToPlural(int where, vector 
 		for (; lsi != lsiEnd; lsi++)
 			if (lsi->om.object > 1 && lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && objects[lsi->om.object].plural && lsi->lastWhere >= 0 && m[lsi->lastWhere].word->second.mainEntry == word)
 			{
-				wstring tmpstr, tmpstr2;
+				lpwstring tmpstr, tmpstr2;
 				objectMatches.push_back(cOM(lsi->om.object, SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Unknown unique singular mapped %s to (unknown plural) %d:%s.", where,
+					lplog(LOG_RESOLUTION, u"%06d:Unknown unique singular mapped %s to (unknown plural) %d:%s.", where,
 						objectString(object, tmpstr, true).c_str(), lsi->lastWhere, whereString(lsi->lastWhere, tmpstr2, false).c_str());
 				break;
 			}
@@ -589,7 +593,7 @@ void cSource::adjustForWordOrderSensitiveModifier(int where, vector <cOM>& objec
 {
 	if (wordOrderSensitiveModifier >= 0 && objectMatches.size() > 0)
 	{
-		if (cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another")
+		if (cObject::wordOrderWords[wordOrderSensitiveModifier] == u"another")
 			objectMatches.clear();
 		else
 		{
@@ -629,14 +633,14 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 		// one noun phrase has adjectives and the other does not, otherwise reject.
 		// compare the principal - this assumes unknown speakers have determiners.
 		int ep = m[where].endObjectPosition, o;
-	if (object->getOwnerWhere() < 0 && ep + 1 < (signed)m.size() && m[ep].word->first == L"of" &&
+	if (object->getOwnerWhere() < 0 && ep + 1 < (signed)m.size() && m[ep].word->first == u"of" &&
 		m[ep + 1].principalWherePosition >= 0 && m[m[ep + 1].principalWherePosition].getObject() >= 0 &&
 		objects[o = m[m[ep + 1].principalWherePosition].getObject()].objectClass == NAME_OBJECT_CLASS &&
 		// The chair of Aunt Amy's / The State Park of New Jersey
 		((m[m[ep + 1].principalWherePosition].endObjectPosition >= 0 && (m[m[m[ep + 1].principalWherePosition].endObjectPosition - 1].flags & cWordMatch::flagNounOwner)) ||
 			objects[o].isLocationObject))
 		object->setOwnerWhere(m[ep + 1].principalWherePosition);
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (object->plural && resolveNonGenderedGeneralObjectPlural(where, object, objectMatches))
 		return;
 	// the pity on Mr. Carter's face
@@ -644,7 +648,7 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 		return;
 	if (resolveNonGenderedGeneralObjectNumAddress(where, object, objectMatches))
 		return;
-	if (m[object->begin].word->first == L"the" || m[object->begin].queryForm(demonstrativeDeterminerForm) >= 0 ||
+	if (m[object->begin].word->first == u"the" || m[object->begin].queryForm(demonstrativeDeterminerForm) >= 0 ||
 		m[object->begin].queryForm(possessiveDeterminerForm) >= 0 || m[object->begin].queryForm(quantifierForm) >= 0 ||
 		object->begin == object->originalLocation)
 	{
@@ -670,7 +674,7 @@ void cSource::resolveNonGenderedGeneralObject(int where, vector <cObject>::itera
 }
 
 // True if hon, hon2 or hon3 equals sHon (e.g. "dr").
-bool cName::matchHonorifics(wstring sHon)
+bool cName::matchHonorifics(lpwstring sHon)
 {
 	LFS
 		return (hon != wNULL && hon->first == sHon) || (hon2 != wNULL && hon2->first == sHon) || (hon3 != wNULL && hon3->first == sHon);
@@ -693,12 +697,12 @@ bool cName::isCompletelyNull()
 // m[where]=="doctor"
 struct tHonMap
 {
-	const wchar_t* shortForm;
-	const wchar_t* longForm;
+	const lpchar_t* shortForm;
+	const lpchar_t* longForm;
 } honorificMap[] = {
-	{ L"dr",L"doctor" },
-	{ L"dr",L"doc" },
-	{ L"doc",L"doctor" }
+	{ u"dr",u"doctor" },
+	{ u"dr",u"doc" },
+	{ u"doc",u"doctor" }
 };
 
 // True if this name's honorific (or originalLocation word) is the short or
@@ -755,11 +759,11 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 		bool chooseFromLocalFocus = false, traceThisNym = (where == 13031);
 	// look for localObjects having the occupation
 	tIWMM fromMatch, toMatch, toMapMatch;
-	wstring logMatch, word = m[where].word->first, tmpstr, tmpstr2, assa, assn;
+	lpwstring logMatch, word = m[where].word->first, tmpstr, tmpstr2, assa, assn;
 	int o = m[where].getObject(), latestOwnerWhere = objects[o].getOwnerWhere(), numOccupationMatch = 0;
 	bool useGender = (object->male ^ object->female), onlyNeuter = object->neuter && !object->male && !object->female, notNeuter = !object->neuter;
 	if (traceThisNym)
-		lplog(LOG_RESOLUTION, L"%06d:[ROO] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(o, tmpstr, false).c_str(),
+		lplog(LOG_RESOLUTION, u"%06d:[ROO] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(o, tmpstr, false).c_str(),
 			wordString(object->associatedAdjectives, assa).c_str(), wordString(object->associatedNouns, assn).c_str());
 	// look through very recent items looking for groups 
 	vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
@@ -767,12 +771,12 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 	if (traceThisNym)
 	{
 		for (; lsi != lsiEnd; lsi++)
-			lplog(LOG_RESOLUTION, L"%06d:[LSI] Object %s includeInSalience=%s useGender=%s matchSex=%s onlyNeuter=%s notNeuter=%s neuter=%s PP=%s LPP=%s NNM=%s",
+			lplog(LOG_RESOLUTION, u"%06d:[LSI] Object %s includeInSalience=%s useGender=%s matchSex=%s onlyNeuter=%s notNeuter=%s neuter=%s PP=%s LPP=%s NNM=%s",
 				where, objectString(lsi->om.object, tmpstr, false).c_str(),
-				(lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge)) ? L"true" : L"false", (useGender) ? L"true" : L"false", (object->matchGender(objects[lsi->om.object])) ? L"true" : L"false",
-				(onlyNeuter) ? L"true" : L"false", (notNeuter) ? L"true" : L"false", (objects[lsi->om.object].neuter) ? L"true" : L"false",
-				(physicallyPresent) ? L"true" : L"false", (lsi->physicallyPresent) ? L"true" : L"false",
-				(nymNoMatch(where, object, objects.begin() + lsi->om.object, false, false, logMatch, fromMatch, toMatch, toMapMatch, L"occupation")) ? L"true" : L"false");
+				(lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge)) ? u"true" : u"false", (useGender) ? u"true" : u"false", (object->matchGender(objects[lsi->om.object])) ? u"true" : u"false",
+				(onlyNeuter) ? u"true" : u"false", (notNeuter) ? u"true" : u"false", (objects[lsi->om.object].neuter) ? u"true" : u"false",
+				(physicallyPresent) ? u"true" : u"false", (lsi->physicallyPresent) ? u"true" : u"false",
+				(nymNoMatch(where, object, objects.begin() + lsi->om.object, false, false, logMatch, fromMatch, toMatch, toMapMatch, u"occupation")) ? u"true" : u"false");
 		lsi = localObjects.begin();
 	}
 	for (; lsi != lsiEnd; lsi++)
@@ -780,15 +784,15 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 			(!useGender || object->matchGender(objects[lsi->om.object])) &&
 			(!onlyNeuter || objects[lsi->om.object].neuter) &&
 			(!notNeuter || !objects[lsi->om.object].neuter) &&
-			!nymNoMatch(where, object, objects.begin() + lsi->om.object, false, false, logMatch, fromMatch, toMatch, toMapMatch, L"occupation") &&
+			!nymNoMatch(where, object, objects.begin() + lsi->om.object, false, false, logMatch, fromMatch, toMatch, toMapMatch, u"occupation") &&
 			lsi->getTotalAge() < 100 &&  // if TA>=100, this hasn't been mentioned in a long time
 			(latestOwnerWhere < 0 || (m[latestOwnerWhere].getObject() != lsi->om.object && in(lsi->om.object, m[latestOwnerWhere].objectMatches) == m[latestOwnerWhere].objectMatches.end())))
 		{
 			if (traceThisNym)
-				lplog(LOG_RESOLUTION, L"%06d:[LSI] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(lsi->om.object, tmpstr, false).c_str(),
+				lplog(LOG_RESOLUTION, u"%06d:[LSI] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(lsi->om.object, tmpstr, false).c_str(),
 					wordString(objects[lsi->om.object].associatedAdjectives, assa).c_str(), wordString(objects[lsi->om.object].associatedNouns, assn).c_str());
 			bool explicitOccupationMatch = false;
-			if (lsi->numMatchedAdjectives = nymMatch(objects.begin() + o, objects.begin() + lsi->om.object, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, L"occupation"))
+			if (lsi->numMatchedAdjectives = nymMatch(objects.begin() + o, objects.begin() + lsi->om.object, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, u"occupation"))
 			{
 				if (!physicallyPresent || lsi->physicallyPresent)
 				{
@@ -818,7 +822,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 		chooseFromLocalFocus = true;
 	}
 	// look ahead for the next paragraph and compile all new matching objects
-	if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another")
+	if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == u"another")
 	{
 		int paragraph = 0;
 		for (unsigned int I = where; paragraph < 2 && I < m.size() && objectMatches.size() == 0; I++)
@@ -865,7 +869,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 			while (m[embeddedStoryBegin].previousQuote >= 0 && ((m[embeddedStoryBegin].flags & cWordMatch::flagEmbeddedStoryResolveSpeakers) || (m[embeddedStoryBegin].flags & cWordMatch::flagEmbeddedStoryResolveSpeakersGap)))
 				embeddedStoryBegin = m[embeddedStoryBegin].previousQuote;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Embedded story last location %d", where, embeddedStoryBegin);
+				lplog(LOG_RESOLUTION, u"%06d:Embedded story last location %d", where, embeddedStoryBegin);
 		}
 		for (vector <cObject>::iterator oi = objects.begin(), oiEnd = objects.end(); oi != oiEnd; oi++, mo++)
 		{
@@ -879,7 +883,7 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 				(!useGender || object->matchGender(*oi)) &&
 				(!onlyNeuter || oi->neuter) &&
 				(!notNeuter || !oi->neuter) &&
-				!nymNoMatch(where, object, oi, false, false, logMatch, fromMatch, toMatch, toMapMatch, L"occupation") &&
+				!nymNoMatch(where, object, oi, false, false, logMatch, fromMatch, toMatch, toMapMatch, u"occupation") &&
 				(latestOwnerWhere < 0 || !in(mo, latestOwnerWhere)))
 			{
 				// if gendered occupation, then since it is not in local salience any more,
@@ -889,29 +893,29 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 				if (oi->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && moSG != speakerGroups.end() &&
 					!intersect(moSG->speakers, speakerGroups[currentSpeakerGroup].speakers, allIn, oneIn))
 				{
-					wstring tmpstr3;
+					lpwstring tmpstr3;
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:%s rejected speakerGroup=%d:%s currentSpeakerGroup=%d:%s", where,
+						lplog(LOG_RESOLUTION, u"%06d:%s rejected speakerGroup=%d:%s currentSpeakerGroup=%d:%s", where,
 							objectString(mo, tmpstr, true).c_str(),
 							locationBefore(mo, where), toText(*moSG, tmpstr2),
 							where, toText(speakerGroups[currentSpeakerGroup], tmpstr3));
 					continue;
 				}
 				if (traceThisNym)
-					lplog(LOG_RESOLUTION, L"%06d:[EO] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(mo, tmpstr, false).c_str(),
+					lplog(LOG_RESOLUTION, u"%06d:[EO] Object %s has associatedAdjectives (%s) associatedNouns (%s)", where, objectString(mo, tmpstr, false).c_str(),
 						wordString(oi->associatedAdjectives, assa).c_str(), wordString(oi->associatedNouns, assn).c_str());
 				bool explicitOccupationMatch = false;
-				numMatchedAdjectives = nymMatch(object, oi, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, L"occupation");
+				numMatchedAdjectives = nymMatch(object, oi, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, u"occupation");
 				int objectClass = oi->objectClass;
 				// if a name is matched to another gendered object which has an alias, those adjectives may not be carried over
 				if (objectClass == NAME_OBJECT_CLASS)
 				{
 					for (vector <int>::iterator alias = oi->aliases.begin(), aliasEnd = oi->aliases.end(); alias != aliasEnd && !numMatchedAdjectives; alias++)
-						if (numMatchedAdjectives = nymMatch(object, objects.begin() + *alias, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, L"occupation"))
+						if (numMatchedAdjectives = nymMatch(object, objects.begin() + *alias, traceThisNym, traceThisNym, explicitOccupationMatch, logMatch, fromMatch, toMatch, toMapMatch, u"occupation"))
 						{
 							objectClass = objects[*alias].objectClass;
 							if (debugTrace.traceSpeakerResolution && numMatchedAdjectives >= 3)
-								lplog(LOG_RESOLUTION, L"%06d:resolveOccRoleActivityObject allObjects matched alias %s (matched=%d)", where, objectString(*alias, tmpstr, false).c_str(), numMatchedAdjectives);
+								lplog(LOG_RESOLUTION, u"%06d:resolveOccRoleActivityObject allObjects matched alias %s (matched=%d)", where, objectString(*alias, tmpstr, false).c_str(), numMatchedAdjectives);
 							break;
 						}
 					if (abbreviationEquivalent(m[object->originalLocation].word, m[oi->originalLocation].word))
@@ -919,9 +923,9 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 				}
 				if (objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && numMatchedAdjectives < 5)
 				{
-					wstring tmpstr3;
+					lpwstring tmpstr3;
 					if (debugTrace.traceSpeakerResolution && numMatchedAdjectives > 2)
-						lplog(LOG_RESOLUTION, L"%06d:rejected %s (numMatchedAdjectives=%d)", where,
+						lplog(LOG_RESOLUTION, u"%06d:rejected %s (numMatchedAdjectives=%d)", where,
 							objectString(mo, tmpstr, true).c_str(), numMatchedAdjectives);
 					continue;
 				}
@@ -929,8 +933,8 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 				// default to the most matched and then the last mentioned before where
 				tmpWhere = locationBefore(mo, where);
 				if (debugTrace.traceSpeakerResolution && numMatchedAdjectives >= 3)
-					lplog(LOG_RESOLUTION, L"%06d:resolveOccRoleActivityObject allObjects candidate %d:%s (matched=%d in localObjects=%s)",
-						where, tmpWhere, objectString(mo, tmpstr, false).c_str(), numMatchedAdjectives, (in(mo) == localObjects.end()) ? L"false" : L"true");
+					lplog(LOG_RESOLUTION, u"%06d:resolveOccRoleActivityObject allObjects candidate %d:%s (matched=%d in localObjects=%s)",
+						where, tmpWhere, objectString(mo, tmpstr, false).c_str(), numMatchedAdjectives, (in(mo) == localObjects.end()) ? u"false" : u"true");
 				if (numMatchedAdjectives > topAdjectiveMatch || (numMatchedAdjectives == topAdjectiveMatch && tmpWhere > latestWhere))
 				{
 					if (latestWhere < 0)
@@ -950,10 +954,10 @@ bool cSource::resolveOccRoleActivityObject(int where, vector <cOM>& objectMatche
 		if (objectMatches.size() == 1)
 			narrowGender(where, objectMatches[0].object);
 		if (debugTrace.traceSpeakerResolution && objectMatches.size())
-			lplog(LOG_RESOLUTION, L"%06d:resolveOccRoleActivityObject allObjects matched %s", where, objectString(objectMatches, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:resolveOccRoleActivityObject allObjects matched %s", where, objectString(objectMatches, tmpstr, false).c_str());
 	}
 	if (objectMatches.size() == 1 && objectMatches[0].object != (object - objects.begin()))
-		replaceObjectInSection(where, objectMatches[0].object, (int)(object - objects.begin()), L"resolveOccRoleActivityObject");
+		replaceObjectInSection(where, objectMatches[0].object, (int)(object - objects.begin()), u"resolveOccRoleActivityObject");
 	return chooseFromLocalFocus;
 }
 
@@ -986,7 +990,7 @@ void cSource::resolveRelativeObject(int where, vector <cOM>& objectMatches, vect
 {
 	LFS
 		// look ahead for the next paragraph and compile all new matching objects
-		if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another")
+		if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == u"another")
 		{
 			int paragraph = 0;
 			for (unsigned int I = where; paragraph < 2 && I < m.size() && objectMatches.size() == 0; I++)
@@ -1036,7 +1040,7 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 {
 	LFS
 		int genderedSubgroupCount;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (limitTwo)
 		genderedSubgroupCount = 2;
 	else if (m[whereGenderedSubgroupCount].queryWinnerForm(NUMBER_FORM_NUM) >= 0)
@@ -1047,7 +1051,7 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 	}
 	else	// one, two, three, four...
 	{
-		const wchar_t* num[] = { L"one",L"two",L"three",L"four",L"five",L"six",L"seven",L"eight",L"nine",NULL };
+		const lpchar_t* num[] = { u"one",u"two",u"three",u"four",u"five",u"six",u"seven",u"eight",u"nine",NULL };
 		unsigned int I = 0;
 		for (; num[I] && m[whereGenderedSubgroupCount].word->first != num[I]; I++);
 		if (!num[I]) return false;
@@ -1075,7 +1079,7 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 				for (set <int>::iterator si = speakerGroups[sg].speakers.begin(), siEnd = speakerGroups[sg].speakers.end(); si != siEnd && !genderDisagreement; si++)
 					objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:tryGenderedSubgroup matched %s [1] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
+					lplog(LOG_RESOLUTION, u"%06d:tryGenderedSubgroup matched %s [1] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
 				return true;
 			}
 		}
@@ -1089,7 +1093,7 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 				for (set <int>::iterator si = speakerGroups[sg].groupedSpeakers.begin(), siEnd = speakerGroups[sg].groupedSpeakers.end(); si != siEnd && !genderDisagreement; si++)
 					objectMatches.push_back(cOM(*si, SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:tryGenderedSubgroup matched %s [2] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
+					lplog(LOG_RESOLUTION, u"%06d:tryGenderedSubgroup matched %s [2] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
 				return true;
 			}
 		}
@@ -1103,7 +1107,7 @@ bool cSource::tryGenderedSubgroup(int where, vector <cOM>& objectMatches, vector
 				for (vector <int>::iterator gsi = speakerGroups[sg].groups[sgg].objects.begin(), gsiEnd = speakerGroups[sg].groups[sgg].objects.end(); gsi != gsiEnd && !genderDisagreement; gsi++)
 					objectMatches.push_back(cOM(*gsi, SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:tryGenderedSubgroup matched %s [3] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
+					lplog(LOG_RESOLUTION, u"%06d:tryGenderedSubgroup matched %s [3] out of speakerGroup %s", where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[sg], tmpstr2));
 				return true;
 			}
 	}
@@ -1203,8 +1207,8 @@ bool cSource::scanFutureGenderedMatchingObjects(int where, bool inQuote, vector 
 		{
 			// if object o has an opposite adjective, skip.
 			tIWMM fromMatch, toMatch, toMapMatch;
-			wstring logMatch;
-			if (nymNoMatch(I, objects.begin() + o, object, false, false, logMatch, fromMatch, toMatch, toMapMatch, L"NoMatch"))
+			lpwstring logMatch;
+			if (nymNoMatch(I, objects.begin() + o, object, false, false, logMatch, fromMatch, toMatch, toMapMatch, u"NoMatch"))
 				continue;
 			// if object o has an opposite gender, skip.
 			if ((objects[o].male ^ objects[o].female) && !(object->male && object->female) &&
@@ -1259,23 +1263,23 @@ void cSource::includeWordOrderPreferences(int where, int wordOrderSensitiveModif
 	{
 		if (!plural && mostRecentLocation >= 0 && objects[lsiOffsets[mostRecentLsiOffset]->om.object].plural)
 			tmp = mostRecentLsiOffset;
-		wstring tmpstr;
+		lpwstring tmpstr;
 		// only bump if what is being matched is not a profession
 		if (lsiOffsets[tmp]->numMatchedAdjectives < ca && m[where].queryForm(commonProfessionForm) < 0)
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Bumped numMatchedAdjectives of %s from %d to %d.", where, objectString(lsiOffsets[tmp]->om, tmpstr, true).c_str(), lsiOffsets[tmp]->numMatchedAdjectives, ca);
+				lplog(LOG_RESOLUTION, u"%06d:Bumped numMatchedAdjectives of %s from %d to %d.", where, objectString(lsiOffsets[tmp]->om, tmpstr, true).c_str(), lsiOffsets[tmp]->numMatchedAdjectives, ca);
 			lsiOffsets[tmp]->numMatchedAdjectives = ca;
 		}
 		lsiOffsets[tmp]->om.salienceFactor += 10000;
-		lsiOffsets[tmp]->res += L"+WORDORDER[+10000]";
+		lsiOffsets[tmp]->res += u"+WORDORDER[+10000]";
 	}
 	else if (tmp == -2)
 	{
 		for (unsigned int I = 0; I < lsiOffsets.size(); I++)
 		{
 			lsiOffsets[I]->om.salienceFactor -= 10000;
-			lsiOffsets[I]->res += L"-WORDORDER[-10000]";
+			lsiOffsets[I]->res += u"-WORDORDER[-10000]";
 		}
 	}
 }
@@ -1301,16 +1305,16 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 				object->objectClass != GENDERED_RELATIVE_OBJECT_CLASS &&
 				object->objectClass != META_GROUP_OBJECT_CLASS && // only should be here if metagroup resolution returned false
 				// treat 'sir' as a gendered object, but not 'general' or 'archdeacon' - all are classed as honorific-only names
-				(object->objectClass != NAME_OBJECT_CLASS || !object->name.justHonorific() || object->name.hon->second.query(L"pinr") < 0)))
+				(object->objectClass != NAME_OBJECT_CLASS || !object->name.justHonorific() || object->name.hon->second.query(u"pinr") < 0)))
 			return false;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	// look ahead for the next paragraph(s) and look for the first new matching object
 	// "another ally" = Julius (20406 Agatha) not inQuote
 	// "another man" = Boris inQuote
-	if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == L"another" && currentSpeakerGroup < speakerGroups.size())
+	if (wordOrderSensitiveModifier >= 0 && cObject::wordOrderWords[wordOrderSensitiveModifier] == u"another" && currentSpeakerGroup < speakerGroups.size())
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING gendered [future] %s", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING gendered [future] %s", where, objectString(object, tmpstr, false).c_str());
 		return scanFutureGenderedMatchingObjects(where, inPrimaryQuote, object, objectMatches);
 	}
 	// not generic 'the young man' and not used as an adjective
@@ -1322,16 +1326,16 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 		begin < (signed)m.size() &&
 		m[begin].queryForm(possessiveDeterminerForm) >= 0 && (m[where].objectRole & HAIL_ROLE) &&
 		(!(m[begin].word->second.inflectionFlags & FIRST_PERSON) ||
-			object->objectClass != NAME_OBJECT_CLASS || !object->name.justHonorific() || object->name.hon->second.query(L"pinr") < 0))
+			object->objectClass != NAME_OBJECT_CLASS || !object->name.justHonorific() || object->name.hon->second.query(u"pinr") < 0))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING Possessive gendered hailed %s is not yet possible [%s]", where, objectString(object, tmpstr, false).c_str(), (definitelyResolveSpeaker) ? L"speaker" : L"object");
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING Possessive gendered hailed %s is not yet possible [%s]", where, objectString(object, tmpstr, false).c_str(), (definitelyResolveSpeaker) ? u"speaker" : u"object");
 		return false;
 	}
 	// search for numbered adjectives - two, three 'the two men'
 	int genderedSubgroup = -1;
 	for (int I = begin; I < m[where].endObjectPosition - 1 && genderedSubgroup < 0; I++)
-		if (m[I].queryWinnerForm(NUMBER_FORM_NUM) >= 0 || (m[I].queryWinnerForm(numeralCardinalForm) >= 0 && m[I].word->first != L"one"))
+		if (m[I].queryWinnerForm(NUMBER_FORM_NUM) >= 0 || (m[I].queryWinnerForm(numeralCardinalForm) >= 0 && m[I].word->first != u"one"))
 			genderedSubgroup = I;
 	if ((genderedSubgroup >= 0 || limitTwo) && tryGenderedSubgroup(where, objectMatches, object, genderedSubgroup, limitTwo))
 		return false;  // don't choose from local focus
@@ -1348,16 +1352,16 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 	adjustSaliencesByGenderNumberAndOccurrenceAgeAdjust(where, m[where].getObject(), inPrimaryQuote, inSecondaryQuote, definitelyResolveSpeaker, lastGenderedAge, disallowedReferences, false, isPhysicallyPresent, physicallyEvaluated);
 	adjustSaliencesByParallelRoleAndPlurality(where, inPrimaryQuote, definitelyResolveSpeaker, lastGenderedAge);
 	// even though 'miss' is a pinr, if the matching object lso has a Mrs as the honorific, we must fail it.
-	if (object->objectClass == NAME_OBJECT_CLASS && object->name.justHonorific() && object->name.hon->first == L"miss")
+	if (object->objectClass == NAME_OBJECT_CLASS && object->name.justHonorific() && object->name.hon->first == u"miss")
 	{
-		tIWMM mrs = Words.gquery(L"mrs");
+		tIWMM mrs = Words.gquery(u"mrs");
 		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
 		for (; lsi != lsiEnd; lsi++)
 			if (lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && objects[lsi->om.object].objectClass == NAME_OBJECT_CLASS &&
 				(objects[lsi->om.object].name.hon == mrs || objects[lsi->om.object].name.hon2 == mrs || objects[lsi->om.object].name.hon3 == mrs))
 			{
 				if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-					itos(L"-HONCONFLICT[", -100000, lsi->res, L"]");
+					itos(u"-HONCONFLICT[", -100000, lsi->res, u"]");
 				lsi->om.salienceFactor -= 100000;
 			}
 	}
@@ -1383,7 +1387,7 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 			objects[localObjects[I].om.object].objectClass == VERB_OBJECT_CLASS))
 		{
 			if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-				localObjects[I].res += L"-DOWNCLASS[" + itos(-10000, tmpstr) + L"]";
+				localObjects[I].res += u"-DOWNCLASS[" + itos(-10000, tmpstr) + u"]";
 			localObjects[I].om.salienceFactor -= 10000;
 		}
 	// if inQuote and !HAIL, diminish match of any objects in currentSpeakerGroup
@@ -1402,7 +1406,7 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 					salience = 2000;
 				lsi->om.salienceFactor -= salience;
 				if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-					lsi->res += L"-INPQUOTE SPEAKER (1)[" + itos(-salience, tmpstr) + L"]";
+					lsi->res += u"-INPQUOTE SPEAKER (1)[" + itos(-salience, tmpstr) + u"]";
 			}
 		}
 	}
@@ -1418,7 +1422,7 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 			{
 				lsi->om.salienceFactor -= 2000;
 				if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-					lsi->res += L"-INPQUOTE SECONDARY SPEAKER (1)[-2000]";
+					lsi->res += u"-INPQUOTE SECONDARY SPEAKER (1)[-2000]";
 			}
 		}
 	}
@@ -1431,7 +1435,7 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 			if (lsi->includeInSalience(objectToBeMatchedInQuote, quoteIndependentAge) && objects[lsi->om.object].objectClass == NAME_OBJECT_CLASS && matchAliases(where, lsi->om.object, m[where].getObject()))
 			{
 				lsi->om.salienceFactor += 10000;
-				lsi->res += L"+ALIASMATCH[+10000]";
+				lsi->res += u"+ALIASMATCH[+10000]";
 			}
 		}
 	}
@@ -1442,7 +1446,7 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 	// if more than one positive reference and !inQuote, and one is a POV, decrease the POV
 	if (!inPrimaryQuote && currentSpeakerGroup < speakerGroups.size() && speakerGroups[currentSpeakerGroup].povSpeakers.size() == 1 &&
 		// generic 
-		m[where].endObjectPosition - m[where].beginObjectPosition == 2 && m[m[where].beginObjectPosition].word->first == L"the" &&
+		m[where].endObjectPosition - m[where].beginObjectPosition == 2 && m[m[where].beginObjectPosition].word->first == u"the" &&
 		(m[m[where].beginObjectPosition + 1].word->second.flags & cSourceWordInfo::genericGenderIgnoreMatch))
 	{
 		vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsiEnd = localObjects.end();
@@ -1462,17 +1466,17 @@ bool cSource::resolveGenderedObject(int where, bool definitelyResolveSpeaker, bo
 			if ((lsi = in(*speakerGroups[currentSpeakerGroup].povSpeakers.begin())) != localObjects.end())
 			{
 				if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-					itos(L"-GENPOV[", -5000, lsi->res, L"]");
+					itos(u"-GENPOV[", -5000, lsi->res, u"]");
 				lsi->om.salienceFactor -= 5000;
 			}
 		}
 	}
 	if (debugTrace.traceSpeakerResolution)
 	{
-		wstring tmpstr2;
-		lplog(LOG_RESOLUTION, L"%06d:RESOLVING gendered %s%s%s%s [%s minAge %d]",
-			where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str(), (isPhysicallyPresent) ? L"[PP]" : L"[NPP]",
-			(physicallyEvaluated) ? L"[PE]" : L"[NPE]", (definitelyResolveSpeaker) ? L"speaker" : L"object", lastGenderedAge);
+		lpwstring tmpstr2;
+		lplog(LOG_RESOLUTION, u"%06d:RESOLVING gendered %s%s%s%s [%s minAge %d]",
+			where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str(), (isPhysicallyPresent) ? u"[PP]" : u"[NPP]",
+			(physicallyEvaluated) ? u"[PE]" : u"[NPE]", (definitelyResolveSpeaker) ? u"speaker" : u"object", lastGenderedAge);
 		printLocalFocusedObjects(where, GENDERED_GENERAL_OBJECT_CLASS);
 	}
 	return true;
@@ -1491,7 +1495,7 @@ void cSource::addPreviousDemonyms(int where)
 	{
 		vector < vector <cLocalFocus>::iterator > locallyRelatedObjects;
 		vector <cLocalFocus>::iterator lsi = localObjects.begin();
-		wstring tmpstr;
+		lpwstring tmpstr;
 		int maxCA = 0, ca;
 		bool atLeastOnePP = false;
 		for (vector <cLocalFocus>::iterator lsiEnd = localObjects.end();
@@ -1514,7 +1518,7 @@ void cSource::addPreviousDemonyms(int where)
 			else
 			{
 				lsi->om.salienceFactor -= 4000;
-				lsi->res += L"-REQUIRES_DEMONYM[-4000]";
+				lsi->res += u"-REQUIRES_DEMONYM[-4000]";
 			}
 		}
 		if (locallyRelatedObjects.empty())
@@ -1525,14 +1529,14 @@ void cSource::addPreviousDemonyms(int where)
 				{
 					int lastWhere = atBefore(*roi, where); // locationBefore(*roi,where,false,true);
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Found local demonym %d:%s@%d", where, objects[*roi].firstLocation, objectString(*roi, tmpstr, false).c_str(), lastWhere);
+						lplog(LOG_RESOLUTION, u"%06d:Found local demonym %d:%s@%d", where, objects[*roi].firstLocation, objectString(*roi, tmpstr, false).c_str(), lastWhere);
 					// if all occurrences are in questions, probability statements or are marked RE, reject.
 					if (m[lastWhere].objectMatches.empty())
 					{
 						if ((lsi = in(*roi)) == localObjects.end() && anyAcceptableLocations(where, *roi))
 						{
 							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"%06d:Adding most recent demonym %s to local objects (1)", where, objectString(*roi, tmpstr, false).c_str());
+								lplog(LOG_RESOLUTION, u"%06d:Adding most recent demonym %s to local objects (1)", where, objectString(*roi, tmpstr, false).c_str());
 							localObjects.push_back(cLocalFocus(cOM(*roi, SALIENCE_THRESHOLD), false, false, true, physicallyPresent));
 							localObjects[localObjects.size() - 1].numMatchedAdjectives = maxCA + 1;
 						}
@@ -1544,7 +1548,7 @@ void cSource::addPreviousDemonyms(int where)
 							if ((lsi = in(omi->object)) == localObjects.end() && anyAcceptableLocations(where, *roi))
 							{
 								if (debugTrace.traceSpeakerResolution)
-									lplog(LOG_RESOLUTION, L"%06d:Adding most recent demonym %d:%s to local objects (2)", where, lastWhere, objectString(omi->object, tmpstr, false).c_str());
+									lplog(LOG_RESOLUTION, u"%06d:Adding most recent demonym %d:%s to local objects (2)", where, lastWhere, objectString(omi->object, tmpstr, false).c_str());
 								localObjects.push_back(cLocalFocus(cOM(omi->object, SALIENCE_THRESHOLD), false, false, true, physicallyPresent));
 								localObjects[localObjects.size() - 1].numMatchedAdjectives = maxCA + 1;
 							}
@@ -1566,7 +1570,7 @@ void cSource::addPreviousDemonyms(int where)
 				lsi = *lro;
 				if (atLeastOnePP && physicallyPresent && !lsi->physicallyPresent) continue;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Found local demonym %d:%s", where, lsi->lastWhere, objectString(lsi->om, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:Found local demonym %d:%s", where, lsi->lastWhere, objectString(lsi->om, tmpstr, false).c_str());
 				int lastWhere = atBefore(lsi->om.object, where);
 				if (lastWhere < 0) return;
 				lsi->physicallyPresent |= physicallyPresent;
@@ -1576,7 +1580,7 @@ void cSource::addPreviousDemonyms(int where)
 					if ((omlsi = in(omi->object)) == localObjects.end())
 					{
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:Adding most recent demonym %d:%s to local objects (3)", where, lastWhere, objectString(omi->object, tmpstr, false).c_str());
+							lplog(LOG_RESOLUTION, u"%06d:Adding most recent demonym %d:%s to local objects (3)", where, lastWhere, objectString(omi->object, tmpstr, false).c_str());
 						localObjects.push_back(cLocalFocus(cOM(omi->object, SALIENCE_THRESHOLD), false, false, true, physicallyPresent));
 						localObjects[localObjects.size() - 1].numMatchedAdjectives = lsi->numMatchedAdjectives + 1;
 					}
@@ -1584,7 +1588,7 @@ void cSource::addPreviousDemonyms(int where)
 					else
 					{
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:Bumping latest match of most recent demonym %d:%s", where, lastWhere, objectString(omlsi->om, tmpstr, false).c_str());
+							lplog(LOG_RESOLUTION, u"%06d:Bumping latest match of most recent demonym %d:%s", where, lastWhere, objectString(omlsi->om, tmpstr, false).c_str());
 						omlsi->om.salienceFactor = SALIENCE_THRESHOLD;
 						omlsi->numMatchedAdjectives = lsi->numMatchedAdjectives + 1;
 					}
@@ -1604,15 +1608,15 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 		if (m[where].getObject() < 0 || (!objects[m[where].getObject()].male && !objects[m[where].getObject()].female) ||
 			(m[where].endObjectPosition - m[where].beginObjectPosition) == 1)
 			return false;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (currentSpeakerGroup + 1 >= (int)speakerGroups.size()) 
 		return false;
 	set <int> speakers = speakerGroups[currentSpeakerGroup + 1].speakers;
 	// erase all objects in the future that already appear in the present
 	for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
 		speakers.erase(*si);
-	if ((m[m[where].beginObjectPosition].word->first == L"two" && speakers.size() != 2) ||
-		(m[m[where].beginObjectPosition].word->first == L"three" && speakers.size() != 3)) return false;
+	if ((m[m[where].beginObjectPosition].word->first == u"two" && speakers.size() != 2) ||
+		(m[m[where].beginObjectPosition].word->first == u"three" && speakers.size() != 3)) return false;
 	// match gender?
 	if (objects[m[where].getObject()].male ^ objects[m[where].getObject()].female)
 		for (set <int>::iterator si = speakers.begin(), siEnd = speakers.end(); si != siEnd; si++)
@@ -1637,7 +1641,7 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 			break;
 		}
 	if (debugTrace.traceSpeakerResolution && objectMatches.size())
-		lplog(LOG_RESOLUTION, L"%06d:multiple subject %s resolved by (new) speakers %s", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:multiple subject %s resolved by (new) speakers %s", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
 	return true;
 }
 
@@ -1649,7 +1653,7 @@ bool cSource::addNewNumberedSpeakers(int where, vector <cOM>& objectMatches)
 bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 {
 	LFS
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 	bool physicallyEvaluated;
 	int csg = currentSpeakerGroup, o = m[where].getObject();// , numSpeakersNotYetPP = 0;
 	if (csg + 1 >= (signed)speakerGroups.size())
@@ -1658,19 +1662,19 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 	while (speakers.find(m[where].getObject()) != speakers.end() && csg + 2 < (signed)speakerGroups.size())
 		speakers = speakerGroups[++csg + 1].speakers;
 	if (currentSpeakerGroup > 0 && debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:previous speakerGroup %s", where, toText(speakerGroups[currentSpeakerGroup - 1], tmpstr2));
+		lplog(LOG_RESOLUTION, u"%06d:previous speakerGroup %s", where, toText(speakerGroups[currentSpeakerGroup - 1], tmpstr2));
 	for (set <int>::iterator si = speakerGroups[currentSpeakerGroup].speakers.begin(), siEnd = speakerGroups[currentSpeakerGroup].speakers.end(); si != siEnd; si++)
 	{
 		vector <cLocalFocus>::iterator lsi = in(*si);
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr3;
+			lpwstring tmpstr3;
 			if (lsi == localObjects.end())
-				lplog(LOG_RESOLUTION, L"%06d:current speaker %s[%s][%s] in speakerGroup %s",
-					where, objectString(*si, tmpstr, false).c_str(), L"NLO", L"NLO", toText(speakerGroups[currentSpeakerGroup], tmpstr3));
+				lplog(LOG_RESOLUTION, u"%06d:current speaker %s[%s][%s] in speakerGroup %s",
+					where, objectString(*si, tmpstr, false).c_str(), u"NLO", u"NLO", toText(speakerGroups[currentSpeakerGroup], tmpstr3));
 			else
-				lplog(LOG_RESOLUTION, L"%06d:current speaker %s[%s][%s]lw=%d,pw=%d in speakerGroup %s",
-					where, objectString(*si, tmpstr, false).c_str(), (lsi->notSpeaker) ? L"object" : L"speaker", (lsi->physicallyPresent) ? L"PP" : L"notPP",
+				lplog(LOG_RESOLUTION, u"%06d:current speaker %s[%s][%s]lw=%d,pw=%d in speakerGroup %s",
+					where, objectString(*si, tmpstr, false).c_str(), (lsi->notSpeaker) ? u"object" : u"speaker", (lsi->physicallyPresent) ? u"PP" : u"notPP",
 					lsi->lastWhere, lsi->previousWhere, toText(speakerGroups[currentSpeakerGroup], tmpstr3));
 		}
 		if (lsi != localObjects.end() && lsi->lastWhere < speakerGroups[currentSpeakerGroup].sgBegin && currentSpeakerGroup>0 && speakerGroups[currentSpeakerGroup - 1].speakers.find(*si) == speakerGroups[currentSpeakerGroup - 1].speakers.end() &&
@@ -1680,18 +1684,18 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 	if (objectMatches.size())
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:speakers not yet PP %s match from speakerGroup %s",
+			lplog(LOG_RESOLUTION, u"%06d:speakers not yet PP %s match from speakerGroup %s",
 				where, objectString(objectMatches, tmpstr, false).c_str(), toText(speakerGroups[currentSpeakerGroup], tmpstr2));
 		if (objectMatches.size() == 1 && speakerGroups[currentSpeakerGroup].speakers.find(o) != speakerGroups[currentSpeakerGroup].speakers.end())
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:speaker %s erased in speakerGroup [post matched]", where, objectString(o, tmpstr, true).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:speaker %s erased in speakerGroup [post matched]", where, objectString(o, tmpstr, true).c_str());
 			vector <cLocalFocus>::iterator lsi = in(o);
 			if (lsi != localObjects.end())
 				localObjects.erase(lsi);
 			speakerGroups[csg].speakers.erase(o);
 			speakers.erase(o);
-			if (replaceObjectInSection(where, objectMatches[0].object, o, L"lookAhead"))
+			if (replaceObjectInSection(where, objectMatches[0].object, o, u"lookAhead"))
 				return true;
 			objectMatches.clear();
 			//return true;
@@ -1729,17 +1733,17 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 		{
 			// if 'a voice' is resolved to 'The German' in the next speakerGroup, and 'The German' was resolved to another speaker earlier,
 			// then a voice must be replaced by 'The German', then 'The German' replaced by its resolved object.
-			wstring tmpstr3;
+			lpwstring tmpstr3;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:speaker %s replaced by future speaker %s in speakerGroup %s",
+				lplog(LOG_RESOLUTION, u"%06d:speaker %s replaced by future speaker %s in speakerGroup %s",
 					where, objectString(*keep, tmpstr, true).c_str(), objectString(toSpeaker, tmpstr2, true).c_str(), toText(speakerGroups[csg], tmpstr3));
-			replaceObjectInSection(where, toSpeaker, *keep, L"lookAheadSpeaker");
+			replaceObjectInSection(where, toSpeaker, *keep, u"lookAheadSpeaker");
 			if (toSpeaker != toSpeakerResolved)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:speaker %s replaced by future speaker %s in speakerGroup %s",
+					lplog(LOG_RESOLUTION, u"%06d:speaker %s replaced by future speaker %s in speakerGroup %s",
 						where, objectString(toSpeaker, tmpstr, true).c_str(), objectString(toSpeakerResolved, tmpstr2, true).c_str(), toText(speakerGroups[csg], tmpstr3));
-				replaceObjectInSection(where, toSpeakerResolved, toSpeaker, L"lookAheadSpeaker");  // don't change "lookAheadSpeaker" because of replaceObjectInSection repeat limitation
+				replaceObjectInSection(where, toSpeakerResolved, toSpeaker, u"lookAheadSpeaker");  // don't change "lookAheadSpeaker" because of replaceObjectInSection repeat limitation
 			}
 		}
 	}
@@ -1779,7 +1783,7 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 			if (objectInSpeakers)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:speaker %s erased in speakerGroup [post matched]", where, objectString(m[where].getObject(), tmpstr, true).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:speaker %s erased in speakerGroup [post matched]", where, objectString(m[where].getObject(), tmpstr, true).c_str());
 				speakerGroups[csg].speakers.erase(m[where].getObject());
 			}
 		}
@@ -1789,12 +1793,12 @@ bool cSource::addNewSpeaker(int where, vector <cOM>& objectMatches)
 		objects[o].male = objects[objectMatches[0].object].male;
 		objects[o].female = objects[objectMatches[0].object].female;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s becomes %s from match object %s (4).", where,
-				objectString(o, tmpstr, false).c_str(), (objects[o].male) ? L"male" : L"female",
+			lplog(LOG_RESOLUTION, u"%06d:%s becomes %s from match object %s (4).", where,
+				objectString(o, tmpstr, false).c_str(), (objects[o].male) ? u"male" : u"female",
 				objectString(objectMatches[0].object, tmpstr2, false).c_str());
 	}
 	if (debugTrace.traceSpeakerResolution && objectMatches.size())
-		lplog(LOG_RESOLUTION, L"%06d:subject %s resolved by (new) speakers %s", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:subject %s resolved by (new) speakers %s", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(objectMatches, tmpstr2, true).c_str());
 	return objectMatches.size() > 0;
 }
 
@@ -1808,13 +1812,13 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 {
 	LFS
 		changeClass = false;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	// check 'the voice of the German'
 	int forwardObjectPosition, o, whereObject;
-	if (object->getOwnerWhere() < 0 && where + 2 < (signed)m.size() && m[where + 1].word->first == L"of" && ((forwardObjectPosition = m[where + 2].principalWherePosition) >= 0) &&
-		m[where].word->first != L"thoughts" && m[where].word->first != L"thought")
+	if (object->getOwnerWhere() < 0 && where + 2 < (signed)m.size() && m[where + 1].word->first == u"of" && ((forwardObjectPosition = m[where + 2].principalWherePosition) >= 0) &&
+		m[where].word->first != u"thoughts" && m[where].word->first != u"thought")
 	{
-		resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, m[where].word->first == L"both");
+		resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, m[where].word->first == u"both");
 		o = m[forwardObjectPosition].getObject();
 		if (o >= 0 && (objects[o].male || objects[o].female) && !objects[o].neuter)
 		{
@@ -1823,7 +1827,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 			else
 				objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:added 'of' match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:added 'of' match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 			//object->getOwnerWhere()=forwardObjectPosition;  may lead to incorrect resolution because of disagreements between identify speaker phases and resolve speaker
 			return false;
 		}
@@ -1835,7 +1839,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 	}
 	// check 'the man with the beard'
 	int ownerObjectPosition;
-	if (object->getOwnerWhere() < 0 && (ownerObjectPosition = m[where].beginObjectPosition) >= 2 && m[ownerObjectPosition - 1].word->first == L"with")
+	if (object->getOwnerWhere() < 0 && (ownerObjectPosition = m[where].beginObjectPosition) >= 2 && m[ownerObjectPosition - 1].word->first == u"with")
 	{
 		o = -1;
 		for (int I = ownerObjectPosition - 2; I >= 0 && I >= where - 5 && !isEOS(I); I--)
@@ -1851,7 +1855,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 					else
 						objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:added 'with' match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+						lplog(LOG_RESOLUTION, u"%06d:added 'with' match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 				}
 				if ((m[ownerObjectPosition].objectRole & OBJECT_ROLE) && (ownerObjectPosition = m[ownerObjectPosition].relSubject) >= 0)
 				{
@@ -1863,7 +1867,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 						else
 							objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
 						if (debugTrace.traceSpeakerResolution)
-							lplog(LOG_RESOLUTION, L"%06d:added 'with' subject match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+							lplog(LOG_RESOLUTION, u"%06d:added 'with' subject match %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 						ownerResolved = true;
 					}
 				}
@@ -1877,17 +1881,17 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 		}
 	}
 	bool urp = unResolvablePosition(beginEntirePosition);
-	if (isInternalBodyPart(where) && object->getOwnerWhere() < 0 && m[beginEntirePosition].pma.queryPattern(L"_META_NAME_EQUIVALENCE") == -1)
+	if (isInternalBodyPart(where) && object->getOwnerWhere() < 0 && m[beginEntirePosition].pma.queryPattern(u"_META_NAME_EQUIVALENCE") == -1)
 	{
 		changeClass = true;
 		return false;
 	}
 	if (urp && object->getOwnerWhere() < 0 &&
-		m[beginEntirePosition].pma.queryPattern(L"_META_NAME_EQUIVALENCE") == -1) // Another voice[german] , which Tommy fancied was that[german] of the tall , commanding - looking man[man] whose face[german] had seemed familiar to him[man,boris,tommy,irish] , said :
+		m[beginEntirePosition].pma.queryPattern(u"_META_NAME_EQUIVALENCE") == -1) // Another voice[german] , which Tommy fancied was that[german] of the tall , commanding - looking man[man] whose face[german] had seemed familiar to him[man,boris,tommy,irish] , said :
 	{
 		// a new voice
 		for (int I = m[where].beginObjectPosition; I < m[where].endObjectPosition; I++)
-			if (m[I].word->first == L"new")
+			if (m[I].word->first == u"new")
 				return false;
 		if ((m[where].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) == SUBJECT_ROLE ||
 			(m[where].objectRole & (OBJECT_ROLE | PREP_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) == (OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE) ||
@@ -1903,13 +1907,13 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 			if (debugTrace.traceSpeakerResolution)
 			{
 				if (whereObject >= 0 && whereVerb >= 0)
-					lplog(LOG_RESOLUTION, L"%06d:facial expression %s %d %s | %d %d %d", where, (isFacialExpression(where)) ? L"true" : L"false", whereObject, m[whereObject].word->first.c_str(),
+					lplog(LOG_RESOLUTION, u"%06d:facial expression %s %d %s | %d %d %d", where, (isFacialExpression(where)) ? u"true" : u"false", whereObject, m[whereObject].word->first.c_str(),
 						whereVerb, m[whereVerb + 1].queryWinnerForm(prepositionForm), m[whereVerb + 1].getRelObject());
 				else if (whereObject >= 0)
-					lplog(LOG_RESOLUTION, L"%06d:facial expression %s %d %s | %d", where, (isFacialExpression(where)) ? L"true" : L"false", whereObject, m[whereObject].word->first.c_str(),
+					lplog(LOG_RESOLUTION, u"%06d:facial expression %s %d %s | %d", where, (isFacialExpression(where)) ? u"true" : u"false", whereObject, m[whereObject].word->first.c_str(),
 						whereVerb);
 				else if (whereVerb >= 0)
-					lplog(LOG_RESOLUTION, L"%06d:facial expression %s %d %d %d", where, (isFacialExpression(where)) ? L"true" : L"false",
+					lplog(LOG_RESOLUTION, u"%06d:facial expression %s %d %d %d", where, (isFacialExpression(where)) ? u"true" : u"false",
 						whereVerb, m[whereVerb + 1].queryWinnerForm(prepositionForm), m[whereVerb + 1].getRelObject());
 			}
 			// a smile overspread his face
@@ -1925,10 +1929,10 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 					// there was a look in the German's eyes
 					(m[whereObject = m[where].endObjectPosition].queryForm(prepositionForm) >= 0 && isFace(whereObject = m[whereObject].getRelObject()))))
 			{
-				resolveObject(whereObject, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, m[where].word->first == L"both");
+				resolveObject(whereObject, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, m[where].word->first == u"both");
 				objectMatches = m[whereObject].objectMatches;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Resolved through facial expression to %s.", where, objectString(objectMatches, tmpstr, true).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:Resolved through facial expression to %s.", where, objectString(objectMatches, tmpstr, true).c_str());
 			}
 			// don't resolve if the subject has no owner and is not definitively a subject
 			// A cold hand seemed to close round her heart
@@ -1948,7 +1952,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 				else
 					objectMatches = m[whereLastObject].objectMatches;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Resolved ownerless body object through subject/object match.", where);
+					lplog(LOG_RESOLUTION, u"%06d:Resolved ownerless body object through subject/object match.", where);
 			}
 		}
 		// Tuppence raised a trembling left hand to the glass .
@@ -1960,7 +1964,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 			else
 				objectMatches = m[whereObject].objectMatches;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Resolved ownerless body object through subject/object match.", where);
+				lplog(LOG_RESOLUTION, u"%06d:Resolved ownerless body object through subject/object match.", where);
 		}
 		else if (!(m[where].objectRole & NO_ALT_RES_SPEAKER_ROLE))
 			changeClass = true;
@@ -1969,7 +1973,7 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 	if (urp) return false;
 	if (object->getOwnerWhere() >= 0 && m[object->getOwnerWhere()].objectMatches.empty() &&
 		m[object->getOwnerWhere()].queryForm(possessiveDeterminerForm) >= 0 && (m[object->getOwnerWhere()].word->second.inflectionFlags & THIRD_PERSON) == THIRD_PERSON &&
-		m[beginEntirePosition].pma.queryPattern(L"_META_NAME_EQUIVALENCE") == -1 &&
+		m[beginEntirePosition].pma.queryPattern(u"_META_NAME_EQUIVALENCE") == -1 &&
 		currentSpeakerGroup + 1 < speakerGroups.size() && !(m[where].objectRole & (NONPAST_OBJECT_ROLE | NOT_OBJECT_ROLE)) &&
 		addNewSpeaker(where, objectMatches))
 		return false;
@@ -1997,11 +2001,11 @@ bool cSource::resolveBodyObjectClass(int where, int beginEntirePosition, vector 
 
 // Subtract DISALLOW_SALIENCE from any local-focus POV speaker so "the other"
 // does not resolve to the point-of-view character (unless HAIL or in-quote).
-void cSource::excludePOVSpeakers(int where, const wchar_t* fromWhere)
+void cSource::excludePOVSpeakers(int where, const lpchar_t* fromWhere)
 {
 	LFS
 		vector <cLocalFocus>::iterator lsi;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (!(m[where].objectRole & (HAIL_ROLE | IN_PRIMARY_QUOTE_ROLE))) // DEBUG TSG  
 	{
 		if (currentSpeakerGroup < speakerGroups.size())
@@ -2010,9 +2014,9 @@ void cSource::excludePOVSpeakers(int where, const wchar_t* fromWhere)
 				if ((lsi = in(*povi)) != localObjects.end())
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:meta group object cannot match pov speaker (1 %s) %s", where, fromWhere, objectString(lsi->om, tmpstr, true).c_str());
+						lplog(LOG_RESOLUTION, u"%06d:meta group object cannot match pov speaker (1 %s) %s", where, fromWhere, objectString(lsi->om, tmpstr, true).c_str());
 					lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-					itos(L"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, L"]");
+					itos(u"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, u"]");
 				}
 		}
 		else
@@ -2023,18 +2027,18 @@ void cSource::excludePOVSpeakers(int where, const wchar_t* fromWhere)
 				if ((lsi = in(m[povWhere].getObject())) != localObjects.end())
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:meta group object cannot match pov speaker (2 %s) %d:%s", where, fromWhere, povWhere, objectString(lsi->om, tmpstr, true).c_str());
+						lplog(LOG_RESOLUTION, u"%06d:meta group object cannot match pov speaker (2 %s) %d:%s", where, fromWhere, povWhere, objectString(lsi->om, tmpstr, true).c_str());
 					lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-					itos(L"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, L"]");
+					itos(u"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, u"]");
 				}
 				if (m[povWhere].objectMatches.size() == 1)
 					for (vector <cOM>::iterator povi = m[povWhere].objectMatches.begin(), poviEnd = m[povWhere].objectMatches.end(); povi != poviEnd; povi++)
 						if ((lsi = in(povi->object)) != localObjects.end())
 						{
 							if (debugTrace.traceSpeakerResolution)
-								lplog(LOG_RESOLUTION, L"%06d:meta group object cannot match pov speaker (3 %s) %d:%s", where, fromWhere, povWhere, objectString(lsi->om, tmpstr, true).c_str());
+								lplog(LOG_RESOLUTION, u"%06d:meta group object cannot match pov speaker (3 %s) %d:%s", where, fromWhere, povWhere, objectString(lsi->om, tmpstr, true).c_str());
 							lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-							itos(L"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, L"]");
+							itos(u"-META_NOT_POV[-", DISALLOW_SALIENCE, lsi->res, u"]");
 						}
 			}
 		}
@@ -2058,7 +2062,7 @@ void cSource::excludeObservers(int where, bool inQuote, bool definitelySpeaker)
 					m[m[where].getRelObject()].beginObjectPosition >= 0 && unResolvablePosition(m[m[where].getRelObject()].beginObjectPosition) &&
 					m[m[where].getRelObject()].getObject() >= 0 && !objects[m[m[where].getRelObject()].getObject()].neuter))
 			{
-				wstring tmpstr;
+				lpwstring tmpstr;
 				for (set <int>::iterator oi = speakerGroups[currentSpeakerGroup].observers.begin(), oiEnd = speakerGroups[currentSpeakerGroup].observers.end(); oi != oiEnd; oi++)
 				{
 					for (vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsEnd = localObjects.end(); lsi != lsEnd; lsi++)
@@ -2074,8 +2078,8 @@ void cSource::excludeObservers(int where, bool inQuote, bool definitelySpeaker)
 							// if so, allow an observer to talk to him/herself 
 							if (debugTrace.traceSpeakerResolution)
 							{
-								lplog(LOG_RESOLUTION, L"%06d:observer %s should not match object", where, objectString(*oi, tmpstr, true).c_str());
-								itos(L"-OBSERVER[", DISALLOW_SALIENCE, lsi->res, L"]");
+								lplog(LOG_RESOLUTION, u"%06d:observer %s should not match object", where, objectString(*oi, tmpstr, true).c_str());
+								itos(u"-OBSERVER[", DISALLOW_SALIENCE, lsi->res, u"]");
 							}
 							lsi->om.salienceFactor = -DISALLOW_SALIENCE;
 						}
@@ -2122,9 +2126,9 @@ void cSource::discouragePOV(int where, bool inQuote, bool definitelySpeaker)
 	{
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr;
-			lplog(LOG_RESOLUTION, L"%06d:POV %s should be disallowed (mixedPlurality)", where, objectString(povLSI->om, tmpstr, true).c_str());
-			itos(L"-POV_MIXED[", DISALLOW_SALIENCE, povLSI->res, L"]");
+			lpwstring tmpstr;
+			lplog(LOG_RESOLUTION, u"%06d:POV %s should be disallowed (mixedPlurality)", where, objectString(povLSI->om, tmpstr, true).c_str());
+			itos(u"-POV_MIXED[", DISALLOW_SALIENCE, povLSI->res, u"]");
 		}
 		povLSI->om.salienceFactor -= DISALLOW_SALIENCE;
 	}
@@ -2138,9 +2142,9 @@ void cSource::discouragePOV(int where, bool inQuote, bool definitelySpeaker)
 		{
 			if (debugTrace.traceSpeakerResolution)
 			{
-				wstring tmpstr, tmpstr2;
-				lplog(LOG_RESOLUTION, L"%06d:POV %s should be disallowed in favor of new object %s", where, objectString(povLSI->om, tmpstr, true).c_str(), objectString(lsi->om, tmpstr2, true).c_str());
-				itos(L"-POV[", DISALLOW_SALIENCE, povLSI->res, L"]");
+				lpwstring tmpstr, tmpstr2;
+				lplog(LOG_RESOLUTION, u"%06d:POV %s should be disallowed in favor of new object %s", where, objectString(povLSI->om, tmpstr, true).c_str(), objectString(lsi->om, tmpstr2, true).c_str());
+				itos(u"-POV[", DISALLOW_SALIENCE, povLSI->res, u"]");
 			}
 			povLSI->om.salienceFactor -= DISALLOW_SALIENCE;
 		}
@@ -2173,7 +2177,7 @@ void cSource::excludeSpeakers(int where, bool inPrimaryQuote, bool inSecondaryQu
 					{
 						lsi->om.salienceFactor -= 2000;
 						if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-							lsi->res += L"-INPQUOTE SPEAKER (2)[-2000]";
+							lsi->res += u"-INPQUOTE SPEAKER (2)[-2000]";
 					}
 				}
 			}
@@ -2195,14 +2199,14 @@ void cSource::excludeSpeakers(int where, bool inPrimaryQuote, bool inSecondaryQu
 				{
 					lsi->om.salienceFactor -= 2000;
 					if (debugTrace.traceObjectResolution || debugTrace.traceSpeakerResolution)
-						lsi->res += L"-INPQUOTE SECONDARY SPEAKER (2)[-2000]";
+						lsi->res += u"-INPQUOTE SECONDARY SPEAKER (2)[-2000]";
 				}
 			}
 		}
 	}
 }
 
-// wchar_t *wordOrderWords[]={L"other",L"another",L"second",L"first",L"third",L"former",L"latter",L"that",L"this",L"two",L"three",NULL};
+// lpchar_t *wordOrderWords[]={u"other",u"another",u"second",u"first",u"third",u"former",u"latter",u"that",u"this",u"two",u"three",NULL};
 //                            -2       -3         -4        -5       -6       -7        -8        -9      -10     -11    -12
 // "the second of the two men": pick first/second/former/latter/other from
 // m[ofObjectWhere].objectMatches by which member was mentioned most
@@ -2248,14 +2252,14 @@ bool cSource::resolveWordOrderOfObject(int where, int wo, int ofObjectWhere, vec
 		else if (beforeLastMentioned == -1 || whereMentioned[beforeLastMentioned] < whereMentioned[I])
 			beforeLastMentioned = I;
 	}
-	wstring tmpstr, tmpstr1, tmpstr2;
+	lpwstring tmpstr, tmpstr1, tmpstr2;
 	wo = -2 - wo;
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:resolveWordOrderOfObject [from begin=%d] wo=%d:(%d:%s %d:%s %d:%s) allMentioned=%s noneMentioned=%s lastMentioned=%d beforeLastMentioned=%d notMentioned=%d",
-			where, begin, wo, whereMentioned[0], (whereMentioned[0] < 0) ? L"" : objectString(m[ofObjectWhere].objectMatches[0].object, tmpstr, true).c_str(),
-			whereMentioned[1], (whereMentioned[1] < 0) ? L"" : objectString(m[ofObjectWhere].objectMatches[1].object, tmpstr1, true).c_str(),
-			whereMentioned[2], (whereMentioned[2] < 0) ? L"" : objectString(m[ofObjectWhere].objectMatches[2].object, tmpstr2, true).c_str(),
-			(allMentioned) ? L"true" : L"false", (noneMentioned) ? L"true" : L"false", lastMentioned, beforeLastMentioned, notMentioned);
+		lplog(LOG_RESOLUTION, u"%06d:resolveWordOrderOfObject [from begin=%d] wo=%d:(%d:%s %d:%s %d:%s) allMentioned=%s noneMentioned=%s lastMentioned=%d beforeLastMentioned=%d notMentioned=%d",
+			where, begin, wo, whereMentioned[0], (whereMentioned[0] < 0) ? u"" : objectString(m[ofObjectWhere].objectMatches[0].object, tmpstr, true).c_str(),
+			whereMentioned[1], (whereMentioned[1] < 0) ? u"" : objectString(m[ofObjectWhere].objectMatches[1].object, tmpstr1, true).c_str(),
+			whereMentioned[2], (whereMentioned[2] < 0) ? u"" : objectString(m[ofObjectWhere].objectMatches[2].object, tmpstr2, true).c_str(),
+			(allMentioned) ? u"true" : u"false", (noneMentioned) ? u"true" : u"false", lastMentioned, beforeLastMentioned, notMentioned);
 	if (noneMentioned || wo == -11 || wo == -12)
 	{
 		objectMatches = m[ofObjectWhere].objectMatches;
@@ -2311,16 +2315,16 @@ int cSource::checkSubsequent(int where, bool definitelySpeaker, bool inPrimaryQu
 {
 	LFS
 		int nextPosition = m[where].endObjectPosition;
-	wstring word = m[where].word->first, tmpstr;
+	lpwstring word = m[where].word->first, tmpstr;
 	// handle 'one' of the vacant seats
-	if ((m[where].queryWinnerForm(numeralCardinalForm) >= 0 || word == L"both" || word == L"most" || word == L"more" || word == L"less" || word == L"any" || word == L"all" || word == L"couple" ||
-		(where > 0 && word == L"lot" && m[where - 1].word->first == L"a")) &&
-		where + 2 < (signed)m.size() && m[where + 1].word->first == L"of" && m[where + 2].principalWherePosition >= 0)
+	if ((m[where].queryWinnerForm(numeralCardinalForm) >= 0 || word == u"both" || word == u"most" || word == u"more" || word == u"less" || word == u"any" || word == u"all" || word == u"couple" ||
+		(where > 0 && word == u"lot" && m[where - 1].word->first == u"a")) &&
+		where + 2 < (signed)m.size() && m[where + 1].word->first == u"of" && m[where + 2].principalWherePosition >= 0)
 	{
 		int forwardObjectPosition = m[where + 2].principalWherePosition;
-		resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == L"both");
+		resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == u"both");
 		// Tommy was one of those englishmen
-		if (word == L"one" && m[forwardObjectPosition].getObject() >= 0 && objects[m[forwardObjectPosition].getObject()].plural &&
+		if (word == u"one" && m[forwardObjectPosition].getObject() >= 0 && objects[m[forwardObjectPosition].getObject()].plural &&
 			m[forwardObjectPosition].word->second.mainEntry != wNULL && m[forwardObjectPosition].word->second.mainEntry != m[forwardObjectPosition].word &&
 			!(m[forwardObjectPosition].word->second.mainEntry->second.inflectionFlags & PLURAL))
 		{
@@ -2352,11 +2356,11 @@ int cSource::checkSubsequent(int where, bool definitelySpeaker, bool inPrimaryQu
 				objectMatches.push_back(cOM(o, SALIENCE_THRESHOLD));
 		}
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:added match (2) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:added match (2) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 		nextPosition = m[forwardObjectPosition].endObjectPosition;
 	}
 	if (nextPosition >= (signed)m.size() || nextPosition < 0) return -1;
-	if (m[nextPosition].word->first != L",")
+	if (m[nextPosition].word->first != u",")
 	{
 		if (m[nextPosition].principalWherePosition < 0 || !(m[m[nextPosition].principalWherePosition].objectRole & RE_OBJECT_ROLE)) return false;
 	}
@@ -2373,15 +2377,15 @@ int cSource::checkSubsequent(int where, bool definitelySpeaker, bool inPrimaryQu
 		{
 			// if replaceInSection used, hail expressions may be incorporated - 'Tuppence, old girl,...'  but Tuppence is not old!
 			objects[m[where].getObject()].aliases.push_back(m[nextPosition].getObject());
-			if (m[where].beginObjectPosition > 0 && m[m[where].beginObjectPosition - 1].queryForm(L"quotes") >= 0 && nextWasHail)
+			if (m[where].beginObjectPosition > 0 && m[m[where].beginObjectPosition - 1].queryForm(u"quotes") >= 0 && nextWasHail)
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:Acquired HAIL role (3).", nextPosition);
+					lplog(LOG_RESOLUTION, u"%06d:Acquired HAIL role (3).", nextPosition);
 				m[nextPosition].objectRole |= HAIL_ROLE;
 			}
-			wstring tmpstr2;
+			lpwstring tmpstr2;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Object %s gained alias %s (5).", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(m[nextPosition].getObject(), tmpstr2, true).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:Object %s gained alias %s (5).", where, objectString(m[where].getObject(), tmpstr, true).c_str(), objectString(m[nextPosition].getObject(), tmpstr2, true).c_str());
 		}
 		return nextPosition;
 	}
@@ -2431,21 +2435,21 @@ bool cSource::matchByAppositivity(int where, int nextPosition)
 	if (objects[object].objectClass == NAME_OBJECT_CLASS && objects[reObject].objectClass == NAME_OBJECT_CLASS &&
 		objects[object].numIdentifiedAsSpeaker && objects[reObject].numIdentifiedAsSpeaker)
 		return false;
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION | LOG_SG, L"%d:resolved object %d:%s to %d:%s by appositivity", where, where, objectString(object, tmpstr, false).c_str(), nextPosition, objectString(reObject, tmpstr2, false).c_str());
+		lplog(LOG_RESOLUTION | LOG_SG, u"%d:resolved object %d:%s to %d:%s by appositivity", where, where, objectString(object, tmpstr, false).c_str(), nextPosition, objectString(reObject, tmpstr2, false).c_str());
 	m[nextPosition].objectRole |= RE_OBJECT_ROLE;
 	// you are a clever woman, Rita;
 	if ((m[nextPosition].objectRole & HAIL_ROLE) && (m[where].objectRole & IS_OBJECT_ROLE) && m[where].relSubject >= 0 &&
 		(m[m[where].relSubject].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON)) == SECOND_PERSON)
 	{
 		if (debugTrace.traceRole)
-			lplog(LOG_ROLE, L"%06d:Kept HAIL role (appositivity with SECOND_PERSON).", nextPosition);
+			lplog(LOG_ROLE, u"%06d:Kept HAIL role (appositivity with SECOND_PERSON).", nextPosition);
 	}
 	else
 	{
 		if (debugTrace.traceRole && (m[nextPosition].objectRole & HAIL_ROLE))
-			lplog(LOG_ROLE, L"%06d:Removed HAIL role (appositivity).", nextPosition);
+			lplog(LOG_ROLE, u"%06d:Removed HAIL role (appositivity).", nextPosition);
 		m[nextPosition].objectRole &= ~HAIL_ROLE;
 	}
 	/*
@@ -2456,7 +2460,7 @@ bool cSource::matchByAppositivity(int where, int nextPosition)
 			speakerGroups[currentSpeakerGroup].speakers.find(reObject)!=speakerGroups[currentSpeakerGroup].speakers.end())
 	{
 		if (t.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION,L"%06d:removed speaker %s from speakerGroup %s by appositivity (insufficient reference)",
+			lplog(LOG_RESOLUTION,u"%06d:removed speaker %s from speakerGroup %s by appositivity (insufficient reference)",
 						where,objectString(reObject,tmpstr,true).c_str(),toText(speakerGroups[currentSpeakerGroup],tmpstr2));
 		speakerGroups[currentSpeakerGroup].speakers.erase(reObject);
 	}
@@ -2475,11 +2479,11 @@ void cSource::setQuoteContainsSpeaker(int where, bool inPrimaryQuote)
 		(m[where].objectRole & FOCUS_EVALUATED) && currentSpeakerGroup < speakerGroups.size() &&
 		intersect(where, speakerGroups[currentSpeakerGroup].speakers, allIn, oneIn) && allIn)
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		m[lastOpeningPrimaryQuote].flags |= cWordMatch::flagQuoteContainsSpeaker;
 		m[lastOpeningPrimaryQuote].setRelObject(where);
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%d:Speaker %s talking about other speakers/audience", where, lastOpeningPrimaryQuote, objectString(m[where].getObject(), tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%d:Speaker %s talking about other speakers/audience", where, lastOpeningPrimaryQuote, objectString(m[where].getObject(), tmpstr, false).c_str());
 	}
 }
 
@@ -2501,7 +2505,7 @@ vector <cLocalFocus>::iterator cSource::ownerObjectInLocal(int o)
 
 // True if any token in [begin,end) equals one of the NULL-terminated
 // modifiers (young/old/little/...).
-bool cObject::hasAgeModifier(vector <cWordMatch>& m, const wchar_t* modifiers[])
+bool cObject::hasAgeModifier(vector <cWordMatch>& m, const lpchar_t* modifiers[])
 {
 	LFS
 		for (int I = 0; modifiers[I]; I++)
@@ -2511,8 +2515,8 @@ bool cObject::hasAgeModifier(vector <cWordMatch>& m, const wchar_t* modifiers[])
 	return false;
 }
 
-const wchar_t* olderAgeModifiers[] = { L"old",L"elderly",L"older",L"aged",NULL };
-const wchar_t* youngerAgeModifiers[] = { L"young",L"teen",L"preteen",L"adolescent",L"miss",NULL };
+const lpchar_t* olderAgeModifiers[] = { u"old",u"elderly",u"older",u"aged",NULL };
+const lpchar_t* youngerAgeModifiers[] = { u"young",u"teen",u"preteen",u"adolescent",u"miss",NULL };
 // Infer objectGenericAge from associated nouns/adjectives (girl/boy vs
 // woman/man, young/old). Returns the age bucket written (0-3) or 0.
 int cObject::setGenericAge(vector <cWordMatch>& m)
@@ -2530,7 +2534,7 @@ int cObject::setGenericAge(vector <cWordMatch>& m)
 		// 2:man/fellow/gentleman/woman/lady/husband/wife
 		// 3:old man
 
-		if (w->first == L"girl" || w->first == L"boy" || w->first == L"child")
+		if (w->first == u"girl" || w->first == u"boy" || w->first == u"child")
 		{
 			if (hasOld)
 			{
@@ -2540,7 +2544,7 @@ int cObject::setGenericAge(vector <cWordMatch>& m)
 			if (hasYoung) return objectGenericAge = 0;
 			return objectGenericAge = 1;
 		}
-		if (w->first == L"baby")
+		if (w->first == u"baby")
 			return objectGenericAge = 0;
 		if (hasYoung)
 			return objectGenericAge = 1;
@@ -2551,10 +2555,10 @@ int cObject::setGenericAge(vector <cWordMatch>& m)
 	return objectGenericAge = -1;
 }
 
-// wchar_t *genericGender[]={ L"man", L"fellow", L"gentleman", L"sir", L"woman", L"lady", L"madam", L"girl", L"miss",L"missus",NULL };
+// lpchar_t *genericGender[]={ u"man", u"fellow", u"gentleman", u"sir", u"woman", u"lady", u"madam", u"girl", u"miss",u"missus",NULL };
 // Record that this entity matched generic noun w (man/woman/girl/...) at
 // fromAge. Updates genericNounMap, mostMatchedGeneric, mostMatchedAge.
-bool cObject::updateGenericGender(int where, tIWMM w, int fromAge, const wchar_t* fromWhere, sTrace& t)
+bool cObject::updateGenericGender(int where, tIWMM w, int fromAge, const lpchar_t* fromWhere, sTrace& t)
 {
 	LFS
 		if (objectClass != PRONOUN_OBJECT_CLASS && (w->second.flags & cSourceWordInfo::genericGenderIgnoreMatch))
@@ -2564,11 +2568,11 @@ bool cObject::updateGenericGender(int where, tIWMM w, int fromAge, const wchar_t
 				keep = genericNounMap[w] = 1;
 			else
 				keep = genericNounMap[w]++;
-			wstring tmpstr;
+			lpwstring tmpstr;
 			if (mostMatchedGeneric == wNULL || genericNounMap[mostMatchedGeneric] < keep)
 				mostMatchedGeneric = w;
 			if (t.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Incorporated generic noun %s (%s) (AGE %d)", where, w->first.c_str(), fromWhere, fromAge);
+				lplog(LOG_RESOLUTION, u"%06d:Incorporated generic noun %s (%s) (AGE %d)", where, w->first.c_str(), fromWhere, fromAge);
 			if (fromAge >= 0)
 			{
 				genericAge[fromAge]++;
@@ -2611,7 +2615,7 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 {
 	LFS
 		tIWMM w = m[object->originalLocation].getMainEntry(), localw;
-	wstring word = w->first;
+	lpwstring word = w->first;
 	//int flags=w->second.flags;
 	if ((object->objectClass != GENDERED_GENERAL_OBJECT_CLASS && object->objectClass != GENDERED_RELATIVE_OBJECT_CLASS && object->objectClass != NAME_OBJECT_CLASS && object->objectClass != META_GROUP_OBJECT_CLASS) ||
 		(!(w->second.flags & cSourceWordInfo::genericGenderIgnoreMatch) && !(w->second.flags & cSourceWordInfo::genericAgeGender))) return;
@@ -2642,7 +2646,7 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 						if (objects[lsi->om.object].objectGenericAge == object->objectGenericAge)
 						{
 							lsi->om.salienceFactor += 500;
-							itos(L"+MATCHING_GENERIC[+", 500, lsi->res, L"]");
+							itos(u"+MATCHING_GENERIC[+", 500, lsi->res, u"]");
 						}
 						else if (localw != w) // not the same word
 							decreaseSalience.push_back(lsi);
@@ -2651,7 +2655,7 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 			}
 			if (lsi->om.salienceFactor >= MINIMUM_SALIENCE_WITH_MATCHED_ADJECTIVES && object->objectGenericAge >= 0)
 			{
-				wstring w2;
+				lpwstring w2;
 				wordString(objects[lsi->om.object].associatedNouns, w2);
 				if ((objects[lsi->om.object].mostMatchedAge == object->objectGenericAge) ||
 					(abs(objects[lsi->om.object].mostMatchedAge - object->objectGenericAge) <= 1 &&
@@ -2671,12 +2675,12 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 			decreaseSalience.push_back(genericLocalObject);
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:GENERIC:%s[sf=%d,AGE=%d(%d)] matched age=%d(%d)%s", where,
+			lpwstring tmpstr2;
+			lplog(LOG_RESOLUTION, u"%06d:GENERIC:%s[sf=%d,AGE=%d(%d)] matched age=%d(%d)%s", where,
 				objectString(genericLocalObject->om, tmpstr2, true).c_str(), genericLocalObject->om.salienceFactor,
 				genericObject->mostMatchedAge, (genericObject->mostMatchedAge >= 0) ? genericObject->genericAge[genericObject->mostMatchedAge] : -1,
 				object->objectGenericAge, (object->objectGenericAge >= 0) ? genericObject->genericAge[object->objectGenericAge] : -1,
-				(decreaseSalience.size()) ? L" DECREASED" : L"");
+				(decreaseSalience.size()) ? u" DECREASED" : u"");
 		}
 	}
 	if (numGenericObjects == 1 && numSalienceObjects == 2)
@@ -2690,8 +2694,8 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 		int MMG = genericObject->genericNounMap[genericObject->mostMatchedGeneric];
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr, tmpstr2;
-			lplog(LOG_RESOLUTION, L"%06d:GENERIC:%s[sf=%d,HEAD=%d,MMG=%d,AGE=%d] salient=%s[sf=%d] matched age=%d", where,
+			lpwstring tmpstr, tmpstr2;
+			lplog(LOG_RESOLUTION, u"%06d:GENERIC:%s[sf=%d,HEAD=%d,MMG=%d,AGE=%d] salient=%s[sf=%d] matched age=%d", where,
 				objectString(genericLocalObject->om, tmpstr2, true).c_str(), genericLocalObject->om.salienceFactor, HEAD, MMG, genericObject->mostMatchedAge,
 				objectString(salientLocalObject->om, tmpstr, true).c_str(), salientLocalObject->om.salienceFactor,
 				object->objectGenericAge);
@@ -2707,15 +2711,15 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 		(objects[alternateGenericLocalObject->om.object].mostMatchedGeneric == w || (objects[alternateGenericLocalObject->om.object].mostMatchedAge == object->objectGenericAge && object->objectGenericAge >= 0)) &&
 		(object->objectGenericAge >= 0 && genericObject->genericAge[object->objectGenericAge] == 0 && genericObject->mostMatchedAge >= 0 && genericObject->genericAge[genericObject->mostMatchedAge] > 1))
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		decreaseSalience.push_back(genericLocalObject);
 		alternateGenericLocalObject->om.salienceFactor += 3500;
-		alternateGenericLocalObject->res += L"+MATCHING_ALT_GENERIC[+" + itos(3500, tmpstr) + L"]";
+		alternateGenericLocalObject->res += u"+MATCHING_ALT_GENERIC[+" + itos(3500, tmpstr) + u"]";
 		if (debugTrace.traceSpeakerResolution)
 		{
-			wstring tmpstr2;
+			lpwstring tmpstr2;
 			genericObject = objects.begin() + genericLocalObject->om.object;
-			lplog(LOG_RESOLUTION, L"%06d:GENERIC:%s[sf=%d,AGE=%d(%d)] alternative=%s[sf=%d] matched age=%d(%d)", where,
+			lplog(LOG_RESOLUTION, u"%06d:GENERIC:%s[sf=%d,AGE=%d(%d)] alternative=%s[sf=%d] matched age=%d(%d)", where,
 				objectString(genericLocalObject->om, tmpstr2, true).c_str(), genericLocalObject->om.salienceFactor,
 				genericObject->mostMatchedAge, (genericObject->mostMatchedAge >= 0) ? genericObject->genericAge[genericObject->mostMatchedAge] : -1,
 				objectString(alternateGenericLocalObject->om, tmpstr, true).c_str(), alternateGenericLocalObject->om.salienceFactor,
@@ -2743,15 +2747,15 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 				// don't reward Julius for matching 'sir' if Tommy is also sometimes called 'sir' (63649)
 				if (object->objectGenericAge != lsoMMA && lso->genericAge[lsoMMA] > 1 && lso->genericAge[object->objectGenericAge] > lso->genericAge[lsoMMA] / 3)
 				{
-					wstring tmpstr;
+					lpwstring tmpstr;
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:Cancel positive generic processing because of uncertainty might lead to bias against %s", where, objectString(lsi->om, tmpstr, true).c_str());
+						lplog(LOG_RESOLUTION, u"%06d:Cancel positive generic processing because of uncertainty might lead to bias against %s", where, objectString(lsi->om, tmpstr, true).c_str());
 					cancelGenericProcessing = true;
 				}
 				if (debugTrace.traceSpeakerResolution)
 				{
-					wstring tmpstr2;
-					lplog(LOG_RESOLUTION, L"%06d:GENERIC:%s[sf=%d] MOAGE=%d:%d AGE=%d:%d", where, objectString(lsi->om, tmpstr2, true).c_str(), lsi->om.salienceFactor,
+					lpwstring tmpstr2;
+					lplog(LOG_RESOLUTION, u"%06d:GENERIC:%s[sf=%d] MOAGE=%d:%d AGE=%d:%d", where, objectString(lsi->om, tmpstr2, true).c_str(), lsi->om.salienceFactor,
 						object->objectGenericAge, lso->genericAge[object->objectGenericAge], lsoMMA, lso->genericAge[lsoMMA]);
 				}
 			}
@@ -2759,32 +2763,32 @@ void cSource::includeGenericGenderPreferences(int where, vector <cObject>::itera
 		if (cancelGenericProcessing)
 			increaseSalience.clear();
 	}
-	wstring tmpstr;
+	lpwstring tmpstr;
 	for (vector < vector <cLocalFocus>::iterator >::iterator dsi = decreaseSalience.begin(), dsiEnd = decreaseSalience.end(); dsi != dsiEnd; dsi++)
 	{
 		vector <cLocalFocus>::iterator lsi = *dsi;
 		lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-		itos(L"-WRONG_GENERIC[-", DISALLOW_SALIENCE, lsi->res, L"]");
+		itos(u"-WRONG_GENERIC[-", DISALLOW_SALIENCE, lsi->res, u"]");
 		for (vector <cLocalFocus>::iterator llsi = localObjects.begin(), llsiEnd = localObjects.end(); llsi != llsiEnd; llsi++)
 		{
 			if (objects[llsi->om.object].getOwnerWhere() >= 0 && in(lsi->om.object, objects[llsi->om.object].getOwnerWhere()))
 			{
 				llsi->om.salienceFactor -= DISALLOW_SALIENCE;
-				itos(L"-WRONG_GENERIC[-", DISALLOW_SALIENCE, llsi->res, L"]");
+				itos(u"-WRONG_GENERIC[-", DISALLOW_SALIENCE, llsi->res, u"]");
 			}
 		}
 	}
 	if (numSalienceObjects == numGenericObjects && numGenericObjects == increaseSalience.size())
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Cancel generic processing because all objects match", where);
+			lplog(LOG_RESOLUTION, u"%06d:Cancel generic processing because all objects match", where);
 		return;
 	}
 	for (vector < vector <cLocalFocus>::iterator >::iterator isi = increaseSalience.begin(), isiEnd = increaseSalience.end(); isi != isiEnd; isi++)
 	{
 		vector <cLocalFocus>::iterator lsi = *isi;
 		lsi->om.salienceFactor += 5000;
-		itos(L"+MATCHING_GENERIC[+", 5000, lsi->res, L"]");
+		itos(u"+MATCHING_GENERIC[+", 5000, lsi->res, u"]");
 	}
 }
 
@@ -2813,14 +2817,14 @@ int cSource::resolveAdjectivalObject(int where, bool definitelySpeaker, bool inP
 	// to his amazement, Tommy ...
 	int pw = m[beginPosition].principalWherePosition, end = m[pw].endObjectPosition, subjectWhere = -1, s = -1;
 	vector <cLocalFocus>::iterator lss;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (lastBeginS1 < 0 && (m[where].objectRole & (SUBJECT_ROLE | OBJECT_ROLE | SUBOBJECT_ROLE | RE_OBJECT_ROLE | PREP_OBJECT_ROLE | IOBJECT_ROLE)) == PREP_OBJECT_ROLE &&
-		m[beginPosition - 1].pma.queryPattern(L"_INTRO_S1") != -1 && pw >= 0 && end >= 0 && m[end].word->first == L"," && (subjectWhere = m[end + 1].principalWherePosition) >= 0 &&
+		m[beginPosition - 1].pma.queryPattern(u"_INTRO_S1") != -1 && pw >= 0 && end >= 0 && m[end].word->first == u"," && (subjectWhere = m[end + 1].principalWherePosition) >= 0 &&
 		(m[subjectWhere].objectRole & SUBJECT_ROLE) && (s = m[subjectWhere].getObject()) >= 0 && (lss = in(s)) != localObjects.end() &&
 		lss->om.salienceFactor >= SALIENCE_THRESHOLD)
 	{
 		lss->om.salienceFactor += 2000;
-		lss->res += L"LEADING_PP_SUBJECT[+" + itos(2000, tmpstr) + L"]";
+		lss->res += u"LEADING_PP_SUBJECT[+" + itos(2000, tmpstr) + u"]";
 	}
 	if (m[m[beginPosition].principalWherePosition].objectRole & POV_OBJECT_ROLE)
 		m[where].objectRole |= POV_OBJECT_ROLE;
@@ -2835,12 +2839,12 @@ int cSource::resolveAdjectivalObject(int where, bool definitelySpeaker, bool inP
 			{
 				lsi->om.salienceFactor -= DISALLOW_SALIENCE;
 				lsi->numMatchedAdjectives = 0;
-				itos(L"BODY_OWNING_BODY[-", -DISALLOW_SALIENCE, lsi->res, L"]");
+				itos(u"BODY_OWNING_BODY[-", -DISALLOW_SALIENCE, lsi->res, u"]");
 			}
 			else if (preferGenderedOwners && lsi->om.salienceFactor > SALIENCE_THRESHOLD && (objects[lsi->om.object].male || objects[lsi->om.object].female))
 			{
 				lsi->om.salienceFactor += 10000;
-				itos(L"GENDERED_BODY_OWNER_PREFERENCE[+", 10000, lsi->res, L"]");
+				itos(u"GENDERED_BODY_OWNER_PREFERENCE[+", 10000, lsi->res, u"]");
 			}
 
 		}
@@ -2849,8 +2853,8 @@ int cSource::resolveAdjectivalObject(int where, bool definitelySpeaker, bool inP
 	excludeSpeakers(where, inPrimaryQuote, inSecondaryQuote);
 	if (debugTrace.traceSpeakerResolution)
 	{
-		wstring tmpstr2;
-		lplog(LOG_RESOLUTION, L"%06d:RESOLVING possessive determiner %s%s [%s minAge %d]", where, phraseString(where, where + 1, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str(), (resolveForSpeaker) ? L"speaker" : L"object", lastGenderedAge);
+		lpwstring tmpstr2;
+		lplog(LOG_RESOLUTION, u"%06d:RESOLVING possessive determiner %s%s [%s minAge %d]", where, phraseString(where, where + 1, tmpstr, true).c_str(), m[where].roleString(tmpstr2).c_str(), (resolveForSpeaker) ? u"speaker" : u"object", lastGenderedAge);
 		printLocalFocusedObjects(where, PRONOUN_OBJECT_CLASS);
 	}
 	chooseBest(where, false, inPrimaryQuote, inSecondaryQuote, resolveForSpeaker, false);
@@ -2900,7 +2904,7 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 		// if at the beginning of the sentence, beginS1 may immediately follow
 		// to herself she[tuppence] said: 
 		int element;
-		if (where && m[where - 1].queryForm(prepositionForm) >= 0 && (where == 1 || isEOS(where - 2)) && (element = m[where + 1].pma.queryPattern(L"__S1")) != -1)
+		if (where && m[where - 1].queryForm(prepositionForm) >= 0 && (where == 1 || isEOS(where - 2)) && (element = m[where + 1].pma.queryPattern(u"__S1")) != -1)
 		{
 			lastBeginS1 = where + 1;
 			futureReference = where + 1 + m[where + 1].pma[element & ~cMatchElement::patternFlag].len;
@@ -2908,12 +2912,12 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 		else
 		{
 			// said Tommy to himself.
-			if (where > 2 && m[where - 1].word->first == L"to" && (m[where - 2].objectRole & NO_ALT_RES_SPEAKER_ROLE))
+			if (where > 2 && m[where - 1].word->first == u"to" && (m[where - 2].objectRole & NO_ALT_RES_SPEAKER_ROLE))
 				verbRel = where - 2;
 			else
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:RESOLVING reflexive %s - no lastBeginS1", where, m[where].word->first.c_str());
+					lplog(LOG_RESOLUTION, u"%06d:RESOLVING reflexive %s - no lastBeginS1", where, m[where].word->first.c_str());
 				// if resolveObject is called before the last containing S1 is hit (in audience resolution)
 				// then we want to reresolve at later time.  
 				m[where].flags &= ~cWordMatch::flagObjectResolved;
@@ -2921,17 +2925,17 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 			}
 		}
 	}
-	const wchar_t* allowedPronouns[] = { L"himself",L"herself",L"itself",L"themselves",NULL };
+	const lpchar_t* allowedPronouns[] = { u"himself",u"herself",u"itself",u"themselves",NULL };
 	int I;
 	for (I = 0; allowedPronouns[I] && m[where].word->first != allowedPronouns[I]; I++);
 	if (!allowedPronouns[I])
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING reflexive %s - not in list of resolvable pronouns", where, m[where].word->first.c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING reflexive %s - not in list of resolvable pronouns", where, m[where].word->first.c_str());
 		m[where].flags &= ~cWordMatch::flagObjectResolved;
 		return -1;
 	}
-	wstring tmpstr;
+	lpwstring tmpstr;
 	bool isMale = false, isFemale = false, isNeuter = false, isPlural = false;
 	switch (I)
 	{
@@ -2949,9 +2953,9 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 			localReferenceObjects = m[verbRel].objectMatches;
 	}
 	// cover the case He himself / She herself / They themselves
-	else if ((I == 0 && m[where - 1].word->first == L"he") ||
-		(I == 1 && m[where - 1].word->first == L"she") ||
-		(I == 3 && m[where - 1].word->first == L"they"))
+	else if ((I == 0 && m[where - 1].word->first == u"he") ||
+		(I == 1 && m[where - 1].word->first == u"she") ||
+		(I == 3 && m[where - 1].word->first == u"they"))
 		localReferenceObjects = m[where - 1].objectMatches;
 	// a reflexive pronoun is bounded tightly.
 	// George hurt himself.
@@ -3000,9 +3004,9 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 	if (debugTrace.traceSpeakerResolution)
 	{
 		if (localReferenceObjects.empty())
-			lplog(LOG_RESOLUTION, L"%06d:No local references from begin S1 position %d.", where, lastBeginS1);
+			lplog(LOG_RESOLUTION, u"%06d:No local references from begin S1 position %d.", where, lastBeginS1);
 		else
-			lplog(LOG_RESOLUTION, L"%06d:Local references from begin S1 position %d:%s", where, lastBeginS1, objectString(localReferenceObjects, tmpstr, true).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:Local references from begin S1 position %d:%s", where, lastBeginS1, objectString(localReferenceObjects, tmpstr, true).c_str());
 	}
 	vector <cLocalFocus>::iterator lsi = localObjects.begin(), lsEnd = localObjects.end();
 	for (; lsi != lsEnd; lsi++)
@@ -3031,19 +3035,19 @@ int cSource::reflexivePronounCoreference(int where, int lastBeginS1, int lastRel
 
 // Format the relPrep chain starting at 'where' into tmpstr (space-separated
 // positions). Stops on -1 or a cycle back to where. Returns tmpstr.c_str().
-wchar_t* cSource::loopString(int where, wstring& tmpstr)
+lpchar_t* cSource::loopString(int where, lpwstring& tmpstr)
 {
 	LFS
 		int relPrep = where;
-	wstring tmp2;
+	lpwstring tmp2;
 	tmpstr.clear();
 	while (relPrep != -1)
 	{
-		tmpstr += itos(relPrep, tmp2) + L" ";
+		tmpstr += itos(relPrep, tmp2) + u" ";
 		relPrep = m[relPrep].relPrep;
 		if (relPrep == where) break;
 	}
-	return (wchar_t*)tmpstr.c_str();
+	return (lpchar_t*)tmpstr.c_str();
 }
 
 // Choose the innermost of lastRelativePhrase / lastBeginS1 / lastQ2 and
@@ -3054,7 +3058,7 @@ int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, cons
 	int end, element;
 	if (lastRelativePhrase > lastBeginS1 && lastRelativePhrase >= lastQ2)
 	{
-		if ((element = m[lastRelativePhrase].pma.queryPattern(L"_REL1", end)) == -1)
+		if ((element = m[lastRelativePhrase].pma.queryPattern(u"_REL1", end)) == -1)
 			return -1;
 		endS1 = lastRelativePhrase + m[lastRelativePhrase].pma[element & ~cMatchElement::patternFlag].len;
 		begin = lastRelativePhrase;
@@ -3062,7 +3066,7 @@ int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, cons
 	if (lastBeginS1 >= lastRelativePhrase && lastBeginS1 >= lastQ2)
 	{
 		if (lastBeginS1 < 0) return 0;
-		if ((element = m[lastBeginS1].pma.queryPattern(L"__S1", end)) == -1)
+		if ((element = m[lastBeginS1].pma.queryPattern(u"__S1", end)) == -1)
 			return -1;
 		endS1 = lastBeginS1 + m[lastBeginS1].pma[element & ~cMatchElement::patternFlag].len;
 		begin = lastBeginS1;
@@ -3070,7 +3074,7 @@ int cSource::coreferenceFilterDetermineBeginAndEndS1(const int lastBeginS1, cons
 	if (lastQ2 > lastRelativePhrase && lastQ2 > lastBeginS1)
 	{
 		if (lastQ2 < 0) return 0;
-		if ((element = m[lastQ2].pma.queryPattern(L"_Q2", end)) == -1)
+		if ((element = m[lastQ2].pma.queryPattern(u"_Q2", end)) == -1)
 			return -1;
 		endS1 = lastQ2 + m[lastQ2].pma[element & ~cMatchElement::patternFlag].len;
 		begin = lastQ2;
@@ -3086,7 +3090,7 @@ bool cSource::noCoreferenceFound(const int where, const int endS1)
 	{
 		// where is past the end of the last S1, but not past an EOS (because lastBeginS1 is reset on EOS)
 		// if no conjunction after sentence end, return.
-		if (m[endS1].queryWinnerForm(conjunctionForm) < 0 && m[endS1].queryWinnerForm(coordinatorForm) < 0 && m[endS1].word->first != L"and") 
+		if (m[endS1].queryWinnerForm(conjunctionForm) < 0 && m[endS1].queryWinnerForm(coordinatorForm) < 0 && m[endS1].word->first != u"and") 
 			return true;
 		int searchPosition = endS1;
 		// get the pattern that covers the most of the rest of the sentence.
@@ -3109,24 +3113,24 @@ bool cSource::noCoreferenceFound(const int where, const int endS1)
 void cSource::disallowCompoundReferences(const int where, vector <int>& disallowedReferences)
 {
 	int compoundLoop = 0, wcpo;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	for (int wcp = m[where].previousCompoundPartObject; wcp >= 0; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
 	{
 		if (compoundLoop > 10)
 			break;
 		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
 		if (wcpo >= 0 && (m[wcp].objectMatches.size() == 1 || objects[wcpo].plural) && objects[wcpo].objectClass != BODY_OBJECT_CLASS)
 			for (unsigned int I = 0; I < m[wcp].objectMatches.size(); I++)
 				if (disallowReference(wcpo = m[wcp].objectMatches[I].object, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1m)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (1m)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
 	}
 	for (int wcp = m[where].nextCompoundPartObject; wcp >= 0; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
 	{
 		if (compoundLoop > 10)
 			break;
 		if (disallowReference(wcpo = m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (2)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 5 ruled out %d:%s (2)", where, wcp, objectString(wcpo, tmpstr, false).c_str());
 	}
 }
 
@@ -3136,12 +3140,12 @@ void cSource::disallowCompoundReferences(const int where, vector <int>& disallow
 // Rule 2: add object1 and object2 to disallowedReferences
 void cSource::rule2DisallowObjects(const int where, const int directObject, const int indirectObject, const int indirectObjectPosition, vector <int>& disallowedReferences)
 {
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (disallowReference(directObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out directObject %s",
+		lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 ruled out directObject %s",
 			where, objectString(directObject, tmpstr, false).c_str());
 	if (disallowReference(indirectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 ruled out indirectObject %s at %d",
+		lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 ruled out indirectObject %s at %d",
 			where, objectString(indirectObject, tmpstr, false).c_str(), indirectObjectPosition);
 }
 
@@ -3152,7 +3156,7 @@ void cSource::rule2DisallowObjects(const int where, const int directObject, cons
 // She sat near her.  NOT She sat him near her.
 void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, const int endS1, const int directObjectPosition, vector <int>& disallowedReferences)
 {
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (directObjectPosition < 0 && whereVerb >= 0 && m[whereVerb].relPrep >= 0)
 	{
 		// get the first prep immediately after the verb
@@ -3162,7 +3166,7 @@ void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, cons
 			relPrep = m[relPrep].relPrep;
 			if (prepLoop++ > 20)
 			{
-				lplog(LOG_ERROR, L"%06d:Prep loop occurred (8) %s.", relPrep, loopString(relPrep, tmpstr));
+				lplog(LOG_ERROR, u"%06d:Prep loop occurred (8) %s.", relPrep, loopString(relPrep, tmpstr));
 				break;
 			}
 		}
@@ -3170,12 +3174,12 @@ void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, cons
 		{
 			int object, I = m[relPrep].getRelObject();
 			if (I >= 0 && (m[I].objectRole & PREP_OBJECT_ROLE) && disallowReference(object = m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 3 ruled out prepObject %s at %d(%d)",
+				lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 3 ruled out prepObject %s at %d(%d)",
 					where, objectString(object, tmpstr, false).c_str(), I, endS1);
 			relPrep = m[relPrep].relPrep;
 			if (prepLoop++ > 20)
 			{
-				lplog(LOG_ERROR, L"%06d:Prep loop occurred (9) %s.", relPrep, loopString(relPrep, tmpstr));
+				lplog(LOG_ERROR, u"%06d:Prep loop occurred (9) %s.", relPrep, loopString(relPrep, tmpstr));
 				break;
 			}
 		}
@@ -3194,7 +3198,7 @@ void cSource::rule3DisallowPrepObject(const int where, const int whereVerb, cons
 // subjectCataRestriction so a later cataphoric subject is also banned.
 void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int whereVerb, const int whereSubject, const int rObject, const int subjectObject, const int directObject, const int directObjectPosition, vector <int>& disallowedReferences, int& subjectCataRestriction)
 {
-	wstring tmpstr;
+	lpwstring tmpstr;
 	int numPrepositionalEmbeddings = 0;
 	if (m[where].objectRole & PREP_OBJECT_ROLE)
 	{
@@ -3205,7 +3209,7 @@ void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int
 			relPrep = m[relPrep].relPrep;
 			if (prepLoop++ > 20)
 			{
-				lplog(LOG_ERROR, L"%06d:Prep loop occurred (10) %s.", relPrep, loopString(relPrep, tmpstr));
+				lplog(LOG_ERROR, u"%06d:Prep loop occurred (10) %s.", relPrep, loopString(relPrep, tmpstr));
 				break;
 			}
 		}
@@ -3215,7 +3219,7 @@ void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int
 			relPrep = m[relPrep].relPrep;
 			if (prepLoop++ > 20)
 			{
-				lplog(LOG_ERROR, L"%06d:Prep loop occurred (11) %s.", relPrep, loopString(relPrep, tmpstr));
+				lplog(LOG_ERROR, u"%06d:Prep loop occurred (11) %s.", relPrep, loopString(relPrep, tmpstr));
 				break;
 			}
 		}
@@ -3227,28 +3231,28 @@ void cSource::rule23ObjectDisallowSubjectOrPrepObject(const int where, const int
 			(!(m[where].objectRole & SUBJECT_ROLE) && (directObject < 0 || !(m[directObjectPosition].objectRole & SUBJECT_ROLE)))))
 	{
 		if (disallowReference(subjectObject, disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject %s", where, objectString(subjectObject, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject %s", where, objectString(subjectObject, tmpstr, false).c_str());
 		// handle compound subjects
 		int compoundLoop = 0;
 		for (int wcp = m[where].previousCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].previousCompoundPartObject, compoundLoop++)
 			if (wcp != whereSubject &&
 				disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
 		for (int wcp = m[where].nextCompoundPartObject; wcp >= 0 && compoundLoop < 10; wcp = m[wcp].nextCompoundPartObject, compoundLoop++)
 			if (wcp != whereSubject &&
 				disallowReference(m[wcp].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 or 3 (compoundSubject) ruled out subjectObject %s", where, objectString(m[wcp].getObject(), tmpstr, false).c_str());
 		// more multiple subjects - MNOUN
 		for (unsigned int I = whereSubject + 1; I < (signed)m.size() && (m[I].objectRole & MNOUN_ROLE) != 0; I++)
 			if (disallowReference(m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 (multipleSubject MNOUN) ruled out subjectObject %s", where, objectString(m[I].getObject(), tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 or 3 (multipleSubject MNOUN) ruled out subjectObject %s", where, objectString(m[I].getObject(), tmpstr, false).c_str());
 		// if personalPronoun, this must not be of form she..her or he..him, where subject has been matched with more than one object.
 		if ((m[whereSubject].queryForm(personalPronounForm) >= 0 && m[where].queryForm(personalPronounAccusativeForm) < 0) ||// must tightly constrict this, because it must not be an indefinite pronoun
 			(m[whereSubject].objectMatches.size() == 1 &&
 				(!objects[subjectObject].plural || objects[subjectObject].objectClass == BODY_OBJECT_CLASS)))
 			for (vector<cOM>::iterator mo = m[whereSubject].objectMatches.begin(), moEnd = m[whereSubject].objectMatches.end(); mo != moEnd; mo++)
 				if (disallowReference(mo->object, disallowedReferences) && debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject matchingObject %s",
+					lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 2 or 3 ruled out subjectObject matchingObject %s",
 						where, objectString(*mo, tmpstr, false).c_str());
 		// if subject is not definitely determined (more than one match)
 		// if subject is not plural
@@ -3265,19 +3269,19 @@ void cSource::rule4MetaNameEquivalenceSameNounPattern(const int where, const int
 {
 	int maxEnd, nameEnd = -1, element;
 	idExemption = -1;
-	wstring tmpstr;
-	if ((element = queryPattern(where, L"_META_NAME_EQUIVALENCE", maxEnd)) != -1)
+	lpwstring tmpstr;
+	if ((element = queryPattern(where, u"_META_NAME_EQUIVALENCE", maxEnd)) != -1)
 	{
 		int whereMNE = where + pema[element].begin;
-		if ((element = m[whereMNE].pma.queryPattern(L"_META_NAME_EQUIVALENCE", nameEnd)) != -1)
+		if ((element = m[whereMNE].pma.queryPattern(u"_META_NAME_EQUIVALENCE", nameEnd)) != -1)
 		{
 			vector < vector <cTagLocation> > tagSets;
-			if (startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, true, true, L"name equivalence coref filter") > 0)
+			if (startCollectTags(true, metaNameEquivalenceTagSet, whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd, tagSets, true, true, u"name equivalence coref filter") > 0)
 				for (unsigned int J = 0; J < tagSets.size(); J++)
 				{
 					if (debugTrace.traceNameResolution)
-						printTagSet(LOG_RESOLUTION, L"MNE", J, tagSets[J], whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
-					int primaryTag = findOneTag(tagSets[J], L"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSets[J], L"NAME_SECONDARY", -1);
+						printTagSet(LOG_RESOLUTION, u"MNE", J, tagSets[J], whereMNE, m[whereMNE].pma[element & ~cMatchElement::patternFlag].pemaByPatternEnd);
+					int primaryTag = findOneTag(tagSets[J], u"NAME_PRIMARY", -1), secondaryTag = findOneTag(tagSets[J], u"NAME_SECONDARY", -1);
 					if (primaryTag < 0 || secondaryTag < 0) 
 						continue;
 					int wherePrimary = tagSets[J][primaryTag].sourcePosition, whereSecondary = tagSets[J][secondaryTag].sourcePosition;
@@ -3296,7 +3300,7 @@ void cSource::rule4MetaNameEquivalenceSameNounPattern(const int where, const int
 	int IP, NEnd = objects[rObject].end;
 	for (IP = objects[rObject].begin; IP < NEnd; IP++)
 		if (m[IP].getObject() != rObject && IP != idExemption && disallowReference(m[IP].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Disallowed coreferences from begin S1 where %d Lappin and Leass 2.1.1 RULE 4: %s",
+			lplog(LOG_RESOLUTION, u"%06d:Disallowed coreferences from begin S1 where %d Lappin and Leass 2.1.1 RULE 4: %s",
 				where, lastBeginS1, objectString(m[IP].getObject(), tmpstr, false).c_str());
 }
 
@@ -3323,7 +3327,7 @@ bool cSource::getMixedPlurality(const int begin, const int endS1)
 void cSource::scanEntireCompoundObject(const int where, const int rObject, const int idExemption, vector <int>& disallowedReferences)
 {
 	int wcpBegin, wcpEnd, maxEnd, compoundLoop = 0;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	for (wcpBegin = where; m[wcpBegin].previousCompoundPartObject >= 0 && compoundLoop < 10; wcpBegin = m[wcpBegin].previousCompoundPartObject, compoundLoop++);
 	for (wcpEnd = where; m[wcpEnd].nextCompoundPartObject >= 0 && compoundLoop < 10; wcpEnd = m[wcpEnd].nextCompoundPartObject, compoundLoop++);
 	if ((m[wcpBegin].objectRole & PREP_OBJECT_ROLE) && m[wcpBegin].relPrep > 0 && ((m[m[wcpBegin].relPrep - 1].objectRole) & (OBJECT_ROLE | SUBJECT_ROLE)))
@@ -3344,22 +3348,22 @@ void cSource::scanEntireCompoundObject(const int where, const int rObject, const
 	}
 	else
 		wcpBegin = m[wcpBegin].beginObjectPosition;
-	if (m[wcpEnd].beginObjectPosition >= 0 && queryPattern(m[wcpEnd].beginObjectPosition, L"__NOUN", maxEnd) != -1)
+	if (m[wcpEnd].beginObjectPosition >= 0 && queryPattern(m[wcpEnd].beginObjectPosition, u"__NOUN", maxEnd) != -1)
 		wcpEnd = m[wcpEnd].beginObjectPosition + maxEnd;
 	else
 		wcpEnd = m[wcpEnd].endObjectPosition;
 	int o;
 	for (int IP = where; IP >= wcpBegin; IP--)
 	{
-		if (m[IP].word->first == L",") break;
+		if (m[IP].word->first == u",") break;
 		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
 	}
 	for (int IP = where + 1; IP < wcpEnd; IP++)
 	{
-		if (m[IP].word->first == L",") break;
+		if (m[IP].word->first == u",") break;
 		if ((o = m[IP].getObject()) != rObject && IP != idExemption && disallowReference(o, disallowedReferences) && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%d:Disallowed coreference L&L 2.1.1 RULE 4: %s", where, IP, objectString(o, tmpstr, true).c_str());
 	}
 }
 
@@ -3440,7 +3444,7 @@ int cSource::coreferenceFilterLL2345(int where, int rObject, vector <int>& disal
 	}
 	else
 		directObject = indirectObjectPosition = indirectObject = -1;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (subjectObject >= 0)
 	{
 		bool isIdentityRelation = (m[whereSubject].objectRole & IS_OBJECT_ROLE) != 0;
@@ -3481,9 +3485,9 @@ void cSource::coreferenceFilterLL5(int where, vector <int>& disallowedReferences
 			for (; I >= 0 && !isEOS(I); I--)
 				if (m[I].getObject() >= 0 && (m[I].objectRole & PREP_OBJECT_ROLE | OBJECT_ROLE) == OBJECT_ROLE)
 					break;
-			wstring tmpstr;
+			lpwstring tmpstr;
 			if ((m[I].objectRole & PREP_OBJECT_ROLE | OBJECT_ROLE) == OBJECT_ROLE && disallowReference(m[I].getObject(), disallowedReferences) && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d: L&L 2.1.1 RULE 5 ruled out object of possessive %d:%s",
+				lplog(LOG_RESOLUTION, u"%06d: L&L 2.1.1 RULE 5 ruled out object of possessive %d:%s",
 					where, I, objectString(m[I].getObject(), tmpstr, false).c_str());
 		}
 }
@@ -3504,27 +3508,27 @@ void cSource::coreferenceFilterLL5(int where, vector <int>& disallowedReferences
 int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& disallowedReferences)
 {
 	LFS
-		wstring tmpstr;
+		lpwstring tmpstr;
 	if (lastBeginS1 < 0)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - no lastBeginS1", P, m[P].word->first.c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - no lastBeginS1", P, m[P].word->first.c_str());
 		return -1;
 	}
-	const wchar_t* allowedPronouns[] = { L"her",L"his",L"its",L"their",NULL };
+	const lpchar_t* allowedPronouns[] = { u"her",u"his",u"its",u"their",NULL };
 	int I;
 	for (I = 0; allowedPronouns[I] && m[P].word->first != allowedPronouns[I]; I++);
 	if (!allowedPronouns[I])
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - not in list of resolvable pronouns", P, m[P].word->first.c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - not in list of resolvable pronouns", P, m[P].word->first.c_str());
 		return -1;
 	}
 	int NEnd = -1, element;
-	if ((element = queryPattern(P, L"__NOUN", NEnd)) == -1)
+	if ((element = queryPattern(P, u"__NOUN", NEnd)) == -1)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - not in NOUN pattern", P, m[P].word->first.c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - not in NOUN pattern", P, m[P].word->first.c_str());
 		return -1;
 	}
 	// This was restricted to preposition phrases 6/1/2007 because of NOUNs like "F", in which this rule is harmful.
@@ -3542,7 +3546,7 @@ int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& d
 	if (PObject < 0)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - object is not referencable", P, m[P].word->first.c_str());
+			lplog(LOG_RESOLUTION, u"%06d:RESOLVING pronounCoreferenceFilterLL6 %s - object is not referencable", P, m[P].word->first.c_str());
 		return -1;
 	}
 	if ((m[P].objectRole & SUBJECT_ROLE) && !(m[P].objectRole & PREP_OBJECT_ROLE) && objects[PObject].objectClass == BODY_OBJECT_CLASS)
@@ -3554,10 +3558,10 @@ int cSource::pronounCoreferenceFilterLL6(int P, int lastBeginS1, vector <int>& d
 	}
 	if (debugTrace.traceSpeakerResolution && disallowedReferences.size())
 	{
-		lplog(LOG_RESOLUTION, L"%06d:LL6 Disallowed references:", P);
+		lplog(LOG_RESOLUTION, u"%06d:LL6 Disallowed references:", P);
 		for (unsigned int J = 0; J < disallowedReferences.size(); J++)
 		{
-			lplog(LOG_RESOLUTION, L"%06d:%s", J, objectString(disallowedReferences[J], tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%s", J, objectString(disallowedReferences[J], tmpstr, false).c_str());
 		}
 	}
 	return 0;
@@ -3570,59 +3574,59 @@ bool cSource::resolvePronounSpecialCases(const int where, const bool definitelyS
 	const int lastBeginS1, const int lastRelativePhrase, const int lastQ2, const int lastVerb, 
 	const bool resolveForSpeaker, const bool avoidCurrentSpeaker, const bool limitTwo, vector <cOM>& objectMatches)
 {
-	wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
-	wstring tmpstr;
+	lpwstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
+	lpwstring tmpstr;
 	// you are a very important person
 	if (inPrimaryQuote && (m[where].objectRole & IS_OBJECT_ROLE) && m[where].relSubject >= 0 &&
 		(m[m[where].relSubject].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON)) == SECOND_PERSON)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:rejected match (IS) with second person subject.", where);
+			lplog(LOG_RESOLUTION, u"%06d:rejected match (IS) with second person subject.", where);
 		return false;
 	}
 	// handle 'one' of the vacant seats
-	if ((word == L"one" || word == L"both" || word == L"most" || word == L"more" || word == L"less" || word == L"any" || word == L"all") &&
-		m.size() > (unsigned)where + 2 && m[where + 1].word->first == L"of" && m[where + 2].principalWherePosition >= 0)
+	if ((word == u"one" || word == u"both" || word == u"most" || word == u"more" || word == u"less" || word == u"any" || word == u"all") &&
+		m.size() > (unsigned)where + 2 && m[where + 1].word->first == u"of" && m[where + 2].principalWherePosition >= 0)
 	{
 		int forwardObjectPosition = m[where + 2].principalWherePosition;
 		if (m[forwardObjectPosition].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON))
 			tryGenderedSubgroup(forwardObjectPosition, objectMatches, objects.begin() + m[forwardObjectPosition].getObject(), -1, true);
 		else
 		{
-			resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == L"both");
+			resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == u"both");
 			narrowGender(forwardObjectPosition, m[where].getObject());
 			if (m[forwardObjectPosition].objectMatches.size())
 			{
 				objectMatches = m[forwardObjectPosition].objectMatches;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:added match (3) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:added match (3) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 			}
 			else if (m[forwardObjectPosition].getObject() >= 0)
 			{
 				objectMatches.push_back(cOM(m[forwardObjectPosition].getObject(), SALIENCE_THRESHOLD));
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:added match (4) %s.", where, objectString(m[forwardObjectPosition].getObject(), tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:added match (4) %s.", where, objectString(m[forwardObjectPosition].getObject(), tmpstr, false).c_str());
 			}
 		}
 		return false;
 	}
 	// you both 
-	if (word == L"both" && where > 0 && m[where - 1].word->first == L"you")
+	if (word == u"both" && where > 0 && m[where - 1].word->first == u"you")
 		return false;
 	// all others - too ambiguous, introduces irrelevant objects into localObjects
-	if (word == L"others" && where > 0 && m[where - 1].word->first == L"all")
+	if (word == u"others" && where > 0 && m[where - 1].word->first == u"all")
 		return false;
 	// at least,... at all.
-	if ((word == L"least" || word == L"most" || word == L"all") && where > 0 && m[where - 1].word->first == L"at")
+	if ((word == u"least" || word == u"most" || word == u"all") && where > 0 && m[where - 1].word->first == u"at")
 		return false;
-	if (word == L"all" && where > 0 && m[where - 1].word->first == L"about")
+	if (word == u"all" && where > 0 && m[where - 1].word->first == u"about")
 		return false;
 	// a night's rest
-	if (word == L"rest" && m[where].beginObjectPosition != where && m[where].beginObjectPosition >= 0 &&
-		m[m[where].beginObjectPosition].word->first == L"a")
+	if (word == u"rest" && m[where].beginObjectPosition != where && m[where].beginObjectPosition >= 0 &&
+		m[m[where].beginObjectPosition].word->first == u"a")
 		return false;
 	// such a look of ...
-	if (word == L"such" && where + 1 < (signed)m.size() && (m[where + 1].word->first == L"a" || m[where + 1].word->first == L"an"))
+	if (word == u"such" && where + 1 < (signed)m.size() && (m[where + 1].word->first == u"a" || m[where + 1].word->first == u"an"))
 		return false;
 	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	if (limitTwo && tryGenderedSubgroup(where, objectMatches, object, -1, limitTwo))
@@ -3647,8 +3651,8 @@ bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const 
 		// They[words] were uttered by Boris and they[words] were : �QS Mr . Brown . �
 		(!object->plural || objects[m[m[where].getRelObject()].getObject()].plural))
 	{
-		wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
-		wstring tmpstr, tmpstr2;
+		lpwstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
+		lpwstring tmpstr, tmpstr2;
 		// it was opposite the door / He was near Bobby 
 		// no preposition, but incorrect parsing means prep was turned into an adverb (opposite, near means the object is NOT the subject)
 		if (m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].relPrep < 0 && (m[m[m[where].getRelObject()].beginObjectPosition - 1].word->second.flags & cSourceWordInfo::prepMoveType))
@@ -3660,19 +3664,19 @@ bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const 
 			m[m[wpo].beginObjectPosition - 1].setRelObject(wpo);
 			m[where].setRelObject(-1);
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:rejected match (IS) %s with %s.", where, objectString(objectMatches, tmpstr, false).c_str(), objectString(object, tmpstr2, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:rejected match (IS) %s with %s.", where, objectString(objectMatches, tmpstr, false).c_str(), objectString(object, tmpstr2, false).c_str());
 		}
 		else
 		{
 			int forwardObjectPosition = m[where].getRelObject();
-			resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == L"both");
+			resolveObject(forwardObjectPosition, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, word == u"both");
 			narrowGender(forwardObjectPosition, m[where].getObject());
 			if (m[forwardObjectPosition].objectMatches.size())
 				objectMatches = m[forwardObjectPosition].objectMatches;
 			else
 				objectMatches.push_back(cOM(m[forwardObjectPosition].getObject(), SALIENCE_THRESHOLD));
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:added match (IS) %s with %s.", where, objectString(objectMatches, tmpstr, false).c_str(), objectString(object, tmpstr2, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:added match (IS) %s with %s.", where, objectString(objectMatches, tmpstr, false).c_str(), objectString(object, tmpstr2, false).c_str());
 			return false;
 		}
 	}
@@ -3685,13 +3689,13 @@ bool cSource::resolveGenderAndNumberMatchedIsRolePronoun(const int where, const 
 		objects[m[m[where].getRelObject()].getObject()].objectClass == NAME_OBJECT_CLASS &&
 		objects[m[m[where].getRelObject()].getObject()].numEncounters > 1)
 	{
-		wstring tmpstr, tmpstr2;
+		lpwstring tmpstr, tmpstr2;
 		if (m[m[where].getRelObject()].objectMatches.size())
 			objectMatches = m[m[where].getRelObject()].objectMatches;
 		else
 			objectMatches.push_back(cOM(m[m[where].getRelObject()].getObject(), SALIENCE_THRESHOLD));
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:match gendered (IS) %s to %s", where, objectString(object, tmpstr2, false).c_str(), whereString(m[where].getRelObject(), tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:match gendered (IS) %s to %s", where, objectString(object, tmpstr2, false).c_str(), whereString(m[where].getRelObject(), tmpstr, false).c_str());
 		return false;
 	}
 	return true;
@@ -3707,12 +3711,12 @@ bool cSource::identifyPleonasticIt(const int where, vector <cOM>& objectMatches)
 	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	if ((!(object->male || object->female) && object->neuter && !object->plural) &&
 		m[where].relPrep >= 0 && m[where].relPrep == m[where].getRelVerb() + 1 &&
-		m[m[where].relPrep].getRelObject() >= 0 && m[m[m[where].relPrep].getRelObject()].endObjectPosition >= 0 && queryPattern(m[m[m[where].relPrep].getRelObject()].endObjectPosition, L"_REL1", maxEnd) != -1 &&
+		m[m[where].relPrep].getRelObject() >= 0 && m[m[m[where].relPrep].getRelObject()].endObjectPosition >= 0 && queryPattern(m[m[m[where].relPrep].getRelObject()].endObjectPosition, u"_REL1", maxEnd) != -1 &&
 		(m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) &&
 		m[where].getRelObject() < 0)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:no match for pleonastic it", where);
+			lplog(LOG_RESOLUTION, u"%06d:no match for pleonastic it", where);
 		m[where].objectRole |= SUBJECT_PLEONASTIC_ROLE;
 		return false;
 	}
@@ -3720,10 +3724,10 @@ bool cSource::identifyPleonasticIt(const int where, vector <cOM>& objectMatches)
 		(m[where].objectRole & (IS_OBJECT_ROLE | SUBJECT_ROLE)) == (IS_OBJECT_ROLE | SUBJECT_ROLE) &&
 		m[where].getRelObject() >= 0 && m[m[where].getRelObject()].beginObjectPosition >= 0 &&
 		((m[m[where].getRelObject()].word->second.timeFlags & T_UNIT) ||
-			(m[m[m[where].getRelObject()].beginObjectPosition].pma.queryPattern(L"_DATE") != -1 || m[m[m[where].getRelObject()].beginObjectPosition].pma.queryPattern(L"_TIME") != -1)))
+			(m[m[m[where].getRelObject()].beginObjectPosition].pma.queryPattern(u"_DATE") != -1 || m[m[m[where].getRelObject()].beginObjectPosition].pma.queryPattern(u"_TIME") != -1)))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:time match for pleonastic it (2)", where);
+			lplog(LOG_RESOLUTION, u"%06d:time match for pleonastic it (2)", where);
 		objectMatches.push_back(cOM(m[m[where].getRelObject()].getObject(), SALIENCE_THRESHOLD));
 		objects[m[m[where].getRelObject()].getObject()].setIsTimeObject(true);
 		m[where].objectRole |= SUBJECT_PLEONASTIC_ROLE;
@@ -3745,9 +3749,9 @@ bool cSource::resolvePronounIsPlace(const int where, vector <cOM>& objectMatches
 		for (vector <cLocalFocus>::iterator lsi = localObjects.begin(); lsi != localObjects.end(); lsi++)
 			if (lsi->physicallyPresent && objects[lsi->om.object].getSubType() >= 0 && lsi->getTotalAge() < 4)
 				objectMatches.push_back(cOM(lsi->om.object, SALIENCE_THRESHOLD));
-		wstring tmpstr;
+		lpwstring tmpstr;
 		if (debugTrace.traceSpeakerResolution && objectMatches.size())
-			lplog(LOG_RESOLUTION, L"%06d:added place match (IS) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:added place match (IS) %s.", where, objectString(objectMatches, tmpstr, false).c_str());
 		if (objectMatches.size()) 
 			return false;
 	}
@@ -3770,8 +3774,8 @@ bool cSource::resolveAdjectivalNonSubject(int where, int lastBeginS1, vector <cO
 				if (m[subjectWhere].objectMatches.size() <= 1 && (s = (m[subjectWhere].objectMatches.size() == 1) ? m[subjectWhere].objectMatches[0].object : m[subjectWhere].getObject()) >= 0 &&
 					objects[s].matchGender(objects[o]) && objects[s].plural == objects[o].plural)
 				{
-					wstring tmpstr,tmpstr2;
-					lplog(LOG_RESOLUTION, L"%06d:possessive subject=%d:%s match to %d:%s.",
+					lpwstring tmpstr,tmpstr2;
+					lplog(LOG_RESOLUTION, u"%06d:possessive subject=%d:%s match to %d:%s.",
 						where, subjectWhere, objectString(s, tmpstr, true).c_str(), where, objectString(o, tmpstr2, true).c_str());
 					objectMatches.push_back(cOM(s, SALIENCE_THRESHOLD));
 					return false;
@@ -3791,11 +3795,11 @@ void cSource::disallowSpeakerOfPreviousQuestion(int where)
 	if ((m[where].objectRole & SUBJECT_ROLE) && !object->plural && (sqi = questionSubjectAgreementMap.find(where)) != questionSubjectAgreementMap.end() &&
 		(m[sqi->second].flags & cWordMatch::flagDefiniteResolveSpeakers) && (lsi = in(m[sqi->second].objectMatches[0].object)) != localObjects.end())
 	{
-		wstring tmpstr,tmpstr2,tmpstr3;
+		lpwstring tmpstr,tmpstr2,tmpstr3;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:subject %s should not match question speaker %d:%s - %s", where, objectString(object, tmpstr, true).c_str(), sqi->second, objectString(lsi->om, tmpstr2, true).c_str(), speakerResolutionFlagsString(m[sqi->second].flags, tmpstr3).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:subject %s should not match question speaker %d:%s - %s", where, objectString(object, tmpstr, true).c_str(), sqi->second, objectString(lsi->om, tmpstr2, true).c_str(), speakerResolutionFlagsString(m[sqi->second].flags, tmpstr3).c_str());
 		lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-		itos(L"-SPEAKER_OF_PREVIOUS_QUESTION[-", DISALLOW_SALIENCE, lsi->res, L"]");
+		itos(u"-SPEAKER_OF_PREVIOUS_QUESTION[-", DISALLOW_SALIENCE, lsi->res, u"]");
 	}
 }
 
@@ -3803,19 +3807,19 @@ void cSource::disallowSpeakerOfPreviousQuestion(int where)
 // third-person pronoun prefers someone else.
 void cSource::disallowPOV(int where, const bool inPrimaryQuote)
 {
-	wstring tmpstr, tmpstr2;
-	if ((m[where].beginObjectPosition < 0 || m[m[where].beginObjectPosition].word->first != L"the") &&
+	lpwstring tmpstr, tmpstr2;
+	if ((m[where].beginObjectPosition < 0 || m[m[where].beginObjectPosition].word->first != u"the") &&
 		m[where].queryForm(indefinitePronounForm) >= 0 && currentSpeakerGroup < speakerGroups.size() && speakerGroups[currentSpeakerGroup].povSpeakers.size() && !inPrimaryQuote)
 	{
 		vector <cLocalFocus>::iterator lsi;
 		for (set <int>::iterator oi = speakerGroups[currentSpeakerGroup].povSpeakers.begin(), oiEnd = speakerGroups[currentSpeakerGroup].povSpeakers.end(); oi != oiEnd; oi++)
 			if ((lsi = in(*oi)) != localObjects.end())
 			{
-				wstring tmpstr3;
+				lpwstring tmpstr3;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:POV %s should not match", where, objectString(*oi, tmpstr, true).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:POV %s should not match", where, objectString(*oi, tmpstr, true).c_str());
 				lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-				itos(L"-POVIND[-", DISALLOW_SALIENCE, lsi->res, L"]");
+				itos(u"-POVIND[-", DISALLOW_SALIENCE, lsi->res, u"]");
 			}
 	}
 }
@@ -3844,7 +3848,7 @@ void cSource::excludeMixedPlurality(int where)
 			if ((lsi = in(m[whereSubject].objectMatches[o].object)) != localObjects.end())
 			{
 				lsi->om.salienceFactor -= 10000;
-				lsi->res += L"MIXED_PLURALITY[-10000]";
+				lsi->res += u"MIXED_PLURALITY[-10000]";
 			}
 	}
 }
@@ -3899,7 +3903,7 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 	{
 		lastGenderedAge--;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"lastGenderedAge is de-aged by one (%d).", lastGenderedAge);
+			lplog(LOG_RESOLUTION, u"lastGenderedAge is de-aged by one (%d).", lastGenderedAge);
 	}
 	excludeMixedPlurality(where);
 	adjustSaliencesByParallelRoleAndPlurality(where, inPrimaryQuote, resolveForSpeaker, lastGenderedAge);
@@ -3910,8 +3914,8 @@ bool cSource::resolvePronoun(int where, bool definitelySpeaker, bool inPrimaryQu
 	excludeSpeakers(where, inPrimaryQuote, inSecondaryQuote);
 	if (debugTrace.traceSpeakerResolution)
 	{
-		wstring tmpstr, tmpstr2;
-		lplog(LOG_RESOLUTION, L"%06d:RESOLVING pronoun %s%s [%s minAge %d]", where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str(), (resolveForSpeaker) ? L"speaker" : L"object", lastGenderedAge);
+		lpwstring tmpstr, tmpstr2;
+		lplog(LOG_RESOLUTION, u"%06d:RESOLVING pronoun %s%s [%s minAge %d]", where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str(), (resolveForSpeaker) ? u"speaker" : u"object", lastGenderedAge);
 		printLocalFocusedObjects(where, PRONOUN_OBJECT_CLASS);
 	}
 	return true;
@@ -3926,21 +3930,21 @@ void cSource::setResolved(int where, vector <cLocalFocus>::iterator lsi, bool is
 		if (m[where].getObject() != lsi->om.object || objects[lsi->om.object].firstLocation != where) // if this is not the first time the object is encountered
 			lsi->resetAge(objectToBeMatchedInQuote);
 	lsi->lastRoleSalience = getRoleSalience(m[where].objectRole);
-	wstring tmpstr;
+	lpwstring tmpstr;
 	if (!lsi->physicallyPresent && isPhysicallyPresent)
 	{
 		if (!lsi->physicallyPresent && isPhysicallyPresent &&
 			((m[where].objectRole & SECONDARY_SPEAKER_ROLE) ||
-				((m[where].objectRole & IN_SECONDARY_QUOTE_ROLE) && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].getMainEntry()->first == L"am") ||
+				((m[where].objectRole & IN_SECONDARY_QUOTE_ROLE) && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].getMainEntry()->first == u"am") ||
 				((m[where].objectRole & IN_SECONDARY_QUOTE_ROLE) && m[where].getObject() >= 0 && objects[m[where].getObject()].whereRelativeClause >= 0 &&
-					m[objects[m[where].getObject()].whereRelativeClause].getRelVerb() >= 0 && m[m[objects[m[where].getObject()].whereRelativeClause].getRelVerb()].getMainEntry()->first == L"am")))
+					m[objects[m[where].getObject()].whereRelativeClause].getRelVerb() >= 0 && m[m[objects[m[where].getObject()].whereRelativeClause].getRelVerb()].getMainEntry()->first == u"am")))
 			isPhysicallyPresent = false;
 		else
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:%s became physically present (1)", where, objectString(lsi->om, tmpstr, true).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:%s became physically present (1)", where, objectString(lsi->om, tmpstr, true).c_str());
 			if (recentExit(lsi))
-				lplog(LOG_RESOLUTION, L"%06d:%s physically present after exit @%d (1)", where, objectString(lsi->om, tmpstr, true).c_str(), lsi->lastExit);
+				lplog(LOG_RESOLUTION, u"%06d:%s physically present after exit @%d (1)", where, objectString(lsi->om, tmpstr, true).c_str(), lsi->lastExit);
 			lsi->whereBecamePhysicallyPresent = where;
 		}
 	}
@@ -3973,12 +3977,12 @@ void cSource::pushSpeakerGroupResolvedObjectToLocalFocus(int where, bool inPrima
 {
 	vector <cLocalFocus>::iterator lsi;
 	if (m[where].getObject() >= 0 && m[where].objectMatches.empty())
-		pushObjectIntoLocalFocus(where, m[where].getObject(), true, false, inPrimaryQuote, inSecondaryQuote, L"keep original resolution through speaker group", lsi);
+		pushObjectIntoLocalFocus(where, m[where].getObject(), true, false, inPrimaryQuote, inSecondaryQuote, u"keep original resolution through speaker group", lsi);
 	eliminateBodyObjectRedundancy(where, m[where].objectMatches);
 	for (vector <cOM>::iterator om = m[where].objectMatches.begin(), omEnd = m[where].objectMatches.end(); om != omEnd; om++)
-		pushObjectIntoLocalFocus(where, om->object, true, false, inPrimaryQuote, inSecondaryQuote, L"keep original resolution through speaker group (2)", lsi);
+		pushObjectIntoLocalFocus(where, om->object, true, false, inPrimaryQuote, inSecondaryQuote, u"keep original resolution through speaker group (2)", lsi);
 	if (m[where].objectMatches.size())
-		moveNyms(where, m[where].objectMatches[0].object, m[where].getObject(), L"UnresolvableObjectResolvedThroughSpeakerGroup");
+		moveNyms(where, m[where].objectMatches[0].object, m[where].getObject(), u"UnresolvableObjectResolvedThroughSpeakerGroup");
 }
 
 // True if this in-quote present-tense mention follows an unquoted paragraph
@@ -4014,7 +4018,7 @@ bool cSource::unresolvableObject(int where, int beginEntirePosition, bool inPrim
 	if (m[where].flags & cWordMatch::flagObjectPleonastic)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:object is pleonastic.", where);
+			lplog(LOG_RESOLUTION, u"%06d:object is pleonastic.", where);
 		return true;
 	}
 	// ignore objects after a relativizer
@@ -4024,11 +4028,11 @@ bool cSource::unresolvableObject(int where, int beginEntirePosition, bool inPrim
 		(beginEntirePosition > 0 && m[beginEntirePosition - 1].queryForm(relativizerForm) >= 0 && m[beginEntirePosition - 1].pma.queryQuestionFlagPattern() != -1)))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:object begins with a relativizer.", where);
+			lplog(LOG_RESOLUTION, u"%06d:object begins with a relativizer.", where);
 		return true;
 	}
 	// objects resolved through speaker groups
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (!(m[where].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)))
 		m[where].flags |= cWordMatch::flagObjectResolved;
 	if (m[where].flags & cWordMatch::flagUnresolvableObjectResolvedThroughSpeakerGroup)
@@ -4055,7 +4059,7 @@ void cSource::reclassifyGenderedOccupationalRoleActivityToNameObject(int where,i
 	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	// Carter nodded thoughtfully .
 	bool hasDeterminer =
-		m[beginEntirePosition].word->first == L"a" || m[beginEntirePosition].word->first == L"the" ||
+		m[beginEntirePosition].word->first == u"a" || m[beginEntirePosition].word->first == u"the" ||
 		m[beginEntirePosition].queryForm(demonstrativeDeterminerForm) >= 0 ||
 		m[beginEntirePosition].queryForm(possessiveDeterminerForm) >= 0 ||
 		m[beginEntirePosition].queryForm(quantifierForm) >= 0 ||
@@ -4076,18 +4080,18 @@ bool cSource::resolveSpecialPronounObjects(int where, bool inPrimaryQuote,bool i
 	int person = m[where].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
 	{
 		int begin = m[where].beginObjectPosition;
-		wstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
+		lpwstring word = (m[where].principalWherePosition >= 0) ? m[m[where].principalWherePosition].word->first : m[where].word->first;
 		// 'there' and 'so' should have special handlers which have not been written yet
 		// also pronouns that never resolve to anything
 		// somebody or anybody may be resolved, but more often they lead to objects having an incorrect salience
-		const wchar_t* doNotResolve[] = { L"no one",L"none",L"nothing",L"nobody",L"someone",L"somebody",L"anyone",L"anybody",L"there",L"so",L"more",L"less",L"this",L"that",NULL };
+		const lpchar_t* doNotResolve[] = { u"no one",u"none",u"nothing",u"nobody",u"someone",u"somebody",u"anyone",u"anybody",u"there",u"so",u"more",u"less",u"this",u"that",NULL };
 		for (unsigned int dNR = 0; doNotResolve[dNR]; dNR++)
 			if (word == doNotResolve[dNR])
 				return true;
 		if ((m[where].flags & cWordMatch::flagAdjectivalObject) &&
-			(word == L"both" || word == L"either" || word == L"neither" || word == L"any" || word == L"all" || word == L"each" || word == L"some"))
+			(word == u"both" || word == u"either" || word == u"neither" || word == u"any" || word == u"all" || word == u"each" || word == u"some"))
 			return true;
-		if (word == L"one" && m[where].endObjectPosition - begin > 1 && m[begin].word->first == L"some")
+		if (word == u"one" && m[where].endObjectPosition - begin > 1 && m[begin].word->first == u"some")
 			return true;
 	}
 	// FIRST_PERSON:  "my", "our", "i", "we", "me", "us", "mine", "ours" -- restrict to speaker or narrator
@@ -4099,26 +4103,26 @@ bool cSource::resolveSpecialPronounObjects(int where, bool inPrimaryQuote,bool i
 			vector <cLocalFocus>::iterator lsi;
 			if (person & FIRST_PERSON)
 			{
-				if (pushObjectIntoLocalFocus(where, 0, true, false, inPrimaryQuote, inSecondaryQuote, L"chooseBest (FS)", lsi))
+				if (pushObjectIntoLocalFocus(where, 0, true, false, inPrimaryQuote, inSecondaryQuote, u"chooseBest (FS)", lsi))
 				{
 					lsi->om.salienceFactor = 0;
-					pushLocalObjectOntoMatches(where, lsi, L"chooseBest (FPS)");
+					pushLocalObjectOntoMatches(where, lsi, u"chooseBest (FPS)");
 					if (!(person & SECOND_PERSON))
 						return true;
 				}
 			}
 			if ((person & SECOND_PERSON) && !(person & FIRST_PERSON))
 			{
-				if (pushObjectIntoLocalFocus(where, 1, true, false, inPrimaryQuote, inSecondaryQuote, L"chooseBest (FS)", lsi))
+				if (pushObjectIntoLocalFocus(where, 1, true, false, inPrimaryQuote, inSecondaryQuote, u"chooseBest (FS)", lsi))
 				{
 					lsi->om.salienceFactor = 0;
-					pushLocalObjectOntoMatches(where, lsi, L"chooseBest (SPS)");
+					pushLocalObjectOntoMatches(where, lsi, u"chooseBest (SPS)");
 					return true;
 				}
 			}
 			// at this point has both first and second person
 			if ((lsi = in(1)) != localObjects.end())
-				pushLocalObjectOntoMatches(where, lsi, L"chooseBest (SPS)");
+				pushLocalObjectOntoMatches(where, lsi, u"chooseBest (SPS)");
 		}
 		m[where].flags &= ~cWordMatch::flagObjectResolved;
 		return true; // Cannot resolve these pronouns until speakers are resolved
@@ -4140,26 +4144,26 @@ bool cSource::resolveFirstPersonSecondPersonPronoun(int where, int person, bool 
 			vector <cLocalFocus>::iterator lsi;
 			if (person & FIRST_PERSON)
 			{
-				if (pushObjectIntoLocalFocus(where, 0, true, false, inPrimaryQuote, inSecondaryQuote, L"chooseBest (FS)", lsi))
+				if (pushObjectIntoLocalFocus(where, 0, true, false, inPrimaryQuote, inSecondaryQuote, u"chooseBest (FS)", lsi))
 				{
 					lsi->om.salienceFactor = 0;
-					pushLocalObjectOntoMatches(where, lsi, L"chooseBest (FPS)");
+					pushLocalObjectOntoMatches(where, lsi, u"chooseBest (FPS)");
 					if (!(person & SECOND_PERSON))
 						return true;
 				}
 			}
 			if ((person & SECOND_PERSON) && !(person & FIRST_PERSON))
 			{
-				if (pushObjectIntoLocalFocus(where, 1, true, false, inPrimaryQuote, inSecondaryQuote, L"chooseBest (FS)", lsi))
+				if (pushObjectIntoLocalFocus(where, 1, true, false, inPrimaryQuote, inSecondaryQuote, u"chooseBest (FS)", lsi))
 				{
 					lsi->om.salienceFactor = 0;
-					pushLocalObjectOntoMatches(where, lsi, L"chooseBest (SPS)");
+					pushLocalObjectOntoMatches(where, lsi, u"chooseBest (SPS)");
 					return true;
 				}
 			}
 			// at this point has both first and second person
 			if ((lsi = in(1)) != localObjects.end())
-				pushLocalObjectOntoMatches(where, lsi, L"chooseBest (SPS)");
+				pushLocalObjectOntoMatches(where, lsi, u"chooseBest (SPS)");
 		}
 		m[where].flags &= ~cWordMatch::flagObjectResolved;
 		return true; // Cannot resolve these pronouns until speakers are resolved
@@ -4172,14 +4176,14 @@ bool cSource::resolveFirstPersonSecondPersonPronoun(int where, int person, bool 
 void cSource::resolveGenderedOccupationalRoleActivityClass(int where, vector <cObject>::iterator object, vector <cOM> &objectMatches, const int wordOrderSensitiveModifier, 
 		bool & chooseFromLocalFocus, const bool isPhysicallyPresent, const bool physicallyEvaluated)
 {
-	wstring tmpstr;
+	lpwstring tmpstr;
 	// if an occupation is introduced, only match against local objects with attributes, not against sex!
 	if (debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:RESOLVING occupation %s", where, objectString(object, tmpstr, false).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:RESOLVING occupation %s", where, objectString(object, tmpstr, false).c_str());
 	if (!object->plural && !unResolvablePosition(m[where].beginObjectPosition))
 	{
 		chooseFromLocalFocus = resolveOccRoleActivityObject(where, objectMatches, object, wordOrderSensitiveModifier, isPhysicallyPresent && physicallyEvaluated);
-		if (objectMatches.empty() && m[where].word->first == L"speaker" && lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].objectMatches.size())
+		if (objectMatches.empty() && m[where].word->first == u"speaker" && lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].objectMatches.size())
 		{
 			int lastSpeaker = m[lastOpeningPrimaryQuote].objectMatches[0].object;
 			vector <cLocalFocus>::iterator lsi = in(lastSpeaker);
@@ -4202,9 +4206,9 @@ void cSource::resolveGenderedOccupationalRoleActivityClass(int where, vector <cO
 bool cSource::resolveIsKindOf(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb,
 	bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo, vector <cOM> &objectMatches)
 {
-	if (isKindOf(where) && where + 2 < (int)m.size() && m[where + 1].word->first == L"of" && m[where + 2].principalWherePosition >= 0)
+	if (isKindOf(where) && where + 2 < (int)m.size() && m[where + 1].word->first == u"of" && m[where + 2].principalWherePosition >= 0)
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		int principalWhere = m[where + 2].principalWherePosition, pobject = m[principalWhere].getObject(), objectClass = (pobject >= 0) ? objects[pobject].objectClass : -1;
 		int begin = m[where].beginObjectPosition;
 		vector <cObject>::iterator object = objects.begin() + m[where].getObject();
@@ -4214,7 +4218,7 @@ bool cSource::resolveIsKindOf(int where, bool definitelySpeaker, bool inPrimaryQ
 			m[principalWhere].beginObjectPosition = begin;
 			m[begin].principalWherePosition = principalWhere;
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:PERSX Incorporating KindOf adjectives into object %s", where, objectString(object, tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:PERSX Incorporating KindOf adjectives into object %s", where, objectString(object, tmpstr, false).c_str());
 			objects[pobject].isKindOf = true;
 		}
 		// the bigger of the two was Whittington
@@ -4256,7 +4260,7 @@ void cSource::deleteCurrentSpeaker(int where)
 {
 	vector < vector <cLocalFocus>::iterator > psls;
 	vector <cLocalFocus>::iterator lsi;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	for (unsigned int J = 0; J < previousSpeakers.size(); J++)
 		if ((lsi = in(previousSpeakers[J])) != localObjects.end() && lsi->om.salienceFactor >= SALIENCE_THRESHOLD)
 			psls.push_back(lsi);
@@ -4273,7 +4277,7 @@ void cSource::deleteCurrentSpeaker(int where)
 				if (psls[J]->om.salienceFactor > maxsf)
 				{
 					if (debugTrace.traceSpeakerResolution)
-						lplog(LOG_RESOLUTION, L"%06d:avoidCurrentSpeaker: reducing %s from %d to %d.", where, objectString(psls[J]->om, tmpstr, true).c_str(), psls[J]->om.salienceFactor, maxsf);
+						lplog(LOG_RESOLUTION, u"%06d:avoidCurrentSpeaker: reducing %s from %d to %d.", where, objectString(psls[J]->om, tmpstr, true).c_str(), psls[J]->om.salienceFactor, maxsf);
 					psls[J]->om.salienceFactor = maxsf;
 				}
 			}
@@ -4288,16 +4292,16 @@ void cSource::avoidFollowingRelativeClauseSubject(int where,vector <cObject>::it
 {
 	if (object->whereRelSubjectClause >= 0 && m[object->whereRelSubjectClause].getObject() >= 0 && m[object->whereRelSubjectClause].principalWherePosition >= 0)
 	{
-		wstring tmpstr;
+		lpwstring tmpstr;
 		vector <cLocalFocus>::iterator lsi;
 		int o = m[m[object->whereRelSubjectClause].principalWherePosition].getObject();
 		vector <cOM>::iterator omi;
 		if (chooseFromLocalFocus && (lsi = in(o)) != localObjects.end())
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:avoidFollowingRelativeClauseSubject: avoiding %s.", where, objectString(lsi->om, tmpstr, true).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:avoidFollowingRelativeClauseSubject: avoiding %s.", where, objectString(lsi->om, tmpstr, true).c_str());
 			lsi->om.salienceFactor -= DISALLOW_SALIENCE;
-			itos(L"-AVOIDRELCLAUSE[-", DISALLOW_SALIENCE, lsi->res, L"]");
+			itos(u"-AVOIDRELCLAUSE[-", DISALLOW_SALIENCE, lsi->res, u"]");
 		}
 		else if (objectMatches.size() && ((omi = in(o, objectMatches)) != objectMatches.end()))
 			objectMatches.erase(omi);
@@ -4360,7 +4364,7 @@ bool cSource::definitelyNotSpeaker(int where, vector <cObject>::iterator object,
 	// 2. an object (not a subject)
 	// 3. in an S1 - must be an identity pattern   idRelationTagSet="id","OBJECT","SUBJECT"
 	// 4. the subject is not in class (PRONOUN_OBJECT_CLASS,REFLEXIVE_PRONOUN_OBJECT_CLASS,RECIPROCAL_PRONOUN_OBJECT_CLASS)
-	__int64 objectRole = m[where].objectRole;
+	int64_t objectRole = m[where].objectRole;
 	notSpeaker |= (objectRole & NOT_OBJECT_ROLE) != 0;
 	if ((objectRole & (IN_EMBEDDED_STORY_OBJECT_ROLE | IN_PRIMARY_QUOTE_ROLE)) == (IN_EMBEDDED_STORY_OBJECT_ROLE | IN_PRIMARY_QUOTE_ROLE)) // embedded story can only be in quotes
 		notSpeaker |= (objectRole & NONPAST_OBJECT_ROLE) != 0;
@@ -4385,9 +4389,9 @@ bool cSource::definitelyNotSpeaker(int where, vector <cObject>::iterator object,
 		(m[where].word->second.timeFlags & T_UNIT) && (m[where].flags & cWordMatch::flagFirstLetterCapitalized))
 	{
 		notSpeaker = true;
-		wstring tmpstr;
+		lpwstring tmpstr;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s not speaker (time)", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%s not speaker (time)", where, objectString(object, tmpstr, false).c_str());
 	}
 	return notSpeaker;
 }
@@ -4396,7 +4400,7 @@ bool cSource::definitelyNotSpeaker(int where, vector <cObject>::iterator object,
 // is promoted to NAME_OBJECT_CLASS ("Jay-Z says he will marry...").
 void cSource::reclassifyWikiPersonSubject(int where, vector <cObject>::iterator object)
 {
-	__int64 objectRole = m[where].objectRole;
+	int64_t objectRole = m[where].objectRole;
 	if (object->originalLocation == where && (objectRole & SUBJECT_ROLE) && object->neuter && !object->male && !object->female && m[where].getRelVerb() >= 0 && m[m[where].getRelVerb()].queryForm(thinkForm) >= 0)
 	{
 		identifyISARelation(where, false, RDFFileCaching);
@@ -4427,9 +4431,9 @@ bool cSource::isNotLocallyMatched(int where, vector <cObject>::iterator object, 
 {
 	if (in(m[where].getObject()) != localObjects.end())
 		return false;
-	__int64 objectRole = m[where].objectRole;
+	int64_t objectRole = m[where].objectRole;
 	bool noLocalMatch = false;
-	wstring tmpstr;
+	lpwstring tmpstr;
 	// if role cannot be found (so parsing is suspect)
 // don't include if inside of an IS sentence, but make sure names are included: 
 // The words uttered by Boris were: "Mr. Brown".
@@ -4443,35 +4447,35 @@ bool cSource::isNotLocallyMatched(int where, vector <cObject>::iterator object, 
 		else
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:%s not put in local objects - possible IS_OBJECT [lastBeginS1=%d]", where, objectString(object, tmpstr, false).c_str(), lastBeginS1);
+				lplog(LOG_RESOLUTION, u"%06d:%s not put in local objects - possible IS_OBJECT [lastBeginS1=%d]", where, objectString(object, tmpstr, false).c_str(), lastBeginS1);
 			noLocalMatch = true;
 		}
 	}
-	if ((objectRole & PREP_OBJECT_ROLE) && beginEntirePosition && m[beginEntirePosition - 1].word->first == L"as" && unResolvablePosition(beginEntirePosition))
+	if ((objectRole & PREP_OBJECT_ROLE) && beginEntirePosition && m[beginEntirePosition - 1].word->first == u"as" && unResolvablePosition(beginEntirePosition))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s not put in local objects - 'as' prep", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%s not put in local objects - 'as' prep", where, objectString(object, tmpstr, false).c_str());
 		noLocalMatch = true;
 	}
 	// if unmatched, don't allow a noun beginning with 'no' to be matched (but not 'No' abbreviation)
-	noLocalMatch |= (m[beginEntirePosition].word->first == L"no" && m[beginEntirePosition + 1].word->first != L".");
+	noLocalMatch |= (m[beginEntirePosition].word->first == u"no" && m[beginEntirePosition + 1].word->first != u".");
 	// don't allow an appositive noun to be a name (should be a description)  My son the doctor
 	if (((objectRole & RE_OBJECT_ROLE) && object->objectClass != NAME_OBJECT_CLASS))
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s not put in local objects - RE_OBJECT", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:%s not put in local objects - RE_OBJECT", where, objectString(object, tmpstr, false).c_str());
 		noLocalMatch = true;
 	}
 	if (((objectRole & (SUBJECT_ROLE | IS_OBJECT_ROLE | SUBJECT_PLEONASTIC_ROLE)) == IS_OBJECT_ROLE) && m[where].relSubject >= 0 && m[m[where].relSubject].getObject() >= 0)
 	{
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s not put in local objects - IS_OBJECT [SUBJ=%d]", where, objectString(object, tmpstr, false).c_str(), m[where].relSubject);
+			lplog(LOG_RESOLUTION, u"%06d:%s not put in local objects - IS_OBJECT [SUBJ=%d]", where, objectString(object, tmpstr, false).c_str(), m[where].relSubject);
 		// it was Annette
 		if (objects[m[where].getObject()].objectClass == NAME_OBJECT_CLASS &&
-			m[m[where].beginObjectPosition].queryWinnerForm(determinerForm) < 0 && objects[m[where].getObject()].PISDefinite > 0 && m[where].relSubject >= 0 && m[m[where].relSubject].word->first == L"it")
+			m[m[where].beginObjectPosition].queryWinnerForm(determinerForm) < 0 && objects[m[where].getObject()].PISDefinite > 0 && m[where].relSubject >= 0 && m[m[where].relSubject].word->first == u"it")
 		{
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:Introduction IS_OBJECT?", where);
+				lplog(LOG_RESOLUTION, u"%06d:Introduction IS_OBJECT?", where);
 		}
 		else
 			noLocalMatch = true;
@@ -4504,20 +4508,20 @@ void cSource::pushObjectMatchesToLocalFocus(int where, vector <cObject>::iterato
 		{
 			vector <cLocalFocus>::iterator lsi;
 			// even if object is already on stack, update other fields associated with the localSpeaker.
-			if (pushObjectIntoLocalFocus(where, om->object, definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, L"chooseBest (IS_OBJECT)", lsi))
+			if (pushObjectIntoLocalFocus(where, om->object, definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, u"chooseBest (IS_OBJECT)", lsi))
 			{
 				// if cata speaker was invoked, an object may be matched by itself because it was already on the localObjects stack.
 				if (m[where].getObject() != om->object)
 				{
-					pushLocalObjectOntoMatches(where, lsi, L"chooseBest (IS_OBJECT)");
+					pushLocalObjectOntoMatches(where, lsi, u"chooseBest (IS_OBJECT)");
 					lsi->om.salienceFactor = SALIENCE_THRESHOLD;
 				}
 			}
 		}
 	}
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (object->objectClass == NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
-		lplog(LOG_RESOLUTION, L"%06d:[END with no local match] RESOLVING name %s with %s", where, objectString(object, tmpstr, false).c_str(), objectString(objectMatches, tmpstr2, false).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:[END with no local match] RESOLVING name %s with %s", where, objectString(object, tmpstr, false).c_str(), objectString(objectMatches, tmpstr2, false).c_str());
 	setQuoteContainsSpeaker(where, inPrimaryQuote);
 }
 
@@ -4526,14 +4530,14 @@ void cSource::pushObjectMatchesToLocalFocus(int where, vector <cObject>::iterato
 // into local focus.
 bool cSource::pleonasticIt(int where)
 {
-	if ((m[where].objectRole & SUBJECT_ROLE) && m[where].word->first == L"it")
+	if ((m[where].objectRole & SUBJECT_ROLE) && m[where].word->first == u"it")
 	{
 		m[where].flags |= cWordMatch::flagObjectPleonastic;
 		m[where].objectRole |= SUBJECT_PLEONASTIC_ROLE;
 		if (m[where].getRelObject() >= 0)
 			m[m[where].getRelObject()].objectRole |= SUBJECT_PLEONASTIC_ROLE;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:subject is set pleonastic (object@%d).", where, m[where].getRelObject());
+			lplog(LOG_RESOLUTION, u"%06d:subject is set pleonastic (object@%d).", where, m[where].getRelObject());
 		return true;
 	}
 	return false;
@@ -4548,20 +4552,20 @@ void cSource::pushObjectMatchesIntoLocalFocusAndLocation(int where, vector <cObj
 	{
 		vector <cLocalFocus>::iterator lsi;
 		// even if object is already on stack, update other fields associated with the localSpeaker.
-		if (!pushObjectIntoLocalFocus(where, om->object, definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, L"chooseBest (2)", lsi))
+		if (!pushObjectIntoLocalFocus(where, om->object, definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, u"chooseBest (2)", lsi))
 			continue;
 		// if cata speaker was invoked, an object may be matched by itself because it was already on the localObjects stack.
 		if (m[where].getObject() != om->object)
 		{
-			pushLocalObjectOntoMatches(where, lsi, L"chooseBest (3)");
+			pushLocalObjectOntoMatches(where, lsi, u"chooseBest (3)");
 			if (object->objectClass == NAME_OBJECT_CLASS)
 				lsi->om.salienceFactor = SALIENCE_THRESHOLD;
 			if (inSpeakerGroup)
 			{
-				wstring tmpstr, tmpstr2, tmpstr3;
+				lpwstring tmpstr, tmpstr2, tmpstr3;
 				speakerGroups[currentSpeakerGroup].speakers.insert(om->object);
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION | LOG_SG, L"%d:Substituted %s for %s in speakerGroup %s.", where, objectString(om->object, tmpstr, false).c_str(), objectString(m[where].getObject(), tmpstr2, false).c_str(), toText(speakerGroups[currentSpeakerGroup], tmpstr3));
+					lplog(LOG_RESOLUTION | LOG_SG, u"%d:Substituted %s for %s in speakerGroup %s.", where, objectString(om->object, tmpstr, false).c_str(), objectString(m[where].getObject(), tmpstr2, false).c_str(), toText(speakerGroups[currentSpeakerGroup], tmpstr3));
 			}
 		}
 	}
@@ -4584,9 +4588,9 @@ void cSource::cataphoricallyMatch(int where, int lastBeginS1, vector <cObject>::
 				!(m[I].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON)) && // don't match pronouns to be matched in resolveFirstSecondPersonPronouns
 				object->cataphoricMatch(&objects[m[I].getObject()]))
 			{
-				wstring tmpstr;
+				lpwstring tmpstr;
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:added cataphoric match (4) %s.", I, objectString(object, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:added cataphoric match (4) %s.", I, objectString(object, tmpstr, false).c_str());
 				m[I].objectMatches.push_back(cOM(m[where].getObject(), getRoleSalience(m[where].objectRole)));
 				object->locations.push_back(cObject::cLocation(I));
 				object->updateFirstLocation(I);
@@ -4603,7 +4607,7 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 {
 	int person = m[where].word->second.inflectionFlags & (FIRST_PERSON | SECOND_PERSON | THIRD_PERSON);
 	int wordOrderSensitiveModifier = object->wordOrderSensitive(where, m);
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	switch (object->objectClass)
 	{
 		case PRONOUN_OBJECT_CLASS:
@@ -4619,7 +4623,7 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 			// THIRD_PERSON:  "himself","herself","itself","themselves",
 			if ((chooseFromLocalFocus = reflexivePronounCoreference(where, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, inPrimaryQuote, inSecondaryQuote) >= 0) && debugTrace.traceSpeakerResolution)
 			{
-				lplog(LOG_RESOLUTION, L"%06d:RESOLVING reflexive %s", where, objectString(object, tmpstr, false).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:RESOLVING reflexive %s", where, objectString(object, tmpstr, false).c_str());
 				printLocalFocusedObjects(where, GENDERED_GENERAL_OBJECT_CLASS);
 			}
 			if (!chooseFromLocalFocus)
@@ -4627,7 +4631,7 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 			break;
 		case NAME_OBJECT_CLASS:
 			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"%06d:[BEGIN] RESOLVING name %s%s", where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str());
+				lplog(LOG_RESOLUTION, u"%06d:[BEGIN] RESOLVING name %s%s", where, objectString(object, tmpstr, false).c_str(), m[where].roleString(tmpstr2).c_str());
 			{
 				checkSubsequent(where, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, objectMatches);
 				// if returns true, then successfully resolved, with or without objectMatches.
@@ -4684,10 +4688,10 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 				checkSubsequent(where, definitelySpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, resolveForSpeaker, avoidCurrentSpeaker, objectMatches);
 			break;
 		case META_GROUP_OBJECT_CLASS:
-			if ((m[where].objectRole & PREP_OBJECT_ROLE) && beginEntirePosition && m[beginEntirePosition - 1].word->first == L"as" && unResolvablePosition(beginEntirePosition))
+			if ((m[where].objectRole & PREP_OBJECT_ROLE) && beginEntirePosition && m[beginEntirePosition - 1].word->first == u"as" && unResolvablePosition(beginEntirePosition))
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:%s not put in local objects - 'as' prep", where, objectString(object, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:%s not put in local objects - 'as' prep", where, objectString(object, tmpstr, false).c_str());
 				// scan backwards for immediately preceding object
 				if (beginEntirePosition > 5)
 				{
@@ -4722,12 +4726,12 @@ bool cSource::resolveSpecificClassObject(const int where, const bool definitelyS
 			else
 			{
 				if (debugTrace.traceSpeakerResolution)
-					lplog(LOG_RESOLUTION, L"%06d:RESOLVING relative %s", where, objectString(object, tmpstr, false).c_str());
+					lplog(LOG_RESOLUTION, u"%06d:RESOLVING relative %s", where, objectString(object, tmpstr, false).c_str());
 				resolveRelativeObject(where, objectMatches, object, wordOrderSensitiveModifier);
 				// must not be matched or specific
 				if (objectMatches.empty() && object->getOwnerWhere() == -1 && object->whereRelativeClause < 0 &&
 					// daughters of the archdeacon
-					(m[where].endObjectPosition >= (signed)m.size() || m[m[where].endObjectPosition].word->first != L"of"))
+					(m[where].endObjectPosition >= (signed)m.size() || m[m[where].endObjectPosition].word->first != u"of"))
 					chooseFromLocalFocus = resolveGenderedObject(where, definitelySpeaker | resolveForSpeaker, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, objectMatches, object, wordOrderSensitiveModifier, subjectCataRestriction, mixedPlurality, limitTwo, isPhysicallyPresent, physicallyEvaluated);
 				printLocalFocusedObjects(where, GENDERED_RELATIVE_OBJECT_CLASS);
 			}
@@ -4833,14 +4837,14 @@ void cSource::resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuo
 	vector <cObject>::iterator object = objects.begin() + m[where].getObject();
 	// if inQuote but hail position, resolve as if out of quotes
 	cLocalFocus::setSalienceAgeMethod(inSecondaryQuote || (inPrimaryQuote && !(m[where].objectRole & (HAIL_ROLE | IN_QUOTE_SELF_REFERRING_SPEAKER_ROLE))), presentAssertion || (object->neuter && !(object->male || object->female)), objectToBeMatchedInQuote, quoteIndependentAge);
-	wstring tmpstr, tmpstr2;
+	lpwstring tmpstr, tmpstr2;
 	if (object->eliminated)
-		lplog(LOG_RESOLUTION, L"%06d:eliminated object #%d %s found!", where, m[where].getObject(), objectString(object, tmpstr, false).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:eliminated object #%d %s found!", where, m[where].getObject(), objectString(object, tmpstr, false).c_str());
 	if (object->relativeClausePM >= 0)
 	{
 		m[object->whereRelativeClause].flags |= cWordMatch::flagObjectResolved;
 		if (debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:%s@%d matched a relative head", where, objectString(object, tmpstr, true).c_str(), object->whereRelativeClause);
+			lplog(LOG_RESOLUTION, u"%06d:%s@%d matched a relative head", where, objectString(object, tmpstr, true).c_str(), object->whereRelativeClause);
 	}
 	reclassifyGenderedOccupationalRoleActivityToNameObject(where, beginEntirePosition, inPrimaryQuote, inSecondaryQuote);
 	// resolve object specific to its class
@@ -4863,7 +4867,7 @@ void cSource::resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuo
 		if (object->objectClass == NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
 		{
 			tmpstr.clear();
-			lplog(LOG_RESOLUTION, L"%06d:[END from local focus] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:[END from local focus] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
 			printLocalFocusedObjects(where, NAME_OBJECT_CLASS);
 		}
 		processSubjectCataRestriction(where, subjectCataRestriction);
@@ -4873,7 +4877,7 @@ void cSource::resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuo
 	{
 		object->resetSubType();
 		if (debugTrace.traceSpeakerResolution || debugTrace.traceObjectResolution)
-			lplog(LOG_RESOLUTION, L"%06d:Removing place designation (5) from object %s.", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:Removing place designation (5) from object %s.", where, objectString(object, tmpstr, false).c_str());
 	}
 	// NAME, GENDERED_GENERAL, NON_GENDERED_GENERAL, DET_NAME, PLEONASTIC, DEICTIC, VERB
 	// if nongendered object and if there is more than one name, or gendered object already in local speakers,
@@ -4896,23 +4900,23 @@ void cSource::resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuo
 		// do not allow an unresolved quantifier or an unresolved numeralCardinal to get into localObjects
 		if (!object->eliminated && (object->end - object->begin > 1 || (m[where].queryWinnerForm(quantifierForm) < 0 && m[where].queryWinnerForm(numeralCardinalForm) < 0)))
 		{
-			if (pushObjectIntoLocalFocus(where, m[where].getObject(), definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, L"chooseBest (1)", lsi))
+			if (pushObjectIntoLocalFocus(where, m[where].getObject(), definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, u"chooseBest (1)", lsi))
 			{
 				vector <cLocalFocus>::iterator tlsi = substituteAlias(where, lsi);
 				if (tlsi != lsi && tlsi != localObjects.end())
-					pushLocalObjectOntoMatches(where, tlsi, L"alias (2)");
+					pushLocalObjectOntoMatches(where, tlsi, u"alias (2)");
 				if (object->objectClass == NAME_OBJECT_CLASS)
 					lsi->om.salienceFactor = SALIENCE_THRESHOLD;
 			}
 		}
 		tmpstr.clear();
 		if (object->objectClass == NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
-			lplog(LOG_RESOLUTION, L"%06d:[END with self match] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
+			lplog(LOG_RESOLUTION, u"%06d:[END with self match] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
 		setQuoteContainsSpeaker(where, inPrimaryQuote);
 		return;
 	}
 	if (object->objectClass == BODY_OBJECT_CLASS)
-		pushObjectIntoLocalFocus(where, m[where].getObject(), definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, L"BODY", lsi);
+		pushObjectIntoLocalFocus(where, m[where].getObject(), definitelySpeaker, notSpeaker, inPrimaryQuote, inSecondaryQuote, u"BODY", lsi);
 	eliminateBodyObjectRedundancy(where, objectMatches);
 	unMatchObjects(where, objectMatches, definitelySpeaker);
 	bool inSpeakerGroup = false;
@@ -4923,7 +4927,7 @@ void cSource::resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuo
 	tmpstr.clear();
 	if (object->objectClass == NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
 	{
-		lplog(LOG_RESOLUTION, L"%06d:[END] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
+		lplog(LOG_RESOLUTION, u"%06d:[END] RESOLVING name %s", where, objectString(object, tmpstr, false).c_str());
 		printLocalFocusedObjects(where, NAME_OBJECT_CLASS);
 	}
 	setQuoteContainsSpeaker(where, inPrimaryQuote);

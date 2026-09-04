@@ -23,7 +23,7 @@
 		- MAX_TAGSETS 500 - cap referenced by tag-set collectors elsewhere
 
 	Notes / gotchas:
-		- fromWords/toWords and the ctors below were retyped from wstring to
+		- fromWords/toWords and the ctors below were retyped from lpwstring to
 		  tIWMM (word-map iterators) to match how summary() / incorporateMapping()
 		  / cSourceWordInfo::addRelation() actually use them under
 		  ACCUMULATE_GROUPS (they call ->second on group members). Even with
@@ -36,6 +36,11 @@
 		- Every ctor now initializes index and otherFlag.
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #define MAX_TAGSETS 500
 
 // each of the 'from Words' are related to ALL of the toWords by a relation in relationWOType.
@@ -57,7 +62,7 @@ public:
 	cWordGroup(tIWMM self,cSourceWordInfo::cRMap::tcRMap *toWords);
 	cWordGroup(void);
 	// "from1 from2 -> to1 to2" debug line; used only under ACCUMULATE_GROUPS.
-	wstring summary(void);
+	lpwstring summary(void);
 };
 
 class cRelationCombo 

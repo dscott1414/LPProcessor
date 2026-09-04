@@ -1,5 +1,6 @@
 *.ipch
 *.tlog
+/build/
 *.js
 *.html
 *.pdb

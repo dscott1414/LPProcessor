@@ -34,6 +34,11 @@
 			previously disabled as TEMP DEBUG).
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 class cSource;
 
 class cColumn
@@ -42,11 +47,11 @@ public:
 	class cWordFrequencyMatch
 	{
 	public:
-		wstring word;
+		lpwstring word;
 		int frequency;
 		bool queryObjectMatch;
 		bool titleObjectMatch;
-		cWordFrequencyMatch(wstring w, int f, bool qom = false, bool tom = false)
+		cWordFrequencyMatch(lpwstring w, int f, bool qom = false, bool tom = false)
 		{
 			word = w;
 			frequency = f;
@@ -116,10 +121,10 @@ public:
 		int titleAssociationsMatched;
 		vector <int> matchedQuestionObject;
 		vector <int> synonymMatchedQuestionObject;
-		wstring simplifiedRDFTypes;
-		wstring sprint(cSource *source, wstring &buffer);
-		void logEntry(int logType, const wchar_t *tableName, int row, int entryIndex, cSource *source);
-		void accumulateEntryRDFTypes(cSource *wikipediaSource, wstring tableName, int row, int entry, unordered_set <wstring> &titleSynonyms, unordered_map < wstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching);
+		lpwstring simplifiedRDFTypes;
+		lpwstring sprint(cSource *source, lpwstring &buffer);
+		void logEntry(int logType, const lpchar_t *tableName, int row, int entryIndex, cSource *source);
+		void accumulateEntryRDFTypes(cSource *wikipediaSource, lpwstring tableName, int row, int entry, unordered_set <lpwstring> &titleSynonyms, unordered_map < lpwstring, cAssociationType > &accumulatedRDFTypesMap, bool fileCaching);
 	};
 	class cRow
 	{
@@ -142,7 +147,7 @@ public:
 	vector <cRow > rows; // there are multiple entries for each row
 	int invalidEntries;
 	int emptyEntries;
-	unordered_map < wstring, cAssociationType > accumulatedRDFTypesMap;
+	unordered_map < lpwstring, cAssociationType > accumulatedRDFTypesMap;
 	set < cWordFrequencyMatch, associationTypeMapCompare > mostCommonAssociationTypeSet;
 	int numDefinite;
 	int numNumerical;
@@ -158,20 +163,20 @@ public:
 	int coherencyPercentage;
 	bool invalidColumn;
 	cColumn();
-	void removeDomainFromAccumulatedRDFTypesMap(const wchar_t *domainAssociations[]);
-	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, unordered_set <wstring> &titleSynonyms, wstring tableName,bool keepMusicDomain, bool keepFilmDomain, bool fileCaching);
+	void removeDomainFromAccumulatedRDFTypesMap(const lpchar_t *domainAssociations[]);
+	bool determineColumnRDFTypeCoherency(cSource *wikipediaSource, cColumn::cEntry titleEntry, unordered_set <lpwstring> &titleSynonyms, lpwstring tableName,bool keepMusicDomain, bool keepFilmDomain, bool fileCaching);
 	void zeroColumnAccumulatedRDFTypes();
-	void accumulateColumnRDFTypes(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching);
-	void getMostCommonRDFTypes(const wchar_t * when, wstring tableName);
-	int getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxFrequency, wstring &maxAssociation, bool fileCaching);
-	bool testTitlePreference(cSource *wikipediaSource, wstring tableName, unordered_set <wstring> &titleSynonyms, bool fileCaching);
-	void setRowPreference(cSource *wikipediaSource, wstring tableName, bool fileCaching);
+	void accumulateColumnRDFTypes(cSource *wikipediaSource, lpwstring tableName, unordered_set <lpwstring> &titleSynonyms, bool keepMusicDomain, bool keepFilmDomain, bool onlyPreferred, bool fileCaching);
+	void getMostCommonRDFTypes(const lpchar_t * when, lpwstring tableName);
+	int getSumOfAllFullyConfidentRDFTypeFrequencies(cSource *wikipediaSource, int row, int entry, int &maxFrequency, lpwstring &maxAssociation, bool fileCaching);
+	bool testTitlePreference(cSource *wikipediaSource, lpwstring tableName, unordered_set <lpwstring> &titleSynonyms, bool fileCaching);
+	void setRowPreference(cSource *wikipediaSource, lpwstring tableName, bool fileCaching);
 	// each lastWordOrSimplifiedRDFTypesFoundInTitleSynonyms entry has two values:
 	//   the average of the associationValue
 	//   the number of values/the size of the 
-	int calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, wstring tableName, bool fileCaching);
-	void logColumn(int logType, const wchar_t * when, wstring tableName);
-	static cColumn::cEntry scanColumnEntry(int whereQuestionType, cSource *wikipediaSource, cSource *questionSource, int &I, bool &matchFound, wstring tableName);
+	int calculateColumnRDFTypeCoherence(cSource *wikipediaSource, cColumn::cEntry titleEntry, lpwstring tableName, bool fileCaching);
+	void logColumn(int logType, const lpchar_t * when, lpwstring tableName);
+	static cColumn::cEntry scanColumnEntry(int whereQuestionType, cSource *wikipediaSource, cSource *questionSource, int &I, bool &matchFound, lpwstring tableName);
 };
 
 class cSourceTable
@@ -180,7 +185,7 @@ public:
 	vector <cColumn> columns;
 	vector <cColumn::cEntry> columnHeaders;
 	cColumn::cEntry tableTitleEntry;
-	wstring num;
+	lpwstring num;
 	cSource *source;
 	int columnHeaderMatchTitle;
 
@@ -192,7 +197,7 @@ public:
 	cSourceTable(int &where, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource,bool fileCaching);
 	bool getTableFromSource(int I, int whereQuestionTypeObject, cSource *wikipediaSource, cSource *questionSource);
 	bool isEntryInvalid(int beginColumn, vector <int> &wikiColumns, cSource *wikipediaSource);
-	bool analyzeTitle(unsigned int where, int &numWords, int &numPrepositions, wstring tableName, cSource *wikipediaSource);
+	bool analyzeTitle(unsigned int where, int &numWords, int &numPrepositions, lpwstring tableName, cSource *wikipediaSource);
 };
 
 class cWikipediaTableCandidateAnswers

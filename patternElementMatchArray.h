@@ -45,8 +45,13 @@
 		- iCost (incremental) is only meaningful inside reduceParent; oCost is the
 		  full pattern cost copied onto every element of the match.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #define IOHANDLE int
-int lplog(const wchar_t *format,...);
+int lplog(const lpchar_t *format,...);
 extern short logCache;
 
 class cPatternElementMatchArray
@@ -120,7 +125,7 @@ public:
     {
 			#ifdef LOG_PATTERN_COST_CHECK
 				if (c>MAX_SIGNED_SHORT)
-					lplog(L"cost overflow of %d reduced to %d.",c,MAX_SIGNED_SHORT);
+					lplog(u"cost overflow of %d reduced to %d.",c,MAX_SIGNED_SHORT);
 			#endif
       if (c>MAX_SIGNED_SHORT) cost=MAX_SIGNED_SHORT;
       else if (c<MIN_SIGNED_SHORT) cost=MIN_SIGNED_SHORT;
@@ -137,21 +142,21 @@ public:
       else iCost+=addedCost;
     }
 	// Append the set COST_*/WINNER flag names onto temp (debug).
-		const wchar_t *flagsStr(wstring &temp)
+		const lpchar_t *flagsStr(lpwstring &temp)
 		{
 			temp.clear();
-			if (flagSet(WINNER_FLAG)) temp+=L" WINNER";
-			if (flagSet(COST_EVAL)) temp += L" COST_EVAL";
-			if (flagSet(COST_ND)) temp += L" COST_ND";
-			if (flagSet(COST_AGREE)) temp += L" COST_AGREE";
-			if (flagSet(COST_NVO)) temp += L" COST_NVO";
-			if (flagSet(COST_DONE)) temp += L" COST_DONE";
-			if (flagSet(IN_CHAIN)) temp += L" IN_CHAIN";
-			if (flagSet(ELIMINATED)) temp += L" ELIMINATED";
-			if (flagSet(COST_ROLE)) temp += L" COST_ROLE";
+			if (flagSet(WINNER_FLAG)) temp+=u" WINNER";
+			if (flagSet(COST_EVAL)) temp += u" COST_EVAL";
+			if (flagSet(COST_ND)) temp += u" COST_ND";
+			if (flagSet(COST_AGREE)) temp += u" COST_AGREE";
+			if (flagSet(COST_NVO)) temp += u" COST_NVO";
+			if (flagSet(COST_DONE)) temp += u" COST_DONE";
+			if (flagSet(IN_CHAIN)) temp += u" IN_CHAIN";
+			if (flagSet(ELIMINATED)) temp += u" ELIMINATED";
+			if (flagSet(COST_ROLE)) temp += u" COST_ROLE";
 			return temp.c_str();
 		}
-    __int64 getRole(__int64 &tagRole); 
+    int64_t getRole(int64_t &tagRole); 
 	// Child packing: bit31=pattern; bits15-30=child pattern #; bits0-14=child len.
 	// getChildForm() is the raw word when bit31 is clear (a form offset, not a pattern).
     bool isChildPattern(void) { return (PEMAElementMatchedSubIndex&cMatchElement::patternFlag)== cMatchElement::patternFlag; }
@@ -159,7 +164,7 @@ public:
     unsigned int getChildLen(void) { return PEMAElementMatchedSubIndex&((1<<CHILDPATBITS)-1); }
     unsigned int getChildForm(void) { return PEMAElementMatchedSubIndex; }
     void setSubIndex(unsigned int subIndexPattern,unsigned int endPosition) { PEMAElementMatchedSubIndex=(subIndexPattern <<CHILDPATBITS)+endPosition; }
-    wchar_t *toText(unsigned int position,wchar_t *temp,vector <cWordMatch> &m); 
+    lpchar_t *toText(unsigned int position,lpchar_t *temp,size_t tempCount,vector <cWordMatch> &m); // batch B5: tempCount
 	// Latch COST_DONE and keep tempCost = max(tempCost, maxOCost) once latched.
 	// Returns true the first time (caller should remember this position).
     bool processTempCost(int maxOCost)
@@ -200,7 +205,7 @@ public:
   void check(void);
   int greatestLength(unsigned int p,int where);
   bool write(IOHANDLE file);
-	bool WriteFile(HANDLE file);
+	bool writeToFile(int file); // batch B5: POSIX fd; renamed off the Win32 API name it shadowed
   bool read(IOHANDLE file);
   bool write(void *buffer,int &where,unsigned int limit);
   bool read(char *buffer,int &where,unsigned int limit);

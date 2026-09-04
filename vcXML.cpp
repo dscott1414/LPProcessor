@@ -21,22 +21,27 @@
 		- readVBNet - directory scan + synthetic BE class
 
 	Dependencies:
-		source\lists\VerbNet\*.xml; tmalloc; mTW (MBCS->wide); FindFirstFile.
+		source/lists/VerbNet/*.xml; tmalloc; mTW (MBCS->wide); lpDirectoryEntries.
 
 	Notes / gotchas:
 		Parser assumes well-formed VerbNet XML and mutates the wide buffer in place
-		(temporarily zeros delimiters). readVBNet closes the FindFirstFile handle on
-		every return path, including a mid-scan _wopen failure.
+		(temporarily zeros delimiters). readVBNet enumerates the directory up front on
+		every return path, including a mid-scan lp_wopen failure.
 */
 #pragma warning(disable : 4786 ) // disable warning C4786
-#include <windows.h>
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
 #include <stdlib.h>
 #include "wn.h"
-#include <io.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -44,15 +49,15 @@
 #include "profile.h"
 
 int numMembers = 0;
-unordered_map <wstring, set <int> > vbNetVerbToClassMap;
+unordered_map <lpwstring, set <int> > vbNetVerbToClassMap;
 
 // Copies buf[offset..endChar) into s and advances offset past endChar. Returns false if endChar is absent.
-bool tX(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
+bool tX(lpchar_t* buf, int64_t& offset, lpwstring& s, lpchar_t endChar)
 {
 	LFS
-		wchar_t* ch = wcschr(buf + offset, endChar);
+		lpchar_t* ch = lp_strchr(buf + offset, endChar);
 	if (ch == NULL) return false;
-	wchar_t savech = *ch;
+	lpchar_t savech = *ch;
 	*ch = 0;
 	s = buf + offset;
 	*ch = savech;
@@ -63,18 +68,18 @@ bool tX(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 // Reads a tag name from buf[offset] up to endChar or '>'. Advances offset to the delimiter
 // (and past it if it was endChar). Returns false only if both delimiters are missing.
 // <VNCLASS
-bool aH(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
+bool aH(lpchar_t* buf, int64_t& offset, lpwstring& s, lpchar_t endChar)
 {
 	LFS
-		wchar_t* ch = wcschr(buf + offset, endChar);
-	wchar_t* ech = wcschr(buf + offset, L'>');
+		lpchar_t* ch = lp_strchr(buf + offset, endChar);
+	lpchar_t* ech = lp_strchr(buf + offset, u'>');
 	if (ch == NULL && ech == NULL) return false;
 	// ech may be NULL (no '>' left in the buffer) even when ch was found; only compare the two
 	// pointers when both are non-NULL, otherwise a NULL ech would compare as "less than" any
 	// valid ch and *ch=0 below would write through a NULL ch.
 	if (ch == NULL || (ech != NULL && ech < ch))
 		ch = ech;
-	wchar_t savech = *ch;
+	lpchar_t savech = *ch;
 	*ch = 0;
 	s = buf + offset;
 	*ch = savech;
@@ -85,18 +90,18 @@ bool aH(wchar_t* buf, __int64& offset, wstring& s, wchar_t endChar)
 
 // Parses one name="value" attribute at offset into attr. Returns false at /> or > or on bad syntax.
 // ID="say-37.7"
-bool tA(wchar_t* buf, __int64& offset, vector <cXMLAttribute>& attr)
+bool tA(lpchar_t* buf, int64_t& offset, vector <cXMLAttribute>& attr)
 {
 	LFS
-		if ((buf[offset] == L'/' && buf[offset + 1] == L'>') || (buf[offset] == L'?' && buf[offset + 1] == L'>') || buf[offset] == L'>')
+		if ((buf[offset] == u'/' && buf[offset + 1] == u'>') || (buf[offset] == u'?' && buf[offset + 1] == u'>') || buf[offset] == u'>')
 			return false;
-	wstring a, as;
+	lpwstring a, as;
 	while (iswspace(buf[offset])) offset++;
-	if (!tX(buf, offset, a, L'=')) return false;
+	if (!tX(buf, offset, a, u'=')) return false;
 	while (iswspace(buf[offset])) offset++;
 	offset++;
-	if (!tX(buf, offset, as, L'\"')) return false;
-	if (buf[offset] == L' ') offset++;
+	if (!tX(buf, offset, as, u'\"')) return false;
+	if (buf[offset] == u' ') offset++;
 	attr.push_back(cXMLAttribute(a, as));
 	return true;
 }
@@ -105,40 +110,40 @@ bool tA(wchar_t* buf, __int64& offset, vector <cXMLAttribute>& attr)
 // pushes a cXMLClass onto vxc. Skips <!-- comments --> recursively. Returns false on mismatch
 // or malformed tag. expectedClass starting with '?' is treated as an <?xml ...?> PI.
 // <VNCLASS ID="say-37.7" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vn_schema-3.xsd">
-bool lineX(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc, wstring expectedClass, bool absorbNonExpectedClassAnyway = false)
+bool lineX(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc, lpwstring expectedClass, bool absorbNonExpectedClassAnyway = false)
 {
 	LFS
 		while (iswspace(buf[offset])) offset++;
-	if (buf[offset] != L'<') return false;
-	if (buf[offset + 1] == L'/') return false; // end of some structure
-	if (buf[offset + 1] == L'!')
+	if (buf[offset] != u'<') return false;
+	if (buf[offset + 1] == u'/') return false; // end of some structure
+	if (buf[offset + 1] == u'!')
 	{
-		wstring endOfComment;
-		while (buf[offset + 2] == L'-')
+		lpwstring endOfComment;
+		while (buf[offset + 2] == u'-')
 		{
 			endOfComment += buf[offset + 2];
 			offset++;
 		}
-		endOfComment += L">";
-		wchar_t* ch = wcsstr(buf + offset, endOfComment.c_str());
+		endOfComment += u">";
+		lpchar_t* ch = lp_strstr(buf + offset, endOfComment.c_str());
 		if (ch == NULL) return false;
 		offset = ch - buf + endOfComment.length() + 1;
 		return lineX(buf, offset, vxc, expectedClass, absorbNonExpectedClassAnyway);
 	}
 	cXMLClass xc;
-	__int64 classOffset = offset + 1;
+	int64_t classOffset = offset + 1;
 	if (!aH(buf, classOffset, xc.XClass, ' ')) return false;
 	if (xc.XClass != expectedClass && !absorbNonExpectedClassAnyway)
 		return false;
 	offset = classOffset;
-	if (expectedClass[0] == L'?')
-		return tX(buf, offset, expectedClass, L'>');
+	if (expectedClass[0] == u'?')
+		return tX(buf, offset, expectedClass, u'>');
 	else
 	{
 		while (tA(buf, offset, xc.av));
-		if (!(buf[offset] == L'/' && buf[offset + 1] == L'>') && !(buf[offset] == L'?' && buf[offset + 1] == L'>') && buf[offset] != L'>')
+		if (!(buf[offset] == u'/' && buf[offset + 1] == u'>') && !(buf[offset] == u'?' && buf[offset + 1] == u'>') && buf[offset] != u'>')
 			return false;
-		if (buf[offset] == L'>')
+		if (buf[offset] == u'>')
 			offset++;
 		else
 			offset += 2;
@@ -148,59 +153,59 @@ bool lineX(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc, wstring expec
 	}
 }
 
-// Consumes a </TAG> (skipping a '!' comment first). Returns the tag name in tmp, or L"" if not an end tag.
+// Consumes a </TAG> (skipping a '!' comment first). Returns the tag name in tmp, or u"" if not an end tag.
 //  </MEMBERS>
-wstring endX(wchar_t* buf, __int64& offset, wstring& tmp)
+lpwstring endX(lpchar_t* buf, int64_t& offset, lpwstring& tmp)
 {
 	LFS
 		while (iswspace(buf[offset])) offset++;
-	if (buf[offset + 1] == L'!')
+	if (buf[offset + 1] == u'!')
 	{
-		tX(buf, offset, tmp, L'>');
+		tX(buf, offset, tmp, u'>');
 		return endX(buf, offset, tmp);
 	}
-	if (buf[offset] != L'<' || buf[offset + 1] != L'/') return L"";
+	if (buf[offset] != u'<' || buf[offset + 1] != u'/') return u"";
 	offset += 2;
-	tX(buf, offset, tmp, L'>');
+	tX(buf, offset, tmp, u'>');
 	return tmp;
 }
 
 // Consumes <SELRESTRS>…</SELRESTRS> (nested SELRESTR / SELRESTRS). Returns true if at least one
 // self-closing or closed block was absorbed.
-bool aVNSEL(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNSEL(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
 		int atLeastOne = false;
-	while (lineX(buf, offset, vxc, L"SELRESTRS"))
+	while (lineX(buf, offset, vxc, u"SELRESTRS"))
 	{
-		while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, L"SELRESTR") || aVNSEL(buf, offset, vxc));
+		while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, u"SELRESTR") || aVNSEL(buf, offset, vxc));
 		atLeastOne = true;
 	}
-	wstring tmp;
-	return lineX(buf, offset, vxc, L"SELRESTRS/") || (atLeastOne && endX(buf, offset, tmp) == L"SELRESTRS");
+	lpwstring tmp;
+	return lineX(buf, offset, vxc, u"SELRESTRS/") || (atLeastOne && endX(buf, offset, tmp) == u"SELRESTRS");
 }
 
 // Consumes <SYNRESTRS> with nested <SYNRESTR/> children, or a self-closing SELRESTRS-style tag.
 // <SYNRESTRS>
 //   <SYNRESTR Value="+" type="quotation"/>
 // </SYNRESTRS>
-bool aVNSYN(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNSYN(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
-		while (lineX(buf, offset, vxc, L"SYNRESTRS"))
-			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, L"SYNRESTR"));
-	wstring tmp;
-	return lineX(buf, offset, vxc, L"SYNRESTRS/") || endX(buf, offset, tmp) == L"SYNRESTRS";
+		while (lineX(buf, offset, vxc, u"SYNRESTRS"))
+			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, u"SYNRESTR"));
+	lpwstring tmp;
+	return lineX(buf, offset, vxc, u"SYNRESTRS/") || endX(buf, offset, tmp) == u"SYNRESTRS";
 }
 
 // Consumes <SUBCLASSES>…<SUBCLASS/>…</SUBCLASSES> (or the self-closing form).
-bool aSUBCLASS(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aSUBCLASS(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
-		while (lineX(buf, offset, vxc, L"SUBCLASSES"))
-			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, L"SUBCLASS"));
-	wstring tmp;
-	return lineX(buf, offset, vxc, L"SUBCLASSES/") || endX(buf, offset, tmp) == L"SUBCLASSES";
+		while (lineX(buf, offset, vxc, u"SUBCLASSES"))
+			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, u"SUBCLASS"));
+	lpwstring tmp;
+	return lineX(buf, offset, vxc, u"SUBCLASSES/") || endX(buf, offset, tmp) == u"SUBCLASSES";
 }
 
 // Consumes <NP> plus either SYNRESTRS or SELRESTRS, then </NP>. Returns false if either piece is missing.
@@ -209,21 +214,21 @@ bool aSUBCLASS(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 //          <SYNRESTR Value="+" type="quotation"/>
 //        </SYNRESTRS>
 //      </NP>
-bool aVNNP(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNNP(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
-		if (!lineX(buf, offset, vxc, L"NP")) return false;
+		if (!lineX(buf, offset, vxc, u"NP")) return false;
 	if (!aVNSYN(buf, offset, vxc) && !aVNSEL(buf, offset, vxc)) return false;
-	wstring tmp;
-	return endX(buf, offset, tmp) == L"NP";
+	lpwstring tmp;
+	return endX(buf, offset, tmp) == u"NP";
 }
 
-// Tries to consume a self-closing leaf named str (e.g. L"ADV/") without committing offset on failure.
-bool aVNLEAF(wchar_t* buf, __int64& offset, const wchar_t* str)
+// Tries to consume a self-closing leaf named str (e.g. u"ADV/") without committing offset on failure.
+bool aVNLEAF(lpchar_t* buf, int64_t& offset, const lpchar_t* str)
 {
 	LFS
 		vector <cXMLClass> tempxc;
-	__int64 advOffset = offset;
+	int64_t advOffset = offset;
 	if (lineX(buf, advOffset, tempxc, str))
 	{
 		offset = advOffset;
@@ -236,13 +241,13 @@ bool aVNLEAF(wchar_t* buf, __int64& offset, const wchar_t* str)
 // <PREP value="with">
 //   <SELRESTRS/>
 // </PREP>
-bool aVNPREP(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNPREP(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
-		if (!lineX(buf, offset, vxc, L"PREP")) return false;
+		if (!lineX(buf, offset, vxc, u"PREP")) return false;
 	if (!aVNSEL(buf, offset, vxc)) return false;
-	wstring tmp;
-	return endX(buf, offset, tmp) == L"PREP";
+	lpwstring tmp;
+	return endX(buf, offset, tmp) == u"PREP";
 }
 
 // Consumes <SYNTAX> NP/ADV/ADJ/PREP/LEX* <VERB/> NP/ADV/ADJ/PREP/LEX* </SYNTAX>.
@@ -258,19 +263,19 @@ bool aVNPREP(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 //          <SYNRESTRS/>
 //      </NP>
 //  </SYNTAX>
-bool aVNSyntax(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNSyntax(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
 		vector <cXMLClass> tempxc;
-	if (!lineX(buf, offset, tempxc, L"SYNTAX")) return false;
+	if (!lineX(buf, offset, tempxc, u"SYNTAX")) return false;
 	// NP, ADV, ADJ, PREP or LEX
-	while (aVNNP(buf, offset, vxc) || aVNLEAF(buf, offset, L"ADV/") || aVNLEAF(buf, offset, L"ADJ/") || aVNPREP(buf, offset, vxc) || lineX(buf, offset, vxc, L"LEX"));
+	while (aVNNP(buf, offset, vxc) || aVNLEAF(buf, offset, u"ADV/") || aVNLEAF(buf, offset, u"ADJ/") || aVNPREP(buf, offset, vxc) || lineX(buf, offset, vxc, u"LEX"));
 	// VERB
-	if (!lineX(buf, offset, tempxc, L"VERB/")) return false;
+	if (!lineX(buf, offset, tempxc, u"VERB/")) return false;
 	// NP, ADV, ADJ, PREP or LEX
-	while (aVNNP(buf, offset, vxc) || aVNLEAF(buf, offset, L"ADV/") || aVNLEAF(buf, offset, L"ADJ/") || aVNPREP(buf, offset, vxc) || lineX(buf, offset, vxc, L"LEX"));
-	wstring end;
-	return endX(buf, offset, end) == L"SYNTAX";
+	while (aVNNP(buf, offset, vxc) || aVNLEAF(buf, offset, u"ADV/") || aVNLEAF(buf, offset, u"ADJ/") || aVNPREP(buf, offset, vxc) || lineX(buf, offset, vxc, u"LEX"));
+	lpwstring end;
+	return endX(buf, offset, end) == u"SYNTAX";
 }
 
 // Consumes <SEMANTICS><PRED>…<ARGS><ARG/>…</ARGS></PRED>…</SEMANTICS>. PREDs land in vxc.
@@ -281,66 +286,66 @@ bool aVNSyntax(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
 //          </ARGS>
 //      </PRED>
 //  </SEMANTICS>
-bool aVNSemantics(wchar_t* buf, __int64& offset, vector <cXMLClass>& vxc)
+bool aVNSemantics(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 {
 	LFS
 		vector <cXMLClass> tempxc;
-	if (!lineX(buf, offset, tempxc, L"SEMANTICS")) return false;
-	wstring tmp;
-	while (lineX(buf, offset, vxc, L"PRED"))
+	if (!lineX(buf, offset, tempxc, u"SEMANTICS")) return false;
+	lpwstring tmp;
+	while (lineX(buf, offset, vxc, u"PRED"))
 	{
-		while (lineX(buf, offset, tempxc, L"ARGS"))
+		while (lineX(buf, offset, tempxc, u"ARGS"))
 		{
-			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, L"ARG"));
-			if (endX(buf, offset, tmp) != L"ARGS") return false;
+			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, u"ARG"));
+			if (endX(buf, offset, tmp) != u"ARGS") return false;
 		}
-		if (endX(buf, offset, tmp) != L"PRED") return false;
+		if (endX(buf, offset, tmp) != u"PRED") return false;
 	}
-	if (endX(buf, offset, tmp) != L"SEMANTICS") return false;
+	if (endX(buf, offset, tmp) != u"SEMANTICS") return false;
 	return true;
 }
 
 // Tries each LP overlay empty-tag (ESTABLISH/, MOVE/, META_BELIEF/, …) once if that flag
 // is still false. Returns true if one tag was consumed so the caller can loop.
-bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_t* buf, __int64& offset)
+bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, lpchar_t* buf, int64_t& offset)
 {
-	if (!vn.establish && (vn.establish = lineX(buf, offset, tempxc, L"ESTABLISH/"))) return true;
-	if (!vn.noPhysicalAction && (vn.noPhysicalAction = lineX(buf, offset, tempxc, L"NO_PHYSICAL_ACTION/"))) return true;
-	if (!vn.control && (vn.control = lineX(buf, offset, tempxc, L"CONTROL/"))) return true;
-	if (!vn.contact && (vn.contact = lineX(buf, offset, tempxc, L"CONTACT/"))) return true;
-	if (!vn._near && (vn._near = lineX(buf, offset, tempxc, L"NEAR/"))) return true;
-	if (!vn.objectMustBeLocation && (vn.objectMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONOBJECT/"))) return true;
-	if (!vn.prepMustBeLocation && (vn.prepMustBeLocation = lineX(buf, offset, tempxc, L"LOCATIONPREPOBJECT/"))) return true;
-	if (!vn.transfer && (vn.transfer = lineX(buf, offset, tempxc, L"TRANSFER/"))) return true;
-	if (!vn.noPrepTo && (vn.noPrepTo = lineX(buf, offset, tempxc, L"NO_PREP_TO/"))) return true;
-	if (!vn.noPrepFrom && (vn.noPrepFrom = lineX(buf, offset, tempxc, L"NO_PREP_FROM/"))) return true;
-	if (!vn.move && (vn.move = lineX(buf, offset, tempxc, L"MOVE/"))) return true;
-	if (!vn.moveObject && (vn.moveObject = lineX(buf, offset, tempxc, L"MOVE_OBJECT/"))) return true;
-	if (!vn.moveInPlace && (vn.moveInPlace = lineX(buf, offset, tempxc, L"MOVE_IN_PLACE/"))) return true;
-	if (!vn.exit && (vn.exit = lineX(buf, offset, tempxc, L"EXIT/"))) return true;
-	if (!vn.enter && (vn.enter = lineX(buf, offset, tempxc, L"ENTER/"))) return true;
-	if (!vn.contiguous && (vn.contiguous = lineX(buf, offset, tempxc, L"CONTIGUOUS/"))) return true;
-	if (!vn.start && (vn.start = lineX(buf, offset, tempxc, L"START/"))) return true;
-	if (!vn.stay && (vn.stay = lineX(buf, offset, tempxc, L"STAY/"))) return true;
-	if (!vn.has && (vn.has = lineX(buf, offset, tempxc, L"HAS/"))) return true;
-	if (!vn.communicate && (vn.communicate = lineX(buf, offset, tempxc, L"COMMUNICATE/"))) return true;
-	if (!vn.think && (vn.think = lineX(buf, offset, tempxc, L"THINK/"))) return true;
-	if (!vn.thinkObject && (vn.thinkObject = lineX(buf, offset, tempxc, L"THINK_OBJECT/"))) return true;
-	if (!vn.sense && (vn.sense = lineX(buf, offset, tempxc, L"SENSE/"))) return true;
-	if (!vn.create && (vn.create = lineX(buf, offset, tempxc, L"CREATE/"))) return true;
-	if (!vn.consume && (vn.consume = lineX(buf, offset, tempxc, L"CONSUME/"))) return true; // to take in and change state 
+	if (!vn.establish && (vn.establish = lineX(buf, offset, tempxc, u"ESTABLISH/"))) return true;
+	if (!vn.noPhysicalAction && (vn.noPhysicalAction = lineX(buf, offset, tempxc, u"NO_PHYSICAL_ACTION/"))) return true;
+	if (!vn.control && (vn.control = lineX(buf, offset, tempxc, u"CONTROL/"))) return true;
+	if (!vn.contact && (vn.contact = lineX(buf, offset, tempxc, u"CONTACT/"))) return true;
+	if (!vn._near && (vn._near = lineX(buf, offset, tempxc, u"NEAR/"))) return true;
+	if (!vn.objectMustBeLocation && (vn.objectMustBeLocation = lineX(buf, offset, tempxc, u"LOCATIONOBJECT/"))) return true;
+	if (!vn.prepMustBeLocation && (vn.prepMustBeLocation = lineX(buf, offset, tempxc, u"LOCATIONPREPOBJECT/"))) return true;
+	if (!vn.transfer && (vn.transfer = lineX(buf, offset, tempxc, u"TRANSFER/"))) return true;
+	if (!vn.noPrepTo && (vn.noPrepTo = lineX(buf, offset, tempxc, u"NO_PREP_TO/"))) return true;
+	if (!vn.noPrepFrom && (vn.noPrepFrom = lineX(buf, offset, tempxc, u"NO_PREP_FROM/"))) return true;
+	if (!vn.move && (vn.move = lineX(buf, offset, tempxc, u"MOVE/"))) return true;
+	if (!vn.moveObject && (vn.moveObject = lineX(buf, offset, tempxc, u"MOVE_OBJECT/"))) return true;
+	if (!vn.moveInPlace && (vn.moveInPlace = lineX(buf, offset, tempxc, u"MOVE_IN_PLACE/"))) return true;
+	if (!vn.exit && (vn.exit = lineX(buf, offset, tempxc, u"EXIT/"))) return true;
+	if (!vn.enter && (vn.enter = lineX(buf, offset, tempxc, u"ENTER/"))) return true;
+	if (!vn.contiguous && (vn.contiguous = lineX(buf, offset, tempxc, u"CONTIGUOUS/"))) return true;
+	if (!vn.start && (vn.start = lineX(buf, offset, tempxc, u"START/"))) return true;
+	if (!vn.stay && (vn.stay = lineX(buf, offset, tempxc, u"STAY/"))) return true;
+	if (!vn.has && (vn.has = lineX(buf, offset, tempxc, u"HAS/"))) return true;
+	if (!vn.communicate && (vn.communicate = lineX(buf, offset, tempxc, u"COMMUNICATE/"))) return true;
+	if (!vn.think && (vn.think = lineX(buf, offset, tempxc, u"THINK/"))) return true;
+	if (!vn.thinkObject && (vn.thinkObject = lineX(buf, offset, tempxc, u"THINK_OBJECT/"))) return true;
+	if (!vn.sense && (vn.sense = lineX(buf, offset, tempxc, u"SENSE/"))) return true;
+	if (!vn.create && (vn.create = lineX(buf, offset, tempxc, u"CREATE/"))) return true;
+	if (!vn.consume && (vn.consume = lineX(buf, offset, tempxc, u"CONSUME/"))) return true; // to take in and change state 
 	// change of state is physical (it can be visibly seen)
-	if (!vn.changeState && (vn.changeState = lineX(buf, offset, tempxc, L"CHANGE_STATE/"))) return true;
+	if (!vn.changeState && (vn.changeState = lineX(buf, offset, tempxc, u"CHANGE_STATE/"))) return true;
 	// if no object, then the change of state is in the subject
-	if (!vn.agentChangeObjectInternalState && (vn.agentChangeObjectInternalState = lineX(buf, offset, tempxc, L"AGENT_CHANGE_OBJECT_INTERNAL_STATE/"))) return true;
-	if (!vn.metaProfession && (vn.metaProfession = lineX(buf, offset, tempxc, L"META_PROFESSION/"))) return true;
-	if (!vn.metaFutureHave && (vn.metaFutureHave = lineX(buf, offset, tempxc, L"META_FUTURE_HAVE/"))) return true;
-	if (!vn.metaFutureContact && (vn.metaFutureContact = lineX(buf, offset, tempxc, L"META_FUTURE_CONTACT/"))) return true;
-	if (!vn.metaInfo && (vn.metaInfo = lineX(buf, offset, tempxc, L"META_INFO/"))) return true;
-	if (!vn.metaIfThen && (vn.metaIfThen = lineX(buf, offset, tempxc, L"META_IF_THEN/"))) return true;
-	if (!vn.metaContains && (vn.metaContains = lineX(buf, offset, tempxc, L"META_CONTAINS/"))) return true;
-	if (!vn.metaDesire && (vn.metaDesire = lineX(buf, offset, tempxc, L"META_DESIRE/"))) return true;
-	if (!vn.metaRole && (vn.metaRole = lineX(buf, offset, tempxc, L"META_ROLE/"))) return true;
+	if (!vn.agentChangeObjectInternalState && (vn.agentChangeObjectInternalState = lineX(buf, offset, tempxc, u"AGENT_CHANGE_OBJECT_INTERNAL_STATE/"))) return true;
+	if (!vn.metaProfession && (vn.metaProfession = lineX(buf, offset, tempxc, u"META_PROFESSION/"))) return true;
+	if (!vn.metaFutureHave && (vn.metaFutureHave = lineX(buf, offset, tempxc, u"META_FUTURE_HAVE/"))) return true;
+	if (!vn.metaFutureContact && (vn.metaFutureContact = lineX(buf, offset, tempxc, u"META_FUTURE_CONTACT/"))) return true;
+	if (!vn.metaInfo && (vn.metaInfo = lineX(buf, offset, tempxc, u"META_INFO/"))) return true;
+	if (!vn.metaIfThen && (vn.metaIfThen = lineX(buf, offset, tempxc, u"META_IF_THEN/"))) return true;
+	if (!vn.metaContains && (vn.metaContains = lineX(buf, offset, tempxc, u"META_CONTAINS/"))) return true;
+	if (!vn.metaDesire && (vn.metaDesire = lineX(buf, offset, tempxc, u"META_DESIRE/"))) return true;
+	if (!vn.metaRole && (vn.metaRole = lineX(buf, offset, tempxc, u"META_ROLE/"))) return true;
 	/*
 	transferring belief or reveal of internal belief or attempt to change another's belief
 	000016:acquiesce-95        subject aligns belief with another
@@ -351,9 +356,9 @@ bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_
 	000034:deduce-97.2         subject knows something
 	000007:interrogate-37.1.3  subject desires to know something
 	*/
-	if (!vn.metaBelief && (vn.metaBelief = lineX(buf, offset, tempxc, L"META_BELIEF/"))) return true;
-	if (!vn.spatialOrientation && (vn.spatialOrientation = lineX(buf, offset, tempxc, L"SPATIAL_ORIENTATION/"))) return true;
-	if (!vn.ignore && (vn.ignore = lineX(buf, offset, tempxc, L"IGNORE/"))) return true;
+	if (!vn.metaBelief && (vn.metaBelief = lineX(buf, offset, tempxc, u"META_BELIEF/"))) return true;
+	if (!vn.spatialOrientation && (vn.spatialOrientation = lineX(buf, offset, tempxc, u"SPATIAL_ORIENTATION/"))) return true;
+	if (!vn.ignore && (vn.ignore = lineX(buf, offset, tempxc, u"IGNORE/"))) return true;
 	return false;
 }
 
@@ -361,30 +366,30 @@ bool absorbCommonVerbNetClasses(cVerbNet &vn, vector <cXMLClass> &tempxc, wchar_
 // (each MEMBER lemma is mapped in vbNetVerbToClassMap to the upcoming vbNetClasses.size()),
 // overlay flags, THEMROLES, FRAMES, then nested SUBCLASSES via recursion. Pushes vn onto
 // vbNetClasses. Returns false if any required closer is missing.
-bool aVNCLASS(wchar_t* buf, __int64& offset)
+bool aVNCLASS(lpchar_t* buf, int64_t& offset)
 {
 	LFS
 		cVerbNet vn;
 	vector <cXMLClass> tempxc;
 	// <?xml version="1.0" encoding="UTF-8"?>
-	lineX(buf, offset, tempxc, L"?xml");
+	lineX(buf, offset, tempxc, u"?xml");
 	// <!DOCTYPE VNCLASS SYSTEM "vn_class-3.dtd">
-	lineX(buf, offset, tempxc, L"!DOCTYPE");
-	if (!lineX(buf, offset, vn.id, L"VNCLASS", false) && !lineX(buf, offset, vn.id, L"VNSUBCLASS", false)) return false;
-	wstring tmp;
+	lineX(buf, offset, tempxc, u"!DOCTYPE");
+	if (!lineX(buf, offset, vn.id, u"VNCLASS", false) && !lineX(buf, offset, vn.id, u"VNSUBCLASS", false)) return false;
+	lpwstring tmp;
 	//  <MEMBERS>
 	//      <MEMBER name="disclose" wn=""/>
 	//  </MEMBERS>
-	if (!lineX(buf, offset, tempxc, L"MEMBERS/"))
+	if (!lineX(buf, offset, tempxc, u"MEMBERS/"))
 	{
-		if (!lineX(buf, offset, tempxc, L"MEMBERS")) return false;
-		while (lineX(buf, offset, vn.members, L"MEMBER"))
+		if (!lineX(buf, offset, tempxc, u"MEMBERS")) return false;
+		while (lineX(buf, offset, vn.members, u"MEMBER"))
 		{
 			vbNetVerbToClassMap[vn.members[vn.members.size() - 1].av[0].as].insert(vbNetClasses.size());
-			//lplog(LOG_TIME,L"mapped %s to %d.",vn.members[vn.members.size()-1].av[0].as.c_str(),vbNetClasses.size());
+			//lplog(LOG_TIME,u"mapped %s to %d.",vn.members[vn.members.size()-1].av[0].as.c_str(),vbNetClasses.size());
 			numMembers++;
 		}
-		if (endX(buf, offset, tmp) != L"MEMBERS") return false;
+		if (endX(buf, offset, tmp) != u"MEMBERS") return false;
 	}
 	while (absorbCommonVerbNetClasses(vn, tempxc, buf, offset));
 	vn.prepLocation = false;
@@ -395,15 +400,15 @@ bool aVNCLASS(wchar_t* buf, __int64& offset)
 	//     </SELRESTRS>
 	//   </THEMROLE>
 	// </THEMROLES>
-	if (!lineX(buf, offset, tempxc, L"THEMROLES/"))
+	if (!lineX(buf, offset, tempxc, u"THEMROLES/"))
 	{
-		if (!lineX(buf, offset, tempxc, L"THEMROLES")) return false;
-		while (lineX(buf, offset, vn.themroles, L"THEMROLE"))
+		if (!lineX(buf, offset, tempxc, u"THEMROLES")) return false;
+		while (lineX(buf, offset, vn.themroles, u"THEMROLE"))
 		{
 			aVNSEL(buf, offset, vn.themroles);
-			if (endX(buf, offset, tmp) != L"THEMROLE") return false;
+			if (endX(buf, offset, tmp) != u"THEMROLE") return false;
 		}
-		if (endX(buf, offset, tmp) != L"THEMROLES") return false;
+		if (endX(buf, offset, tmp) != u"THEMROLES") return false;
 	}
 	//  <FRAMES>
 	//    <FRAME>
@@ -412,41 +417,41 @@ bool aVNCLASS(wchar_t* buf, __int64& offset)
 	//            <EXAMPLE>Ellen said a few words.</EXAMPLE>
 	//        </EXAMPLES>
 	//    </FRAME>
-	if (!lineX(buf, offset, tempxc, L"FRAMES/"))
+	if (!lineX(buf, offset, tempxc, u"FRAMES/"))
 	{
 		cXMLFrame frame;
-		if (!lineX(buf, offset, tempxc, L"FRAMES")) return false;
-		while (lineX(buf, offset, frame.description, L"FRAME"))
+		if (!lineX(buf, offset, tempxc, u"FRAMES")) return false;
+		while (lineX(buf, offset, frame.description, u"FRAME"))
 		{
-			lineX(buf, offset, frame.description, L"DESCRIPTION");
-			if (lineX(buf, offset, tempxc, L"EXAMPLES"))
+			lineX(buf, offset, frame.description, u"DESCRIPTION");
+			if (lineX(buf, offset, tempxc, u"EXAMPLES"))
 			{
-				wstring example;
-				tmp = L"EXAMPLE";
-				while (lineX(buf, offset, frame.examples, L"EXAMPLE"))
+				lpwstring example;
+				tmp = u"EXAMPLE";
+				while (lineX(buf, offset, frame.examples, u"EXAMPLE"))
 				{
-					if (!tX(buf, offset, example, L'<')) return false;
+					if (!tX(buf, offset, example, u'<')) return false;
 					frame.examples[frame.examples.size() - 1].av.push_back(cXMLAttribute(tmp, example));
 					offset--;
-					if (endX(buf, offset, tmp) != L"EXAMPLE") return false;
+					if (endX(buf, offset, tmp) != u"EXAMPLE") return false;
 				}
-				if (endX(buf, offset, tmp) != L"EXAMPLES") return false;
+				if (endX(buf, offset, tmp) != u"EXAMPLES") return false;
 			}
 			aVNSyntax(buf, offset, frame.syntax);
 			aVNSemantics(buf, offset, frame.semantics);
 			vn.frames.push_back(frame);
-			if (endX(buf, offset, tmp) != L"FRAME") return false;
+			if (endX(buf, offset, tmp) != u"FRAME") return false;
 		}
-		if (endX(buf, offset, tmp) != L"FRAMES") return false;
+		if (endX(buf, offset, tmp) != u"FRAMES") return false;
 	}
-	//lplog(LOG_WCHECK,L"%s:%s",vn.id[0].av[0].as.c_str(),(vn.noPhysicalAction) ? L"true":L"false");
+	//lplog(LOG_WCHECK,u"%s:%s",vn.id[0].av[0].as.c_str(),(vn.noPhysicalAction) ? u"true":u"false");
 	vbNetClasses.push_back(vn);
-	if (lineX(buf, offset, tempxc, L"SUBCLASSES", true))
+	if (lineX(buf, offset, tempxc, u"SUBCLASSES", true))
 	{
 		while (aVNCLASS(buf, offset));
-		if (endX(buf, offset, tmp) != L"SUBCLASSES") return false;
+		if (endX(buf, offset, tmp) != u"SUBCLASSES") return false;
 	}
-	return endX(buf, offset, tmp) == L"VNCLASS" || tmp == L"VNSUBCLASS";
+	return endX(buf, offset, tmp) == u"VNCLASS" || tmp == u"VNSUBCLASS";
 }
 
 vector < cVerbNet > vbNetClasses;
@@ -457,45 +462,43 @@ vector < cVerbNet > vbNetClasses;
 void readVBNet(void)
 {
 	LFS
-		WIN32_FIND_DATA FindFileData;
-	HANDLE hFind;
-	if ((hFind = FindFirstFile(L"source\\lists\\VerbNet\\*.xml", &FindFileData)) == INVALID_HANDLE_VALUE)
+		// Batch B10: lpDirectoryEntries replaces FindFirstFile/FindNextFile/FindClose.
+		// The directory separator is '/' now; the path itself is otherwise unchanged.
+		const lpwstring verbNetDirectory = u"source/lists/VerbNet";
+	std::vector<lpwstring> verbNetFiles = lpDirectoryEntries(verbNetDirectory, u"*.xml");
+	if (verbNetFiles.empty())
 	{
-		wprintf(L"FindFirstFile failed on directory %s (%d)\r", L"source\\lists\\VerbNet\\", (int)GetLastError());
+		lp_wprintf(u"No VerbNet .xml files found in directory %s\r", verbNetDirectory.c_str());
 		return;
 	}
 	vbNetClasses.reserve(550);
-	do
+	for (const lpwstring& verbNetFile : verbNetFiles)
 	{
-		if (FindFileData.cFileName[0] == '.') continue;
-		wchar_t original[4096];
-		_snwprintf(original, 4096, L"source\\lists\\VerbNet\\%s", FindFileData.cFileName);
-		int fd = _wopen(original, O_RDONLY | O_BINARY);
+		if (verbNetFile.empty() || verbNetFile[0] == '.') continue;
+		lpchar_t original[4096];
+		lp_snprintf(original, 4096, u"%s/%s", verbNetDirectory.c_str(), verbNetFile.c_str());
+		int fd = lp_wopen(original, O_RDONLY | O_BINARY);
 		if (fd < 0)
-		{
-			FindClose(hFind);
 			return;
-		}
-		int bufferlen = filelength(fd);
+		int bufferlen = lp_filelength(fd);
 		char* buffer = (char*)tmalloc(bufferlen + 10);
 		::read(fd, buffer, bufferlen);
 		close(fd);
 		buffer[bufferlen] = 0;
-		wstring wide;
+		lpwstring wide;
 		mTW(buffer, wide);
 		tfree(bufferlen + 10, buffer);
-		__int64 offset = 0;
-		if (!aVNCLASS((wchar_t*)wide.c_str(), offset))
-			wprintf(L"Error reading %s at offset %I64d:%lS..->\n%lS...\n",
-				FindFileData.cFileName, offset, wide.substr((int)(offset - min(offset, 64)), (int)(min(offset, 64))).c_str(), wide.substr((int)offset, 64).c_str());
-	} while (FindNextFile(hFind, &FindFileData) != 0);
-	FindClose(hFind);
-	vbNetVerbToClassMap[L"am"].insert(vbNetClasses.size());
-	vbNetVerbToClassMap[L"become"].insert(vbNetClasses.size());
+		int64_t offset = 0;
+		if (!aVNCLASS((lpchar_t*)wide.c_str(), offset))
+			lp_wprintf(u"Error reading %s at offset %I64d:%lS..->\n%lS...\n",
+				verbNetFile.c_str(), offset, wide.substr((int)(offset - min(offset, (int64_t)64)), (int)(min(offset, (int64_t)64))).c_str(), wide.substr((int)offset, 64).c_str());
+	}
+	vbNetVerbToClassMap[u"am"].insert(vbNetClasses.size());
+	vbNetVerbToClassMap[u"become"].insert(vbNetClasses.size());
 	// who would be afraid to meet death 
 	// he would be at the courthouse
-	vbNetVerbToClassMap[L"be"].insert(vbNetClasses.size());
-	wstring a, as = L"am";
+	vbNetVerbToClassMap[u"be"].insert(vbNetClasses.size());
+	lpwstring a, as = u"am";
 	cXMLClass id;
 	id.av.push_back(cXMLAttribute(a, as));
 	cVerbNet vn;

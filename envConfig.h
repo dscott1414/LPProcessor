@@ -32,18 +32,30 @@
 			this module can do - only removing the hardcoded literals from source.
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #include <string>
 
 const std::string& getDBUser();
 const std::string& getDBPassword();
 const std::string& getDBHost();
 
-const std::wstring& getMainDir();
-const std::wstring& getCacheDir();
-const std::wstring& getWebSearchCacheDir();
-const std::wstring& getTextDir();
+const lpwstring& getMainDir();
+const lpwstring& getCacheDir();
+const lpwstring& getWebSearchCacheDir();
+const lpwstring& getTextDir();
 
-const std::wstring& getGoogleCSEKey();
-const std::wstring& getGoogleCSEContext();
-const std::wstring& getBingSubscriptionKey();
-const std::wstring& getMerriamWebsterKey();
+const lpwstring& getGoogleCSEKey();
+const lpwstring& getGoogleCSEContext();
+const lpwstring& getBingSubscriptionKey();
+const lpwstring& getMerriamWebsterKey();
+
+// Batch B11: the Java classpath used to create the JNI VM for the Stanford parser
+// (hmm.cpp). Was a hardcoded Windows path,
+// ".;F:\\lp\\Stanford\\workspace\\StanfordParser\\target\\StanfordParser-0.0.1-SNAPSHOT.jar".
+// Override with LP_STANFORD_CLASSPATH; the default is the same jar relative to
+// getMainDir(), with POSIX separators (':' between entries, '/' within a path).
+const std::string& getStanfordClasspath();

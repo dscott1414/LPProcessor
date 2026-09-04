@@ -20,6 +20,12 @@
 		- write(buffer,...) FATAL-exits if the payload will not fit, then memcpy's
 			anyway (dead after FATAL).
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
+#include <unistd.h> // batch B5: ::read/::write, replacing MSVC ::read/::write
 #pragma warning (disable: 4996)
 #pragma warning (disable: 4503)
 class cIntArray
@@ -98,7 +104,7 @@ public:
 			content = (int*)tmalloc(allocated * sizeof(*content));
 			if (!content)
 			{
-				lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (9)");
+				lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (9)");
 				return;
 			}
 			if (zeroOutSpace)
@@ -109,24 +115,30 @@ public:
 	// Write count, then count ints.  Return is always true; write errors are ignored.
 	bool write(IOHANDLE file)
 	{
-		_write(file, &count, sizeof(count));
-		_write(file, content, count * sizeof(*content));
+		// Batch B5: ::write, not write -- unqualified would resolve to this very
+		// member function.  IOHANDLE is an int fd (general.h), so the POSIX call
+		// is a direct swap for MSVC's ::write.
+		::write(file, &count, sizeof(count));
+		::write(file, content, count * sizeof(*content));
 		return true;
 	}
 	// Read count, allocate exactly that many ints, read them.  false on short read
 	// or OOM (OOM is also FATAL).  allocated is set equal to count (no slack).
 	bool read(IOHANDLE file)
 	{
-		if (_read(file, &count, sizeof(count)) < sizeof(count))
+		// Batch B5: ::read returns ssize_t (negative on error); the sizeof must be
+		// cast to match, or the comparison goes through unsigned conversion and a
+		// -1 error return compares as enormous rather than short.
+		if (::read(file, &count, sizeof(count)) < (ssize_t)sizeof(count))
 			return false;
 		allocated = count;
 		content = (int*)tmalloc(count * sizeof(*content));
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (10)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (10)");
 			return false;
 		}
-		if (_read(file, content, count * sizeof(*content)) < count * sizeof(*content))
+		if (::read(file, content, count * sizeof(*content)) < (ssize_t)(count * sizeof(*content)))
 			return false;
 		return true;
 	}
@@ -136,7 +148,7 @@ public:
 	{
 		if (!copy(buffer, count, where, limit)) return false;
 		if (where + count * sizeof(*content) > limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (2)!", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached (2)!", limit);
 		memcpy(((char*)buffer) + where, content, count * sizeof(*content));
 		where += count * sizeof(*content);
 		return true;
@@ -149,10 +161,10 @@ public:
 		allocated = count;
 		content = (int*)tmalloc(count * sizeof(*content));
 		if (where + count * sizeof(*content) > limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum read copy limit of %d bytes reached (2)!", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum read copy limit of %d bytes reached (2)!", limit);
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (11)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (11)");
 			return false;
 		}
 		memcpy(content, ((char*)buffer) + where, count * sizeof(*content));
@@ -177,7 +189,7 @@ public:
 			content = (int*)tmalloc(allocated * sizeof(*content));
 			if (!content)
 			{
-				lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (12)");
+				lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (12)");
 				return *this;
 			}
 			memcpy(content, rhs.content, count * sizeof(*content));
@@ -194,7 +206,7 @@ public:
 #ifdef INDEX_CHECK
 		if (_P0 >= count)
 		{
-			lplog(LOG_ERROR, L"Illegal reference (4) to element %d in an array with only %d elements!", _P0, count);
+			lplog(LOG_ERROR, u"Illegal reference (4) to element %d in an array with only %d elements!", _P0, count);
 			if (count == 0) add(0);
 			return content[0];
 		}
@@ -206,7 +218,7 @@ public:
 #ifdef INDEX_CHECK
 		if (_P0 >= count)
 		{
-			lplog(LOG_ERROR, L"Illegal reference (5) to element %d in an array with only %d elements!", _P0, count);
+			lplog(LOG_ERROR, u"Illegal reference (5) to element %d in an array with only %d elements!", _P0, count);
 			if (count == 0) throw;
 			return content[0];
 		}
@@ -298,7 +310,7 @@ public:
 #ifdef INDEX_CHECK
 		if (at >= count || at < 0)
 		{
-			lplog(LOG_ERROR, L"Illegal reference (6) to element %d in an array with only %d elements!", at, count);
+			lplog(LOG_ERROR, u"Illegal reference (6) to element %d in an array with only %d elements!", at, count);
 			if (count == 0) throw;
 			return count;
 		}
@@ -314,11 +326,18 @@ public:
 		return 0;
 	}
 	// Space-separated decimal dump into 'trail' (cleared first).  Returns trail.
-	wstring concatToString(wstring& trail)
+	lpwstring concatToString(lpwstring& trail)
 	{
 		trail.clear();
-		wchar_t temp[10];
-		for (unsigned int I = 0; I < count; I++) trail = trail + wstring(_itow(content[I], temp, 10)) + L" ";
+		// Batch B5: lp_snprintf replaces MSVC's lp_itow.  The buffer also grew from 10
+		// to 16: the most negative int is "-2147483648", 11 characters plus a NUL,
+		// so the original could overflow temp by two on that one value.
+		lpchar_t temp[16];
+		for (unsigned int I = 0; I < count; I++)
+		{
+			lp_snprintf(temp, 16, u"%d", content[I]);
+			trail = trail + lpwstring(temp) + u" ";
+		}
 		return trail;
 	}
 #define BITS_PER_RULE 10

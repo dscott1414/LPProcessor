@@ -42,14 +42,19 @@
 		  returns the first at or after startingPattern (patterns.size() if none);
 		  the caller walks nextRoot or uses [*] at create time to bind all of them.
 		- ABNF read/write is #ifdef ABNF and does not compile against the current
-		  members (wtoi is not a real function - it should be _wtoi -, and fgets is
-		  called with a wchar_t buffer where _fgetws-style input is needed).  The
+		  members (wtoi is not a real function - it should be lp_wtoi -, and fgets is
+		  called with a lpchar_t buffer where _fgetws-style input is needed).  The
 		  live path is always the va_list create().
 		- SOURCE_VERSION must be bumped on any pattern or cache-format change; the
 		  parsed-source cache is keyed on it.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #include "bitObject.h"
-extern vector <wstring> patternTagStrings;
+extern vector <lpwstring> patternTagStrings;
 
 int createBasicPatterns(void);
 int createVerbPatterns(void);
@@ -59,12 +64,12 @@ void createSecondaryPatterns1(void);
 int createSecondaryPatterns2(void);
 void createQuestionPatterns(void);
 
-#define SOURCE_VERSION 8 // increment on any format or pattern change or source processing change
+#define SOURCE_VERSION 9 // increment on any format or pattern change or source processing change
 /*
 EXAMPLE
-cPattern::create(L"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", L"Y",
-										1, L"__C1__S1", 0, 1, 1, ** patternElement 0, patternElementIndex=0
-										3, L"_NOUN_OBJ{OBJECT}", L"__NOUN[*]{OBJECT}", L"_ADJECTIVE", 0, 0, 1, ** patternElement 1, patternElementIndex=0, patternElement 1, patternElementIndex=1, patternElement 1, patternElementIndex=2
+cPattern::create(u"XX{_FINAL_IF_NO_MIDDLE_MATCH_EXCEPT_SUBPATTERN}", u"Y",
+										1, u"__C1__S1", 0, 1, 1, ** patternElement 0, patternElementIndex=0
+										3, u"_NOUN_OBJ{OBJECT}", u"__NOUN[*]{OBJECT}", u"_ADJECTIVE", 0, 0, 1, ** patternElement 1, patternElementIndex=0, patternElement 1, patternElementIndex=1, patternElement 1, patternElementIndex=2
 										0);
 */
 class cSource;
@@ -143,17 +148,17 @@ public:
     int inflectionFlags; // see enum InflectionTypes
     int minimum;
     int maximum;
-    wstring patternName;
+    lpwstring patternName;
     int patternNum;
     int elementPosition;
-    vector <wstring> formStr;
-    vector <wstring> specificWords;
+    vector <lpwstring> formStr;
+    vector <lpwstring> specificWords;
     cIntArray formIndexes;
     cIntArray formCosts;
 
     vector < set <unsigned int> > formTags;
     vector <bool> formStopDescendingSearch;
-    vector <wstring> patternStr;
+    vector <lpwstring> patternStr;
     cIntArray patternIndexes;
     cIntArray patternCosts;
     vector < set <unsigned int> > patternTags;
@@ -190,8 +195,8 @@ public:
     int matchOne(cSource &source,unsigned int sourcePosition,unsigned int lastElement,vector <cMatchElement> &whatMatched, sTrace &t);
     bool matchRange(cSource &source,int begin,int end,vector <cMatchElement> &whatMatched, sTrace &t);
     bool matchFirst(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched, sTrace &t);
-    bool inflectionMatch(int inflectionFlags,__int64 flags,wstring formStr, sTrace &t);
-    wstring formsStr(void);
+    bool inflectionMatch(int inflectionFlags,int64_t flags,lpwstring formStr, sTrace &t);
+    lpwstring formsStr(void);
 	// True if this element's OR-list of child patterns includes pattern number pn.
     bool contains(int pn)
     {
@@ -199,18 +204,18 @@ public:
         if (patternIndexes[e]==pn) return true;
       return false;
     }
-		void reportUsage(wchar_t *temp, int J, bool isPattern);
+		void reportUsage(lpchar_t *temp, size_t tempCount, int J, bool isPattern); // batch B5: tempCount, see pattern.cpp
 		bool copyUsage(void *buf, int &where, int limit);
 		void zeroUsage();
-		wchar_t *toText(wchar_t *temp,int J,bool isPattern,int maxBuf);
+		lpchar_t *toText(lpchar_t *temp,int J,bool isPattern,int maxBuf);
     bool hasTag(unsigned int tag);
 		bool hasTag(unsigned int elementIndex,unsigned int tag,bool isPattern);
     int hasTagInSet(unsigned int patternIndex,unsigned int desiredTagSetNum,unsigned int &tagNumBySet,bool isPattern);
-    void writeABNF(wchar_t *buf,int &len);
-    int writeABNFElementTag(wchar_t *buf,wstring sForm,int num,int cost,vector <unsigned int> &tags,bool printNum);
-    void readABNFElementTag(wstring patternName,wstring differentiator,int elementNum,set <unsigned int> &descendantTags,wchar_t *buf);
-    const wchar_t *inflectionFlagsToStr(wstring &sFlags);
-		wstring variable;
+    void writeABNF(lpchar_t *buf,int &len);
+    int writeABNFElementTag(lpchar_t *buf,lpwstring sForm,int num,int cost,vector <unsigned int> &tags,bool printNum);
+    void readABNFElementTag(lpwstring patternName,lpwstring differentiator,int elementNum,set <unsigned int> &descendantTags,lpchar_t *buf);
+    const lpchar_t *inflectionFlagsToStr(lpwstring &sFlags);
+		lpwstring variable;
 		int endPosition;
 };
 
@@ -301,32 +306,32 @@ public:
 class cTagSet
 {
 public:
-    wstring name;
+    lpwstring name;
     unsigned int NAME_TAG;
     int required;
     vector <unsigned int> tags;
-    cTagSet(unsigned int &tagSetNum,const wchar_t *tag,int,...);
+    cTagSet(unsigned int &tagSetNum,const lpchar_t *tag,int,...);
     void addTagSet(int tagSet);
 };
 
 extern vector < cTagSet > desiredTagSets;
 
-int findTag(vector <cTagLocation> &tagSet,const wchar_t *tagName,int &nextTag);
-int findTag(const wchar_t *tagName);
-int findOneTag(vector <cTagLocation> &tagSet, const wchar_t *tagName,int start=-1);
-int findTagConstrained(vector <cTagLocation> &tagSet, const wchar_t *tagName,int &nextTag,cTagLocation &parentTag);
-int findTagConstrained(vector <cTagLocation> &tagSet, const wchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
+int findTag(vector <cTagLocation> &tagSet,const lpchar_t *tagName,int &nextTag);
+int findTag(const lpchar_t *tagName);
+int findOneTag(vector <cTagLocation> &tagSet, const lpchar_t *tagName,int start=-1);
+int findTagConstrained(vector <cTagLocation> &tagSet, const lpchar_t *tagName,int &nextTag,cTagLocation &parentTag);
+int findTagConstrained(vector <cTagLocation> &tagSet, const lpchar_t *tagName,int &nextTag,unsigned int searchBegin,unsigned int searchEnd);
 void findTagSetConstrained(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray,cTagLocation &parentTag);
 void findTagSet(vector <cTagLocation> &tagSet,unsigned int desiredTagSetNum,char *tagFilledArray);
-void printTagSet(int logType,wchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet,vector <wstring> &words);
-void printTagSet(int logType, const wchar_t * descriptor,int ts,vector <cTagLocation> &tagSet);
+void printTagSet(int logType,lpchar_t *tagSetType,int ts,vector <cTagLocation> &tagSet,vector <lpwstring> &words);
+void printTagSet(int logType, const lpchar_t * descriptor,int ts,vector <cTagLocation> &tagSet);
 bool tagSetSame(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSetNew);
 void minimizeTagSet(vector  <cTagLocation> &tagSet);
 
 // Sole findPattern overload; patterns.size() is the not-found sentinel (see
-// pattern.cpp header notes - the unused wstring-only and (name,diff)/-1-sentinel
+// pattern.cpp header notes - the unused lpwstring-only and (name,diff)/-1-sentinel
 // overloads had zero callers anywhere in the tree and were removed).
-unsigned int findPattern(wstring form,unsigned int &startingPattern);
+unsigned int findPattern(lpwstring form,unsigned int &startingPattern);
 
 class cPattern {
 public:
@@ -373,9 +378,9 @@ public:
 				checkIgnorableForms = false;
         objectTag=-1;
     };
-    static bool create(wstring patternName,wstring differentiator,int numForms,...);
-		static cPattern *create(cSource *source,wstring patternName,int num,int whereBegin,int whereEnd,unordered_map <wstring, wstring> &parseVariables);
-    bool eliminateTag(wstring tag);
+    static bool create(lpwstring patternName,lpwstring differentiator,int numForms,...);
+		static cPattern *create(cSource *source,lpwstring patternName,int num,int whereBegin,int whereEnd,unordered_map <lpwstring, lpwstring> &parseVariables);
+    bool eliminateTag(lpwstring tag);
     bool resolveDescendants(bool circular);
     cPattern(cPattern *p);
 	// Deletes owned cPatternElement pointers.  The global `patterns` vector holds
@@ -394,13 +399,13 @@ public:
 		void reportUsage(void);
 		bool copyUsage(void *buf, int &where, int limit);
 		void zeroUsage();
-    bool add(int elementNum,wstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
+    bool add(int elementNum,lpwstring patternName,bool logFutureReferences,int cost,set <unsigned int> tags,bool blockDescendants,bool allowRecursiveMatch);
     void lplog(int logTypes);
-    void lplogShort(wstring patternType, int logTypes);
+    void lplogShort(lpwstring patternType, int logTypes);
     void readABNF(FILE *fh);
     void writeABNF(FILE *fh,unsigned int lastTag);
-    wstring name;
-    wstring differentiator;
+    lpwstring name;
+    lpwstring differentiator;
     unsigned int num;
     unsigned int rootPattern; // first pattern having the same name
     int cost;
@@ -415,19 +420,19 @@ public:
     set <unsigned int> tags;
     set <unsigned int> descendantTags;
     vector <unsigned int> descendantPatterns;
-    unordered_map < wstring, int > variableToLocationMap;
-		unordered_map < wstring, int > variableToLengthMap;
-		unordered_map < int , wstring > locationToVariableMap;
+    unordered_map < lpwstring, int > variableToLocationMap;
+		unordered_map < lpwstring, int > variableToLengthMap;
+		unordered_map < int , lpwstring > locationToVariableMap;
 
     // descendantTagSets only used during test procedure -
     bool descendantsPopulated,referencing,doubleReferencing;
     vector < vector<cTagLocation> > descendantTagSets;
-    vector < vector<wstring> > descendantWordSets;
+    vector < vector<lpwstring> > descendantWordSets;
 
-    unsigned __int64 includesOneOfTagSet;
-    unsigned __int64 tagSetMemberInclusion[64]; // more than 64 tagSets?  more than 64 tags in one tagSet?
-    unsigned __int64 includesOnlyDescendantsAllOfTagSet;
-    unsigned __int64 includesDescendantsAndSelfAllOfTagSet;
+    uint64_t includesOneOfTagSet;
+    uint64_t tagSetMemberInclusion[64]; // more than 64 tagSets?  more than 64 tags in one tagSet?
+    uint64_t includesOnlyDescendantsAllOfTagSet;
+    uint64_t includesDescendantsAndSelfAllOfTagSet;
     unsigned int lastTagSetEvaluated;
 	// True if this alternative is marked {_BLOCK}: collectTags must not walk into
 	// the child's descendant tags.  Logs _WRONG and returns false if index is OOB
@@ -438,13 +443,13 @@ public:
 			{
 				if ((int)elements[element]->patternStopDescendingSearch.size()<=index)
 				{
-					::lplog(L"_WRONG (1) %s[%s] element #%d index #%d [IS pattern] %d<=%d!",name.c_str(),differentiator.c_str(),element,index,(int)elements[element]->patternStopDescendingSearch.size(),index);
+					::lplog(u"_WRONG (1) %s[%s] element #%d index #%d [IS pattern] %d<=%d!",name.c_str(),differentiator.c_str(),element,index,(int)elements[element]->patternStopDescendingSearch.size(),index);
 					return false;
 				}
 			}
 			else if ((int)elements[element]->formStopDescendingSearch.size()<=index)
 			{
-				::lplog(L"_WRONG (2) %s[%s] element #%d index #%d [NOT pattern] %d<=%d!",name.c_str(),differentiator.c_str(),element,index,(int)elements[element]->formStopDescendingSearch.size(),index);
+				::lplog(u"_WRONG (2) %s[%s] element #%d index #%d [NOT pattern] %d<=%d!",name.c_str(),differentiator.c_str(),element,index,(int)elements[element]->formStopDescendingSearch.size(),index);
 				return false;
 			}
 			return (isPattern) ? elements[element]->patternStopDescendingSearch[index] : elements[element]->formStopDescendingSearch[index]; 
@@ -526,7 +531,7 @@ public:
         else
             low=currentElement+1;
         //if (t.tracePatternElimination)
-        //  ::lplog(LOG_INFO,L"next element of pattern %s[%s] after element #%d will be element #%d-#%d.",name.c_str(),differentiator.c_str(),currentElement,low,high);
+        //  ::lplog(LOG_INFO,u"next element of pattern %s[%s] after element #%d will be element #%d-#%d.",name.c_str(),differentiator.c_str(),currentElement,low,high);
         return low<elements.size();
     }
     bool containsOneOfTagSet(cTagSet &desiredTagSet,unsigned int limit,bool includeSelf);
@@ -555,7 +560,7 @@ public:
 private:
     vector <cPatternElement *> elements;
 //    static vector <cMatchElement> whatMatched;
-    void static processForm(wstring &form,wstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants, bool &allowRecursiveMatch);
+    void static processForm(lpwstring &form,lpwstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants, bool &allowRecursiveMatch);
     void firstForm(void);
     void lastForm(void);
     void firstNonMandatoryForm(void);
@@ -569,7 +574,7 @@ public:
 	// Record that patterns[inPatternNum].elements[inElementNum] refers to the
 	// still-unresolved pattern named inForm.  resolve() later calls add() for
 	// every already-created instance of that name.
-    cPatternReference(wstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
+    cPatternReference(lpwstring inForm,int inPatternNum,int inDiffNum,int inElementNum,int inCost,set <unsigned int> inTags, bool inBlockDescendants, bool inAllowRecursiveMatch, bool inLogFutureReferences)
     {
         form=inForm;
         patternNum=inPatternNum;
@@ -583,7 +588,7 @@ public:
 		};
     void resolve(bool &patternError);
     void resolve(vector <cPattern *> &patterns,bool &patternError);
-    wstring form;
+    lpwstring form;
     int patternNum;
     int diffNum;
     int elementNum;

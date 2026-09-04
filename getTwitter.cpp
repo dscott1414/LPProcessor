@@ -10,7 +10,7 @@
 		Standalone acquisition utility; not called from the novel-parse pipeline.
 
 	Key entry points:
-		- I64ToS() - formats an __int64 into tmp
+		- I64ToS() - formats an int64_t into tmp
 		- logCurrentTime() - logs UTC month-day-year
 		- getTwitterEntries() - infinite scrape loop for 'filter'
 
@@ -23,15 +23,22 @@
 		since_id on the next cycle), not just whichever entry was processed last.
 		while(true) only exits on HTTP error.
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <thread>
+#include <chrono>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <errno.h>
-#include <windows.h>
-#include "WinInet.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
+#include "lpProcess.h"
 #include "errno.h"
 #include <time.h>
 #undef _STLP_USE_EXCEPTIONS // STLPORT 4.6.1
@@ -41,13 +48,12 @@
 #include <unordered_map>
 #include <set>
 using namespace std;
-#include <direct.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
 #include "internet.h"
 
-void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntology.cpp
+void encodeURL(lpwstring winput, lpwstring& wencodedURL); // defined in createOntology.cpp
 
 // ethereal parameters to track packets
 // host 64.15.203.18
@@ -80,10 +86,10 @@ void encodeURL(wstring winput, wstring& wencodedURL); // defined in createOntolo
 	*/
 
 // Writes decimal i into tmp (via a 1024-wchar stack buffer) and returns tmp.
-wstring I64ToS(__int64 i, wstring& tmp)
+lpwstring I64ToS(int64_t i, lpwstring& tmp)
 {
-	wchar_t temp[1024];
-	_i64tow(i, temp, 10);
+	lpchar_t temp[1024];
+	lp_i64tow(i, temp);
 	return tmp = temp;
 }
 
@@ -105,16 +111,16 @@ void logCurrentTime(void)
 {
 	time_t seconds = time(NULL);
 	struct tm* day = gmtime(&seconds);
-	lplog(L"%d-%d-%d", day->tm_mon, day->tm_mday, 1900 + day->tm_year);
+	lplog(u"%d-%d-%d", day->tm_mon, day->tm_mday, 1900 + day->tm_year);
 }
 
-extern wstring logFileExtension;
+extern thread_local lpwstring logFileExtension; // batch B5: matches logging.h
 // Scrapes search.twitter.com Atom for 'filter' forever. Returns only on readPage error.
 // not currently called from anywhere in the tree (see file header).
-int getTwitterEntries(wchar_t* filter)
+int getTwitterEntries(lpchar_t* filter)
 {
 	// happy
-	wstring baseURL = L"https://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
+	lpwstring baseURL = u"https://search.twitter.com/search.atom?lang=en&rpp=100&q="; // ORq=%3A-)ORq=%3D) - removed - actually decreases results!
 
 	// %3A) happy
 	// %3A( sad
@@ -122,48 +128,48 @@ int getTwitterEntries(wchar_t* filter)
 	// corrupt or truncate the request); if a caller ever needs to pass pre-built query syntax
 	// (raw "q="/"OR" clauses, already-percent-escaped emoticons) that caller will need its own
 	// query-construction path instead of a single opaque 'filter' string.
-	wstring uFilter;
+	lpwstring uFilter;
 	encodeURL(filter, uFilter);
 	baseURL += uFilter;
 	cInternet::bandwidthControl = 0;
-	__int64 lastId = -1;
+	int64_t lastId = -1;
 	int numTotalPerQueryCollected = 0;
-	set <__int64> tweets;
+	set <int64_t> tweets;
 	logCache = 0;
-	wchar_t logbuf[1024];
-	_swprintf(logbuf, L".Twitter.%s", filter);
+	lpchar_t logbuf[1024];
+	lp_snprintf(logbuf, 1024, u".Twitter.%s", filter); // batch B10: bounded
 	logFileExtension = logbuf;
 	while (true)
 	{
 		logCurrentTime();
-		wstring buffer, URL = baseURL, tmp;
+		lpwstring buffer, URL = baseURL, tmp;
 		if (lastId >= 0)
-			URL += L"&since_id=" + I64ToS(lastId, buffer);
-		wstring consoleTitle = L"# tweets total=" + itos(tweets.size(), buffer) + L" perQuery=" + itos(numTotalPerQueryCollected, tmp) + wstring(L" filter=") + filter;
-		SetConsoleTitle(consoleTitle.c_str());
+			URL += u"&since_id=" + I64ToS(lastId, buffer);
+		lpwstring consoleTitle = u"# tweets total=" + itos(tweets.size(), buffer) + u" perQuery=" + itos(numTotalPerQueryCollected, tmp) + lpwstring(u" filter=") + filter;
+		lpReportProgress(consoleTitle.c_str());
 		numTotalPerQueryCollected = 0;
 		for (int page = 1; page < 15; page++)
 		{
-			wstring pagedURL = URL + L"&page=" + itos(page, buffer);
+			lpwstring pagedURL = URL + u"&page=" + itos(page, buffer);
 			int pos = -1, ret, numCollected = tweets.size();
 			if (ret = cInternet::readPage(pagedURL.c_str(), buffer)) return ret;
-			wstring entry;
+			lpwstring entry;
 			int numEntriesPerPage = 0;
-			for (; (pos = takeLastMatch(buffer, L"<entry>", L"</entry>", entry, false)) >= 0; numEntriesPerPage++)
+			for (; (pos = takeLastMatch(buffer, u"<entry>", u"</entry>", entry, false)) >= 0; numEntriesPerPage++)
 			{
-				wstring sid, title;
-				const wchar_t* wch;
-				pos = takeLastMatch(entry, L"<id>", L"</id>", sid, false);
-				if ((wch = wcschr(sid.c_str(), L':')) != NULL && (wch = wcschr(wch + 1, L':')) != NULL)
+				lpwstring sid, title;
+				const lpchar_t* wch;
+				pos = takeLastMatch(entry, u"<id>", u"</id>", sid, false);
+				if ((wch = lp_strchr(sid.c_str(), u':')) != NULL && (wch = lp_strchr(wch + 1, u':')) != NULL)
 				{
-					__int64 thisId = _wtoi64(wch + 1);
+					int64_t thisId = lp_wtoll(wch + 1);
 					if (thisId > lastId)
 						lastId = thisId; // track the maximum id seen (used as since_id next cycle), not just whichever entry was processed last
-					pos = takeLastMatch(entry, L"<title>", L"</title>", title, false);
+					pos = takeLastMatch(entry, u"<title>", u"</title>", title, false);
 					if (tweets.find(thisId) == tweets.end())
 					{
 						printf("%010I64d:%lS\n", thisId, title.c_str());
-						lplog(L"%010I64d:%s", thisId, title.c_str());
+						lplog(u"%010I64d:%s", thisId, title.c_str());
 						tweets.insert(thisId);
 						numTotalPerQueryCollected++;
 					}
@@ -171,7 +177,7 @@ int getTwitterEntries(wchar_t* filter)
 			}
 			if (numEntriesPerPage == 0 || (tweets.size() - numCollected) == 0) break;
 		}
-		Sleep(1000 * 60 * 10);
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000 * 60 * 10));
 	}
 	return 0;
 }

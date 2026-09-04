@@ -35,28 +35,32 @@
 			index names; FKs to tables that were created later, or never
 			created at all).  createTimeRelationTables, createObjectTables, and
 			createRelationTables have all been fixed; see the comments on each.
-			createGroupTables/createLocationTables/createThesaurusTables remain
-			broken-if-run, but are never called from anywhere in the tree
-			(author note: "these do not exist within the database"), so they
-			were left alone.
-		- generateBNCSources allocates actualLen+sizeof(wchar_t) bytes and
-			NUL-terminates at buffer[actualLen/sizeof(wchar_t)] - in range.
-		- writeThesaurusEntry builds the statement in a wstring (no fixed-size
+			createGroupTables's two remaining defects (no index on the column
+			its children FK to, and an FK naming a groups.id column that does
+			not exist) are now fixed as well; createLocationTables and
+			createThesaurusTables were re-checked and are valid as they stand.
+			All three are still uncalled from anywhere in the tree (author
+			note: "these do not exist within the database").
+		- generateBNCSources allocates actualLen+sizeof(lpchar_t) bytes and
+			NUL-terminates at buffer[actualLen/sizeof(lpchar_t)] - in range.
+		- writeThesaurusEntry builds the statement in a lpwstring (no fixed-size
 			stack buffer), escaping each list entry before appending it.
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include <winsock.h>
-#include "Winhttp.h"
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
@@ -66,7 +70,7 @@
 #include "mysqldb.h"
 #include "QuestionAnswering.h"
 
-bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qualifier);
+bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qualifier);
 
 //maxSynonymAccumulatedSize = 552
 //maxAntonymAccumulatedSize = 106
@@ -78,13 +82,13 @@ bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qual
 // unless the caller used allowFailure).
 int cSource::createThesaurusTables()
 {
-	if (!myquery(&mysql, L"CREATE TABLE thesaurus ("
-		L"mainEntry CHAR(32) CHARACTER SET utf8mb4 NOT NULL, INDEX me_ind (mainEntry), "
-		L"wordType SMALLINT UNSIGNED NOT NULL,"
-		L"primarySynonyms CHAR(100) CHARACTER SET utf8mb4 NOT NULL, "
-		L"accumulatedSynonyms TEXT(1000) CHARACTER SET utf8mb4 NOT NULL, "
-		L"accumulatedAntonyms CHAR(120) CHARACTER SET utf8mb4 NOT NULL, "
-		L"concepts CHAR(40) CHARACTER SET utf8mb4 NOT NULL)"))
+	if (!myquery(&mysql, u"CREATE TABLE thesaurus ("
+		u"mainEntry CHAR(32) CHARACTER SET utf8mb4 NOT NULL, INDEX me_ind (mainEntry), "
+		u"wordType SMALLINT UNSIGNED NOT NULL,"
+		u"primarySynonyms CHAR(100) CHARACTER SET utf8mb4 NOT NULL, "
+		u"accumulatedSynonyms TEXT(1000) CHARACTER SET utf8mb4 NOT NULL, "
+		u"accumulatedAntonyms CHAR(120) CHARACTER SET utf8mb4 NOT NULL, "
+		u"concepts CHAR(40) CHARACTER SET utf8mb4 NOT NULL)"))
 		return -1;
 	return 0;
 }
@@ -101,13 +105,13 @@ vector <string> rest;
 
 */
 // Append each narrow string as "value;" into a wide SQL literal, escaped.
-static void appendEscapedList(wstring& qt, const vector <string>& values)
+static void appendEscapedList(lpwstring& qt, const vector <string>& values)
 {
-	wstring wide;
+	lpwstring wide;
 	for (unsigned int I = 0; I < values.size(); I++)
 	{
 		mTW(values[I], wide);
-		qt += escaped(wide) + L";";
+		qt += escaped(wide) + u";";
 	}
 }
 
@@ -125,39 +129,48 @@ int cSource::writeThesaurusEntry(sDefinition& d)
 		wtTotal &= ~(1 << 7);
 	if (wtTotal & (1 << 1))
 		wtTotal &= ~(1 << 8);
-	// Built in a wstring: the synonym/antonym lists are unbounded and used to be
-	// wcscat'd into a 4096 wchar_t stack buffer.
-	wstring qt, mainEntry, tmp;
+	// Built in a lpwstring: the synonym/antonym lists are unbounded and used to be
+	// wcscat'd into a 4096 lpchar_t stack buffer.
+	lpwstring qt, mainEntry, tmp;
 	mTW(d.mainEntry, mainEntry);
-	qt = L"INSERT INTO thesaurus VALUES (\"" + escaped(mainEntry) + L"\"," + itos(wtTotal, tmp) + L",\"";
+	qt = u"INSERT INTO thesaurus VALUES (\"" + escaped(mainEntry) + u"\"," + itos(wtTotal, tmp) + u",\"";
 	appendEscapedList(qt, d.primarySynonyms);
-	qt += L"\",\"";
+	qt += u"\",\"";
 	appendEscapedList(qt, d.accumulatedSynonyms);
-	qt += L"\",\"";
+	qt += u"\",\"";
 	appendEscapedList(qt, d.accumulatedAntonyms);
-	qt += L"\",\"";
+	qt += u"\",\"";
 	for (unsigned int I = 0; I < d.concepts.size(); I++)
-		qt += itos(d.concepts[I], tmp) + L";";
-	qt += L"\")";
+		qt += itos(d.concepts[I], tmp) + u";";
+	qt += u"\")";
 	return myquery(&mysql, qt.c_str());
 }
 
-// CREATE groups / groupMapTo / subGroups.  Unused; subGroups FKs
-// groups(id) but groups has no id column (would fail if run).
-// thse are not used and do not exist within the database
+// CREATE groups / groupMapTo / subGroups.  Still unused (author note: "these do
+// not exist within the database"), but no longer broken-if-run: two defects that
+// would have made this fail on the first call are fixed.
+//   1. `groups` declared groupId with no index on it, so both child tables'
+//      FOREIGN KEY (...) REFERENCES groups(groupId) would be rejected -- InnoDB
+//      requires the referenced column to be the first column of an index on the
+//      parent.  A non-unique index is the right kind here: a group has one row
+//      per fromWord, so groupId is deliberately NOT unique in this table.
+//   2. subGroups' second FK referenced groups(id); `groups` has no `id` column at
+//      all.  It now references groups(groupId), which is what it meant.
+// Reasoned from the schema, not executed -- there is no MySQL server in this
+// environment to run it against, and nothing calls this function.
 int cSource::createGroupTables(void)
 {
 	LFS
-		if (!myquery(&mysql, L"CREATE TABLE groups (groupId int(11) unsigned NOT NULL, "
-			L"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
-			L"fromWordId INT UNSIGNED NOT NULL, INDEX fw_ind (fromWordId), FOREIGN KEY (fromWordId) REFERENCES words(id), "
-			L"ts TIMESTAMP)")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE groupMapTo (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
-		L"toWordId INT UNSIGNED NOT NULL, INDEX tw_ind (toWordId), FOREIGN KEY (toWordId) REFERENCES words(id), "
-		L"ts TIMESTAMP)")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE subGroups (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
-		L"subgroupId INT UNSIGNED NOT NULL, INDEX sg_ind (subgroupId), FOREIGN KEY (subgroupId) REFERENCES groups(id), "
-		L"UNIQUE INDEX gsg_ind (groupId,subgroupId))")) return -1;
+		if (!myquery(&mysql, u"CREATE TABLE groups (groupId int(11) unsigned NOT NULL, INDEX g_ind (groupId), "
+			u"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
+			u"fromWordId INT UNSIGNED NOT NULL, INDEX fw_ind (fromWordId), FOREIGN KEY (fromWordId) REFERENCES words(id), "
+			u"ts TIMESTAMP)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE groupMapTo (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
+		u"toWordId INT UNSIGNED NOT NULL, INDEX tw_ind (toWordId), FOREIGN KEY (toWordId) REFERENCES words(id), "
+		u"ts TIMESTAMP)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE subGroups (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
+		u"subgroupId INT UNSIGNED NOT NULL, INDEX sg_ind (subgroupId), FOREIGN KEY (subgroupId) REFERENCES groups(groupId), "
+		u"UNIQUE INDEX gsg_ind (groupId,subgroupId))")) return -1;
 	return 0;
 }
 
@@ -173,20 +186,20 @@ int cSource::createLocationTables(void)
 			where int
 			generic location id (key to locations table) - park/room/building etc
 		*/
-		if (!myquery(&mysql, L"CREATE TABLE locations ("
-			L"id int(11) unsigned NOT NULL auto_increment unique, sourceId smallint NOT NULL, w int NOT NULL, "
-			L"genericLocation INT UNSIGNED, FOREIGN KEY (genericLocation) REFERENCES locations(id))")) return -1;
+		if (!myquery(&mysql, u"CREATE TABLE locations ("
+			u"id int(11) unsigned NOT NULL auto_increment unique, sourceId smallint NOT NULL, w int NOT NULL, "
+			u"genericLocation INT UNSIGNED, FOREIGN KEY (genericLocation) REFERENCES locations(id))")) return -1;
 	/*
 		locationObjectAssociation table:
 		location id (key to locations table)
 		word (representing noun), physically present at said location
 		specific location where (sourceId + where)
 	*/
-	if (!myquery(&mysql, L"CREATE TABLE locationObjectAssociation ("
-		L"locationId INT UNSIGNED NOT NULL, FOREIGN KEY (locationId) REFERENCES locations(id), "
-		L"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
-		L"sourceId smallint NOT NULL, "
-		L"w int NOT NULL)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE locationObjectAssociation ("
+		u"locationId INT UNSIGNED NOT NULL, FOREIGN KEY (locationId) REFERENCES locations(id), "
+		u"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
+		u"sourceId smallint NOT NULL, "
+		u"w int NOT NULL)")) return -1;
 	return 0;
 }
 
@@ -202,28 +215,28 @@ int cSource::createObjectTables(void)
 	LFS
 		// the name bit will be set so that objectWordMap orderOrType will be defined as a type,
 		// hon,hon2,hon3; first; middle,middle2; last; suffix; any;
-		if (!myquery(&mysql, L"CREATE TABLE objects ("
-			L"sourceId INT NOT NULL, "
-			L"objectNum INT NOT NULL, "
-			L"objectClass INT NOT NULL, "
-			L"numEncounters INT NOT NULL, "
-			L"numIdentifiedAsSpeaker INT NOT NULL, "
-			L"nickName INT NOT NULL, "
-			L"ownerWhere INT NOT NULL, "
-			L"firstSpeakerGroup INT NOT NULL, "
-			L"profession INT NOT NULL, "
-			L"ts TIMESTAMP, "
-			L"identified BIT NOT NULL, plural BIT NOT NULL, male BIT NOT NULL, female BIT NOT NULL, neuter BIT NOT NULL, "
-			L"common BIT NOT NULL, name BIT NOT NULL)")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE objectLocations ("
-		L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), "
-		L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
-		L"at INT)")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE objectWordMap ("
-		L"sourceId INT NOT NULL, "
-		L"objectNum INT NOT NULL, "
-		L"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
-		L"orderOrType TINYINT NOT NULL)")) return -1;
+		if (!myquery(&mysql, u"CREATE TABLE objects ("
+			u"sourceId INT NOT NULL, "
+			u"objectNum INT NOT NULL, "
+			u"objectClass INT NOT NULL, "
+			u"numEncounters INT NOT NULL, "
+			u"numIdentifiedAsSpeaker INT NOT NULL, "
+			u"nickName INT NOT NULL, "
+			u"ownerWhere INT NOT NULL, "
+			u"firstSpeakerGroup INT NOT NULL, "
+			u"profession INT NOT NULL, "
+			u"ts TIMESTAMP, "
+			u"identified BIT NOT NULL, plural BIT NOT NULL, male BIT NOT NULL, female BIT NOT NULL, neuter BIT NOT NULL, "
+			u"common BIT NOT NULL, name BIT NOT NULL)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE objectLocations ("
+		u"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), "
+		u"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
+		u"at INT)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE objectWordMap ("
+		u"sourceId INT NOT NULL, "
+		u"objectNum INT NOT NULL, "
+		u"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
+		u"orderOrType TINYINT NOT NULL)")) return -1;
 	return 0;
 }
 
@@ -238,24 +251,24 @@ int cSource::createTimeRelationTables(void)
 {
 	LFS
 		// timeGroups:
-		if (!myquery(&mysql, L"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
-			L"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
-			L"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
+		if (!myquery(&mysql, u"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
+			u"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
+			u"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
 	// timeGroupMembers: timeGroupId foreign key to timeGroups, objectId, wordRelationId
-	if (!myquery(&mysql, L"CREATE TABLE timeGroupMembers ("
-		L"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-		L"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
-		L"wordRelationId INT UNSIGNED NOT NULL, INDEX r_ind (wordRelationId), FOREIGN KEY (wordRelationId) REFERENCES wordRelations(id))")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE timeGroupMembers ("
+		u"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
+		u"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
+		u"wordRelationId INT UNSIGNED NOT NULL, INDEX r_ind (wordRelationId), FOREIGN KEY (wordRelationId) REFERENCES wordRelations(id))")) return -1;
 	// timeRelationTypes: {BEFORE|AFTER|ON_OR_BEFORE|ON_OR_AFTER|LESS_THAN|MORE_THAN|
 	//                    EQUAL_OR_LESS|EQUAL_OR_MORE|START|MID|END|APPROX}
-	if (!myquery(&mysql, L"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
-		L"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
+		u"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
 	// timeGroupRelations:
-	if (!myquery(&mysql, L"CREATE TABLE timeGroupRelations (id int(11) unsigned NOT NULL auto_increment unique, "
-		L"timeRelationTypeId INT UNSIGNED NOT NULL, INDEX tri_ind (timeRelationTypeId), FOREIGN KEY (timeRelationTypeId) REFERENCES timeRelationTypes(id), "
-		L"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-		L"timeGroup2Id INT UNSIGNED NOT NULL, INDEX tgi2_ind (timeGroup2Id), FOREIGN KEY (timeGroup2Id) REFERENCES timeGroups(id)"
-		L")")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE timeGroupRelations (id int(11) unsigned NOT NULL auto_increment unique, "
+		u"timeRelationTypeId INT UNSIGNED NOT NULL, INDEX tri_ind (timeRelationTypeId), FOREIGN KEY (timeRelationTypeId) REFERENCES timeRelationTypes(id), "
+		u"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
+		u"timeGroup2Id INT UNSIGNED NOT NULL, INDEX tgi2_ind (timeGroup2Id), FOREIGN KEY (timeGroup2Id) REFERENCES timeGroups(id)"
+		u")")) return -1;
 	return 0;
 }
 
@@ -318,180 +331,181 @@ int cSource::createTimeRelationTables(void)
 int cSource::createRelationTables(void)
 {
 	LFS
-		if (!myquery(&mysql, L"CREATE TABLE objectRelations (id int(11) unsigned NOT NULL auto_increment unique, "
-			L"fromObjectId INT UNSIGNED NOT NULL, INDEX fo_ind (fromObjectId), FOREIGN KEY (fromObjectId) REFERENCES objects(id), "
-			L"toObjectId INT UNSIGNED NOT NULL, INDEX to_ind (toObjectId), FOREIGN KEY (toObjectId) REFERENCES objects(id), "
-			L"totalCount INT NOT NULL, "
-			L"typeId INT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
-			L"ts TIMESTAMP)")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE wordRelations ("
-		L"id int(11) unsigned NOT NULL auto_increment unique, "
-		L"sourceId smallint(5) unsigned NOT NULL, "
-		L"lastWhere int NOT NULL, "
-		L"fromWordId INT UNSIGNED NOT NULL DEFAULT '0', INDEX fw_ind (fromWordId), FOREIGN KEY (fromWordId) REFERENCES words(id), "
-		L"toWordId INT UNSIGNED NOT NULL DEFAULT '0', INDEX tw_ind (toWordId), FOREIGN KEY (toWordId) REFERENCES words(id), "
-		L"typeId SMALLINT UNSIGNED NOT NULL DEFAULT '0', "
-		L"UNIQUE INDEX uw_ind (fromWordId,toWordId,typeId), " // must be kept for ON DUPLICATE KEY UPDATE logic in flushWordRelations
-		L"totalCount INT NOT NULL DEFAULT '0', "
-		L"ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX ts_ind (ts)) DELAY_KEY_WRITE=1")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE wordrelationsmemory ("
-		L"id int(11) unsigned NOT NULL AUTO_INCREMENT,"
-		L"sourceId smallint(5) unsigned NOT NULL,"
-		L"lastWhere int(10) unsigned NOT NULL,"
-		L"fromWordId int(10) unsigned NOT NULL DEFAULT '0',"
-		L"toWordId int(10) unsigned NOT NULL DEFAULT '0',"
-		L"typeId smallint(5) unsigned NOT NULL DEFAULT '0',"
-		L"totalCount int(11) NOT NULL DEFAULT '0',"
-		L"UNIQUE KEY id (id),"
+		if (!myquery(&mysql, u"CREATE TABLE objectRelations (id int(11) unsigned NOT NULL auto_increment unique, "
+			u"fromObjectId INT UNSIGNED NOT NULL, INDEX fo_ind (fromObjectId), FOREIGN KEY (fromObjectId) REFERENCES objects(id), "
+			u"toObjectId INT UNSIGNED NOT NULL, INDEX to_ind (toObjectId), FOREIGN KEY (toObjectId) REFERENCES objects(id), "
+			u"totalCount INT NOT NULL, "
+			u"typeId INT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
+			u"ts TIMESTAMP)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE wordRelations ("
+		u"id int(11) unsigned NOT NULL auto_increment unique, "
+		u"sourceId smallint(5) unsigned NOT NULL, "
+		u"lastWhere int NOT NULL, "
+		u"fromWordId INT UNSIGNED NOT NULL DEFAULT '0', INDEX fw_ind (fromWordId), FOREIGN KEY (fromWordId) REFERENCES words(id), "
+		u"toWordId INT UNSIGNED NOT NULL DEFAULT '0', INDEX tw_ind (toWordId), FOREIGN KEY (toWordId) REFERENCES words(id), "
+		u"typeId SMALLINT UNSIGNED NOT NULL DEFAULT '0', "
+		u"UNIQUE INDEX uw_ind (fromWordId,toWordId,typeId), " // must be kept for ON DUPLICATE KEY UPDATE logic in flushWordRelations
+		u"totalCount INT NOT NULL DEFAULT '0', "
+		u"ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX ts_ind (ts)) DELAY_KEY_WRITE=1")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE wordrelationsmemory ("
+		u"id int(11) unsigned NOT NULL AUTO_INCREMENT,"
+		u"sourceId smallint(5) unsigned NOT NULL,"
+		u"lastWhere int(10) unsigned NOT NULL,"
+		u"fromWordId int(10) unsigned NOT NULL DEFAULT '0',"
+		u"toWordId int(10) unsigned NOT NULL DEFAULT '0',"
+		u"typeId smallint(5) unsigned NOT NULL DEFAULT '0',"
+		u"totalCount int(11) NOT NULL DEFAULT '0',"
+		u"UNIQUE KEY id (id),"
 		// must match wordRelations' own (fromWordId,toWordId,typeId) unique key: main.cpp's
 		// WRMemoryCheck bulk-inserts every row of wordRelations into this table with a plain
 		// INSERT (no IGNORE/ON DUPLICATE), so a narrower key here (fromWordId,typeId) would
 		// collide on the first fromWordId that has more than one toWordId of the same type
 		// and abort the insert.
-		L"UNIQUE KEY uw_ind (fromWordId,toWordId,typeId),"
-		L"KEY fw_ind (fromWordId),"
-		L"KEY tw_ind (toWordId)"
-		L") ENGINE = MEMORY AUTO_INCREMENT = 36258188 DEFAULT CHARSET = latin1 DELAY_KEY_WRITE = 1;")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE multiWordRelations ("
-		L"id int(11) unsigned NOT NULL auto_increment unique, "
-		L"sourceId INT SIGNED NOT NULL DEFAULT -1, INDEX sourceId_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
-		L"w INT SIGNED NOT NULL DEFAULT -1, " // where is a reserved word so renamed to 'w'
-		L"sentenceNum INT SIGNED NOT NULL DEFAULT -1, "
-		L"narrativeNum INT SIGNED NOT NULL DEFAULT -1, "
-		L"speaker INT SIGNED NOT NULL DEFAULT -1, "
-		L"audience INT SIGNED NOT NULL DEFAULT -1, "
-		L"referencingEntityLocal INT SIGNED NOT NULL DEFAULT -1, INDEX referencingEntity_ind (referencingEntityLocal), FOREIGN KEY (referencingEntityLocal) REFERENCES words(id), "
-		L"referencingEntityMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"referencingVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (referencingVerb) REFERENCES words(id), "
-		L"subjectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjectiveMatchedOwner) REFERENCES objects(id), "
-		L"subjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjective) REFERENCES words(id), "
-		L"subjectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjective2) REFERENCES words(id), "
-		L"subjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX subject_ind (subjectLocal), FOREIGN KEY (subjectLocal) REFERENCES words(id), "
-		L"subjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"verb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (verb) REFERENCES words(id), "
-		L"adverb INT SIGNED DEFAULT -1,FOREIGN KEY (adverb) REFERENCES words(id), "
-		L"objectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjectiveMatchedOwner) REFERENCES objects(id), "
-		L"objectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective) REFERENCES words(id), "
-		L"objectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective2) REFERENCES words(id), "
-		L"objectAdjective3 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective3) REFERENCES words(id), "
-		L"objectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX object_ind (objectLocal), FOREIGN KEY (objectLocal) REFERENCES words(id), "
-		L"objectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"nextObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextObjectLocal_ind (nextObjectLocal), FOREIGN KEY (nextObjectLocal) REFERENCES words(id), "
-		L"nextObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"secondaryVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (secondaryVerb) REFERENCES words(id), "
-		L"secondaryObjectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjectiveMatchedOwner) REFERENCES objects(id), "
-		L"secondaryObjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective) REFERENCES words(id), "
-		L"secondaryObjectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective2) REFERENCES words(id), "
-		L"secondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX secondaryObjectLocal_ind (secondaryObjectLocal), FOREIGN KEY (secondaryObjectLocal) REFERENCES words(id), "
-		L"secondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"nextSecondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextSecondaryObjectLocal_ind (nextSecondaryObjectLocal), FOREIGN KEY (nextSecondaryObjectLocal) REFERENCES words(id), "
-		L"nextSecondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"relationType INT SIGNED NOT NULL DEFAULT -1, "
-		L"objectSubType INT SIGNED NOT NULL DEFAULT -1, "
-		L"timeProgression INT SIGNED NOT NULL DEFAULT -1, "
-		L"flags BIGINT SIGNED NOT NULL DEFAULT -1) DELAY_KEY_WRITE=1")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE prepPhraseMultiWordRelations ("
-		L"sourceId INT SIGNED NOT NULL DEFAULT -1, INDEX sourceId_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
-		L"w INT SIGNED NOT NULL DEFAULT -1, " // where is a reserved word so renamed to 'w'
-		L"nearestVerb INT SIGNED DEFAULT NULL, INDEX nearestVerb_ind (nearestVerb), FOREIGN KEY (nearestVerb) REFERENCES words(id), "
-		L"nearestObject INT SIGNED DEFAULT NULL, INDEX nearestObject_ind (nearestObject), FOREIGN KEY (nearestObject) REFERENCES words(id), "
-		L"principalWord INT SIGNED DEFAULT NULL, INDEX principalWord_ind (principalWord), FOREIGN KEY (principalWord) REFERENCES words(id), "
-		L"immediatePrincipalWord INT SIGNED DEFAULT NULL, INDEX immediatePrincipalWord_ind (immediatePrincipalWord), FOREIGN KEY (immediatePrincipalWord) REFERENCES words(id), "
-		L"prep INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (prep) REFERENCES words(id), "
-		L"prepObjectAdjectiveMatchedOwner int(11) NOT NULL DEFAULT -1, "
-		L"prepObjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (prepObjectAdjective) REFERENCES words(id), "
-		L"prepObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX prepObjectLocal_ind (prepObjectLocal), FOREIGN KEY (prepObjectLocal) REFERENCES words(id), "
-		L"prepObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
-		L"prepObjectSubType INT SIGNED NOT NULL DEFAULT -1, "
-		L"flags INT SIGNED NOT NULL DEFAULT -1) DELAY_KEY_WRITE=1")) return -1;
-	if (!myquery(&mysql, L"CREATE TABLE relationsFlow (id int(11) unsigned NOT NULL auto_increment unique, "
+		u"UNIQUE KEY uw_ind (fromWordId,toWordId,typeId),"
+		u"KEY fw_ind (fromWordId),"
+		u"KEY tw_ind (toWordId)"
+		u") ENGINE = MEMORY AUTO_INCREMENT = 36258188 DEFAULT CHARSET = latin1 DELAY_KEY_WRITE = 1;")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE multiWordRelations ("
+		u"id int(11) unsigned NOT NULL auto_increment unique, "
+		u"sourceId INT SIGNED NOT NULL DEFAULT -1, INDEX sourceId_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
+		u"w INT SIGNED NOT NULL DEFAULT -1, " // where is a reserved word so renamed to 'w'
+		u"sentenceNum INT SIGNED NOT NULL DEFAULT -1, "
+		u"narrativeNum INT SIGNED NOT NULL DEFAULT -1, "
+		u"speaker INT SIGNED NOT NULL DEFAULT -1, "
+		u"audience INT SIGNED NOT NULL DEFAULT -1, "
+		u"referencingEntityLocal INT SIGNED NOT NULL DEFAULT -1, INDEX referencingEntity_ind (referencingEntityLocal), FOREIGN KEY (referencingEntityLocal) REFERENCES words(id), "
+		u"referencingEntityMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"referencingVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (referencingVerb) REFERENCES words(id), "
+		u"subjectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjectiveMatchedOwner) REFERENCES objects(id), "
+		u"subjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjective) REFERENCES words(id), "
+		u"subjectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (subjectAdjective2) REFERENCES words(id), "
+		u"subjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX subject_ind (subjectLocal), FOREIGN KEY (subjectLocal) REFERENCES words(id), "
+		u"subjectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"verb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (verb) REFERENCES words(id), "
+		u"adverb INT SIGNED DEFAULT -1,FOREIGN KEY (adverb) REFERENCES words(id), "
+		u"objectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjectiveMatchedOwner) REFERENCES objects(id), "
+		u"objectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective) REFERENCES words(id), "
+		u"objectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective2) REFERENCES words(id), "
+		u"objectAdjective3 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (objectAdjective3) REFERENCES words(id), "
+		u"objectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX object_ind (objectLocal), FOREIGN KEY (objectLocal) REFERENCES words(id), "
+		u"objectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"nextObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextObjectLocal_ind (nextObjectLocal), FOREIGN KEY (nextObjectLocal) REFERENCES words(id), "
+		u"nextObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"secondaryVerb INT SIGNED NOT NULL DEFAULT -1,FOREIGN KEY (secondaryVerb) REFERENCES words(id), "
+		u"secondaryObjectAdjectiveMatchedOwner INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjectiveMatchedOwner) REFERENCES objects(id), "
+		u"secondaryObjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective) REFERENCES words(id), "
+		u"secondaryObjectAdjective2 INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (secondaryObjectAdjective2) REFERENCES words(id), "
+		u"secondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX secondaryObjectLocal_ind (secondaryObjectLocal), FOREIGN KEY (secondaryObjectLocal) REFERENCES words(id), "
+		u"secondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"nextSecondaryObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX nextSecondaryObjectLocal_ind (nextSecondaryObjectLocal), FOREIGN KEY (nextSecondaryObjectLocal) REFERENCES words(id), "
+		u"nextSecondaryObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"relationType INT SIGNED NOT NULL DEFAULT -1, "
+		u"objectSubType INT SIGNED NOT NULL DEFAULT -1, "
+		u"timeProgression INT SIGNED NOT NULL DEFAULT -1, "
+		u"flags BIGINT SIGNED NOT NULL DEFAULT -1) DELAY_KEY_WRITE=1")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE prepPhraseMultiWordRelations ("
+		u"sourceId INT SIGNED NOT NULL DEFAULT -1, INDEX sourceId_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id), "
+		u"w INT SIGNED NOT NULL DEFAULT -1, " // where is a reserved word so renamed to 'w'
+		u"nearestVerb INT SIGNED DEFAULT NULL, INDEX nearestVerb_ind (nearestVerb), FOREIGN KEY (nearestVerb) REFERENCES words(id), "
+		u"nearestObject INT SIGNED DEFAULT NULL, INDEX nearestObject_ind (nearestObject), FOREIGN KEY (nearestObject) REFERENCES words(id), "
+		u"principalWord INT SIGNED DEFAULT NULL, INDEX principalWord_ind (principalWord), FOREIGN KEY (principalWord) REFERENCES words(id), "
+		u"immediatePrincipalWord INT SIGNED DEFAULT NULL, INDEX immediatePrincipalWord_ind (immediatePrincipalWord), FOREIGN KEY (immediatePrincipalWord) REFERENCES words(id), "
+		u"prep INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (prep) REFERENCES words(id), "
+		u"prepObjectAdjectiveMatchedOwner int(11) NOT NULL DEFAULT -1, "
+		u"prepObjectAdjective INT SIGNED NOT NULL DEFAULT -1, FOREIGN KEY (prepObjectAdjective) REFERENCES words(id), "
+		u"prepObjectLocal INT SIGNED NOT NULL DEFAULT -1, INDEX prepObjectLocal_ind (prepObjectLocal), FOREIGN KEY (prepObjectLocal) REFERENCES words(id), "
+		u"prepObjectMatched INT SIGNED NOT NULL DEFAULT -1, "
+		u"prepObjectSubType INT SIGNED NOT NULL DEFAULT -1, "
+		u"flags INT SIGNED NOT NULL DEFAULT -1) DELAY_KEY_WRITE=1")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE relationsFlow (id int(11) unsigned NOT NULL auto_increment unique, "
 		// subject or object (objectId)
-		L"objectId INT UNSIGNED, INDEX o_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
+		u"objectId INT UNSIGNED, INDEX o_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
 		// relationIndex
-		L"relationId INT UNSIGNED NOT NULL, INDEX r_ind (relationId), FOREIGN KEY (relationId) REFERENCES wordRelations(id), "
+		u"relationId INT UNSIGNED NOT NULL, INDEX r_ind (relationId), FOREIGN KEY (relationId) REFERENCES wordRelations(id), "
 		// { T_SEQUENTIAL, T_ON, T_AFTER, T_PRESENT,T_VAGUE, T_RECURRING etc }
-		L"timeRelationType SMALLINT UNSIGNED NOT NULL, "
+		u"timeRelationType SMALLINT UNSIGNED NOT NULL, "
 		// day  (year > season > month > week > day (date) > afternoon > hour > minute (time) > second...
-		L"capacity SMALLINT UNSIGNED NOT NULL, "
+		u"capacity SMALLINT UNSIGNED NOT NULL, "
 		// reference time
-		L"timeExpressionId INT UNSIGNED NOT NULL, FOREIGN KEY (timeExpressionId) REFERENCES relationsFlow(id), "
+		u"timeExpressionId INT UNSIGNED NOT NULL, FOREIGN KEY (timeExpressionId) REFERENCES relationsFlow(id), "
 		// other generic relations in the same expression - no relationsTributary table exists anywhere
 		// in the schema, so this can only be a plain column (dropping the dangling FK) until one is added
-		L"relationsTributaryId INT UNSIGNED NOT NULL, "
-		L"sequenceId INT UNSIGNED," // # - after timeExpression (increases by 10 to allow for insertions, or none if simultaneous
-		L"sourceId INT UNSIGNED NOT NULL, FOREIGN KEY (sourceId) REFERENCES sources(id), "
-		L"ts TIMESTAMP)")) return -1;
+		u"relationsTributaryId INT UNSIGNED NOT NULL, "
+		u"sequenceId INT UNSIGNED," // # - after timeExpression (increases by 10 to allow for insertions, or none if simultaneous
+		u"sourceId INT UNSIGNED NOT NULL, FOREIGN KEY (sourceId) REFERENCES sources(id), "
+		u"ts TIMESTAMP)")) return -1;
 	return 0;
 }
 
 // Parse a BNC-world bncIndex.xml-like file and INSERT one sources row per
-// <doc> whose <genre> starts with 'W'.  Reads the file as raw wchar_t data
-// (actualLen bytes) into a buffer of actualLen+sizeof(wchar_t) bytes and
-// NUL-terminates at the wchar_t offset, in range.  Returns 0 on success,
+// <doc> whose <genre> starts with 'W'.  Reads the file as raw lpchar_t data
+// (actualLen bytes) into a buffer of actualLen+sizeof(lpchar_t) bytes and
+// NUL-terminates at the lpchar_t offset, in range.  Returns 0 on success,
 // negative NET_ERR-like codes on I/O or parse failure.
-int generateBNCSources(MYSQL& mysql, wstring indexFile) // note this is slightly modified from the original
+int generateBNCSources(MYSQL& mysql, lpwstring indexFile) // note this is slightly modified from the original
 {
 	LFS
 		int startTime = clock();
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wcscpy(qt, L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
-	size_t len = wcslen(qt);
-	HANDLE hFile = CreateFile(indexFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (hFile == INVALID_HANDLE_VALUE)
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lp_strcpy(qt, u"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
+	size_t len = lp_strlen(qt);
+	// Batch B5: POSIX open/fstat/read replace CreateFile/GetFileSize/ReadFile.
+	int hFile = lp_wopen(indexFile, O_RDONLY);
+	if (hFile < 0)
 	{
-		wstring bcct;
-		if (GetLastError() != ERROR_PATH_NOT_FOUND)
-			lplog(LOG_FATAL_ERROR, L"GetPath cannot open BNC sources path %s - %s", indexFile.c_str(), getLastErrorMessage(bcct));
+		lpwstring bcct;
+		if (errno != ERROR_PATH_NOT_FOUND)
+			lplog(LOG_FATAL_ERROR, u"GetPath cannot open BNC sources path %s - %s", indexFile.c_str(), getLastErrorMessage(bcct));
 		return -17;
 	}
-	unsigned int actualLen = GetFileSize(hFile, NULL);
-	if (actualLen <= 0 || (actualLen % sizeof(wchar_t)) != 0)
+	struct stat indexStatus;
+	unsigned int actualLen = (fstat(hFile, &indexStatus) == 0) ? (unsigned int)indexStatus.st_size : 0;
+	if (actualLen <= 0 || (actualLen % sizeof(lpchar_t)) != 0)
 	{
-		lplog(LOG_ERROR, L"ERROR:filelength of file %s yields an invalid filelength (%d).", indexFile.c_str(), actualLen);
-		CloseHandle(hFile);
+		lplog(LOG_ERROR, u"ERROR:filelength of file %s yields an invalid filelength (%d).", indexFile.c_str(), actualLen);
+		::close(hFile);
 		return -18;
 	}
-	wchar_t* buffer = (wchar_t*)tmalloc(actualLen + sizeof(wchar_t));
-	DWORD lenRead = 0;
-	if (!ReadFile(hFile, buffer, actualLen, &lenRead, NULL) || actualLen != lenRead)
+	lpchar_t* buffer = (lpchar_t*)tmalloc(actualLen + sizeof(lpchar_t));
+	if (::read(hFile, buffer, actualLen) != (ssize_t)actualLen)
 	{
-		lplog(LOG_ERROR, L"ERROR:read error of file %s.", indexFile.c_str());
-		CloseHandle(hFile);
+		lplog(LOG_ERROR, u"ERROR:read error of file %s.", indexFile.c_str());
+		::close(hFile);
 		return -19;
 	}
-	buffer[actualLen / sizeof(wchar_t)] = 0;
-	CloseHandle(hFile);
+	buffer[actualLen / sizeof(lpchar_t)] = 0;
+	::close(hFile);
 	int where = 0, returnCode = -20;// , numWords = 0;
 	while (true)
 	{
-		wchar_t* docStart = wcsstr(buffer + where, L"<doc>");
+		lpchar_t* docStart = lp_strstr(buffer + where, u"<doc>");
 		if (!docStart)
 		{
 			returnCode = 0;
 			break;
 		}
 		returnCode = -20;
-		wchar_t* docEnd = wcsstr(docStart, L"</doc>");
+		lpchar_t* docEnd = lp_strstr(docStart, u"</doc>");
 		if (!docEnd) break;
 		*docEnd = 0;
-		wchar_t* id = wcsstr(docStart, L"<idno>");
+		lpchar_t* id = lp_strstr(docStart, u"<idno>");
 		if (!id) break;
-		id += wcslen(L"<idno>");
-		wchar_t* idEnd = wcsstr(id, L"</idno>");
+		id += lp_strlen(u"<idno>");
+		lpchar_t* idEnd = lp_strstr(id, u"</idno>");
 		if (!idEnd) break;
 		*idEnd = 0;
-		wchar_t* genre = wcsstr(idEnd + 1, L"<genre>");
+		lpchar_t* genre = lp_strstr(idEnd + 1, u"<genre>");
 		if (!genre) break;
-		where = (docEnd - buffer) + wcslen(L"</doc>");
-		if (genre[wcslen(L"<genre>")] != 'W')
+		where = (docEnd - buffer) + lp_strlen(u"</doc>");
+		if (genre[lp_strlen(u"<genre>")] != 'W')
 			continue;
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%d, \"%s\", \"\", 0),", cSource::BNC_SOURCE_TYPE, id);
+		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%d, \"%s\", \"\", 0),", cSource::BNC_SOURCE_TYPE, id);
 		if (!checkFull(&mysql, qt, len, false, NULL)) return -20;
 	}
 	if (!checkFull(&mysql, qt, len, true, NULL)) return -21;
 	if (logDatabaseDetails)
-		lplog(L"Inserting BNC sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
-	tfree(actualLen + sizeof(wchar_t), buffer); // match the tmalloc(actualLen + sizeof(wchar_t)) above
+		lplog(u"Inserting BNC sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
+	tfree(actualLen + sizeof(lpchar_t), buffer); // match the tmalloc(actualLen + sizeof(lpchar_t)) above
 	return returnCode;
 }
 
@@ -501,19 +515,19 @@ int generateNewsBankSources(MYSQL& mysql)
 {
 	LFS
 		int startTime = clock();
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wcscpy(qt, L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
-	size_t len = wcslen(qt);
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lp_strcpy(qt, u"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
+	size_t len = lp_strlen(qt);
 	for (unsigned int I = 2557; I < 7057; I++)
 	{
 		time_t timer = I * 24 * 3600;
 		struct tm* day = gmtime(&timer);
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),", cSource::NEWS_BANK_SOURCE_TYPE, day->tm_year + 1900, timer / (24 * 3600));
+		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),", cSource::NEWS_BANK_SOURCE_TYPE, day->tm_year + 1900, timer / (24 * 3600));
 		if (!checkFull(&mysql, qt, len, false, NULL)) return -1;
 	}
 	if (!checkFull(&mysql, qt, len, true, NULL)) return -1;
 	if (logDatabaseDetails)
-		lplog(L"Inserting NewsBank sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
+		lplog(u"Inserting NewsBank sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
 	return 0;
 }
 
@@ -523,41 +537,41 @@ int generateTestSources(MYSQL& mysql)
 {
 	LFS
 		int startTime = clock();
-	wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wcscpy(qt, L"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
-	size_t len = wcslen(qt);
-	const wchar_t* testSources[] = { L"agreement",L"date-time-number",L"lappinl",L"modification",L"Nameres",L"pattern matching",L"resolution",L"time",L"timeExpressions",L"usage",
-											 L"verb object",NULL };
+	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lp_strcpy(qt, u"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
+	size_t len = lp_strlen(qt);
+	const lpchar_t* testSources[] = { u"agreement",u"date-time-number",u"lappinl",u"modification",u"Nameres",u"pattern matching",u"resolution",u"time",u"timeExpressions",u"usage",
+											 u"verb object",NULL };
 	for (unsigned int I = 0; testSources[I]; I++)
 	{
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),", cSource::TEST_SOURCE_TYPE, testSources[I]);
+		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%d, \"tests\\\\%s.txt\", \"~~BEGIN\", 1),", cSource::TEST_SOURCE_TYPE, testSources[I]);
 		if (!checkFull(&mysql, qt, len, false, NULL)) return -1;
 	}
 	if (!checkFull(&mysql, qt, len, true, NULL)) return -1;
 	if (logDatabaseDetails)
-		lplog(L"Inserting Test sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
+		lplog(u"Inserting Test sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
 	return 0;
 }
 
 // INSERT one REQUEST_TYPE source for a QA web-search hit.  pathInCache is
 // stripped of the TEXTDIR prefix and escapeStr'd; fullWebPath is used as
-// title and is NOT escaped (wsprintf into 16384 wchar_t).
+// title and is NOT escaped (lp_wsprintf into 16384 lpchar_t).
 int generateParseRequestSources(MYSQL& mysql, vector <cQuestionAnswering::cSearchSource>::iterator pri)
 {
-	wchar_t qt[16384];
-	wstring pathInCache = pri->pathInCache;
-	pathInCache = pathInCache.substr(wcslen(TEXTDIR) + 1, pathInCache.length() - wcslen(TEXTDIR) - 1);
+	lpchar_t qt[16384];
+	lpwstring pathInCache = pri->pathInCache;
+	pathInCache = pathInCache.substr(lp_strlen(TEXTDIR) + 1, pathInCache.length() - lp_strlen(TEXTDIR) - 1);
 	escapeStr(pathInCache);
-	wsprintf(qt, L"INSERT INTO sources (sourceType, etext, path, start, repeatStart, author, title, processing, processed) VALUES (%d,\"%s\",\"%s\",\"\",0,\"\",\"%s\",NULL,NULL)",
-		cSource::REQUEST_TYPE, (pri->isSnippet) ? L"snippet" : L"full", pathInCache.c_str(), pri->fullWebPath.c_str());
+	lp_wsprintf(qt, u"INSERT INTO sources (sourceType, etext, path, start, repeatStart, author, title, processing, processed) VALUES (%d,\"%s\",\"%s\",\"\",0,\"\",\"%s\",NULL,NULL)",
+		cSource::REQUEST_TYPE, (pri->isSnippet) ? u"snippet" : u"full", pathInCache.c_str(), pri->fullWebPath.c_str());
 	return myquery(&mysql, qt);
 }
 
 // DELETE every REQUEST_TYPE row from sources (the ephemeral QA parses).
 int deleteGeneratedParseRequests(MYSQL& mysql)
 {
-	wchar_t qt[1024];
-	wsprintf(qt, L"delete from sources where sourceType=%d", cSource::REQUEST_TYPE);
+	lpchar_t qt[1024];
+	lp_wsprintf(qt, u"delete from sources where sourceType=%d", cSource::REQUEST_TYPE);
 	return myquery(&mysql, qt);
 }
 
@@ -567,12 +581,12 @@ int deleteGeneratedParseRequests(MYSQL& mysql)
 int cSource::insertWordRelationTypes(void)
 {
 	LFS
-		wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	wcscpy(qt, L"INSERT INTO wordRelationType VALUES ");
-	size_t len = wcslen(qt);
+		lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
+	lp_strcpy(qt, u"INSERT INTO wordRelationType VALUES ");
+	size_t len = lp_strlen(qt);
 	for (unsigned int I = firstRelationType; I < numRelationWOTypes; I++)
 	{
-		len += _snwprintf(qt + len, QUERY_BUFFER_LEN - len, L"(%u, \"%s\"),", I, getRelStr(I));
+		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%u, \"%s\"),", I, getRelStr(I));
 		if (!checkFull(&mysql, qt, len, false, NULL)) return -1;
 	}
 	if (!checkFull(&mysql, qt, len, true, NULL)) return -1;
@@ -584,7 +598,7 @@ int cSource::insertWordRelationTypes(void)
 // a schema (same getDBUser()/getDBPassword() credentials), CREATE DATABASE lp,
 // then CREATE the core tables and seed sources from bookSources.sql + BNC/
 // NewsBank/tests. Returns 0 or -1; most CREATE failures are FATAL first.
-int cSource::createDatabase(const wchar_t* server)
+int cSource::createDatabase(const lpchar_t* server)
 {
 	LFS
 		if (!initializeDatabaseHandle(mysql, server, alreadyConnected))
@@ -595,128 +609,128 @@ int cSource::createDatabase(const wchar_t* server)
 	string sqlStr;
 	if (mysql_errno(&mysql) != ER_BAD_DB_ERROR || mysql_real_connect(&mysql, wTM(server, sqlStr), getDBUser().c_str(), getDBPassword().c_str(), NULL, 0, NULL, 0) == NULL)
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to connect to MySQL - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to connect to MySQL - %S", mysql_error(&mysql));
 		//int err=mysql_errno(&mysql);
 		return -1;
 	}
-	wchar_t qt[2 * QUERY_BUFFER_LEN_OVERFLOW];
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"CREATE DATABASE %s character set utf8mb4", LDBNAME);
+	lpchar_t qt[2 * QUERY_BUFFER_LEN_OVERFLOW];
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"CREATE DATABASE %s character set utf8mb4", LDBNAME);
 	if (!myquery(&mysql, qt)) return -1;
-	_snwprintf(qt, QUERY_BUFFER_LEN, L"USE %s", LDBNAME);
+	lp_snprintf(qt, QUERY_BUFFER_LEN, u"USE %s", LDBNAME);
 	if (!myquery(&mysql, qt)) return -1;
 	// create forms table
-	if (!myquery(&mysql, L"CREATE TABLE forms ("
-		L"id int(11) unsigned NOT NULL auto_increment unique, "
-		L"name CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
-		L"shortName CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
-		L"inflectionsClass CHAR(12) CHARACTER SET utf8mb4 NOT NULL, "
-		L"hasInflections BIT NOT NULL, "
-		L"isTopLevel BIT NOT NULL, "
-		L"properNounSubClass BIT NOT NULL, "
-		L"blockProperNounRecognition BIT NOT NULL,"
-		L"ts TIMESTAMP)")) return -1;
+	if (!myquery(&mysql, u"CREATE TABLE forms ("
+		u"id int(11) unsigned NOT NULL auto_increment unique, "
+		u"name CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
+		u"shortName CHAR(32) CHARACTER SET utf8mb4 NOT NULL, "
+		u"inflectionsClass CHAR(12) CHARACTER SET utf8mb4 NOT NULL, "
+		u"hasInflections BIT NOT NULL, "
+		u"isTopLevel BIT NOT NULL, "
+		u"properNounSubClass BIT NOT NULL, "
+		u"blockProperNounRecognition BIT NOT NULL,"
+		u"ts TIMESTAMP)")) return -1;
 	// create sources table
-	if (!myquery(&mysql, L"CREATE TABLE sources "
-		L"(id int(11) unsigned NOT NULL auto_increment unique, "
-		L"sourceType TINYINT(4) NOT NULL, "
-		L"etext VARCHAR (10) CHARACTER SET utf8mb4,"
-		L"path VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,"
-		L"start VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, "
-		L"repeatStart INT NOT NULL, "
-		L"author VARCHAR (128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
-		L"title VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
-		L"date DATETIME,"
-		L"numSentences INT, matchedSentences INT, numWords INT, numUnknown INT, numUnmatched INT, numOvermatched INT,"
-		L"numQuotations INT, quotationExceptions INT, numTicks INT, numPatternMatches INT, "
-		L"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
-		L"processing BIT, processed BIT, "
-		L"proc2 INT, " // other processing steps
-		L"duplicateId INT," // if not null, this source should be skipped because it is a duplicate of another source (id)
-		L"lastProcessedTime TIMESTAMP DEFAULT 0, " // not set to current timestamp or updated automatically
-		L"ts TIMESTAMP," // specifying nothing is the same as DEFAULT CURRENT_TIMESTAMP and ON UPDATE CURRENT_TIMESTAMP
-		L"KEY `EtextIndex` (`etext`),"
-		L"KEY `nsi` (`sourceType`,`start`,`processed`)"
-		L") DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin"))
+	if (!myquery(&mysql, u"CREATE TABLE sources "
+		u"(id int(11) unsigned NOT NULL auto_increment unique, "
+		u"sourceType TINYINT(4) NOT NULL, "
+		u"etext VARCHAR (10) CHARACTER SET utf8mb4,"
+		u"path VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,"
+		u"start VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, "
+		u"repeatStart INT NOT NULL, "
+		u"author VARCHAR (128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
+		u"title VARCHAR (1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, "
+		u"date DATETIME,"
+		u"numSentences INT, matchedSentences INT, numWords INT, numUnknown INT, numUnmatched INT, numOvermatched INT,"
+		u"numQuotations INT, quotationExceptions INT, numTicks INT, numPatternMatches INT, "
+		u"sizeInBytes INT, numWordRelations INT, numMultiWordRelations INT, "
+		u"processing BIT, processed BIT, "
+		u"proc2 INT, " // other processing steps
+		u"duplicateId INT," // if not null, this source should be skipped because it is a duplicate of another source (id)
+		u"lastProcessedTime TIMESTAMP DEFAULT 0, " // not set to current timestamp or updated automatically
+		u"ts TIMESTAMP," // specifying nothing is the same as DEFAULT CURRENT_TIMESTAMP and ON UPDATE CURRENT_TIMESTAMP
+		u"KEY `EtextIndex` (`etext`),"
+		u"KEY `nsi` (`sourceType`,`start`,`processed`)"
+		u") DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin"))
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create sources - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create sources - %S", mysql_error(&mysql));
 		return -1;
 	}
 	int actualLen;
-	getPath(L"source\\lists\\bookSources.sql", qt, 2 * QUERY_BUFFER_LEN, actualLen);
+	getPath(u"source\\lists\\bookSources.sql", qt, 2 * QUERY_BUFFER_LEN, actualLen);
 	qt[actualLen] = 0;
-	wstring source = qt;
+	lpwstring source = qt;
 	//mysql_real_escape_string(&mysql, qt, source.c_str(), actualLen);
 	if (!myquery(&mysql, qt))
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to populate sources with books - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to populate sources with books - %S", mysql_error(&mysql));
 		return -1;
 	}
-	generateBNCSources(mysql, wstring(LMAINDIR) + L"\\BNC-world\\doc\\Source\\bncIndex.xml");
+	generateBNCSources(mysql, lpwstring(LMAINDIR) + u"\\BNC-world\\doc\\Source\\bncIndex.xml");
 	generateNewsBankSources(mysql);
 	generateTestSources(mysql);
 	// create wordRelations types table (for convenience)
-	if (!myquery(&mysql, L"CREATE TABLE wordRelationType (id int(11) unsigned NOT NULL unique, type CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL)"))
+	if (!myquery(&mysql, u"CREATE TABLE wordRelationType (id int(11) unsigned NOT NULL unique, type CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL)"))
 		insertWordRelationTypes();
 	// create words table
-	if (!myquery(&mysql, L"CREATE TABLE words (id int(11) unsigned NOT NULL auto_increment unique, "
-		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
-		L"inflectionFlags INT UNSIGNED NOT NULL default '0',"
-		L"flags INT NOT NULL default '0',"
-		L"timeFlags INT NOT NULL default '0'," // INDEX word_ind (word) dropped (increased index space by more than 1000 times)
-		L"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
-		L"derivationRules INT DEFAULT 0, "
-		L"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
-		L"ts TIMESTAMP, "
-		L"INDEX ts_ind (ts)"
-		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+	if (!myquery(&mysql, u"CREATE TABLE words (id int(11) unsigned NOT NULL auto_increment unique, "
+		u"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
+		u"inflectionFlags INT UNSIGNED NOT NULL default '0',"
+		u"flags INT NOT NULL default '0',"
+		u"timeFlags INT NOT NULL default '0'," // INDEX word_ind (word) dropped (increased index space by more than 1000 times)
+		u"mainEntryWordId INT UNSIGNED NULL, INDEX me_ind (mainEntryWordId), "
+		u"derivationRules INT DEFAULT 0, "
+		u"sourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (sourceId), " //FOREIGN KEY (sourceId) REFERENCES sources(id),
+		u"ts TIMESTAMP, "
+		u"INDEX ts_ind (ts)"
+		u") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create words table - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create words table - %S", mysql_error(&mysql));
 		return -1;
 	}
 	// create wordForms table
-	if (!myquery(&mysql, L"CREATE TABLE wordForms ("
-		L"wordId INT UNSIGNED NOT NULL, "
-		L"formId INT UNSIGNED NOT NULL, "
-		L"count INT NOT NULL, "
-		L"ts TIMESTAMP, "
-		L"INDEX wId_ind (wordId), " // FOREIGN KEY (wordId) REFERENCES words(id), "
-		L"INDEX fId_ind (formId), "
-		L"INDEX ts_ind (ts), "
-		L"UNIQUE INDEX uw_ind (wordId,formId)"))
+	if (!myquery(&mysql, u"CREATE TABLE wordForms ("
+		u"wordId INT UNSIGNED NOT NULL, "
+		u"formId INT UNSIGNED NOT NULL, "
+		u"count INT NOT NULL, "
+		u"ts TIMESTAMP, "
+		u"INDEX wId_ind (wordId), " // FOREIGN KEY (wordId) REFERENCES words(id), "
+		u"INDEX fId_ind (formId), "
+		u"INDEX ts_ind (ts), "
+		u"UNIQUE INDEX uw_ind (wordId,formId)"))
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create wordForms - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create wordForms - %S", mysql_error(&mysql));
 		return -1;
 	}
-	if (!myquery(&mysql, L"ALTER TABLE wordForms DELAY_KEY_WRITE = 1")) return -1;
+	if (!myquery(&mysql, u"ALTER TABLE wordForms DELAY_KEY_WRITE = 1")) return -1;
 	// words unknown processing
-	if (!myquery(&mysql, L"CREATE TABLE wordFrequency ("
-		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
-		L"totalFrequency       INT NOT NULL default '0', "
-		L"unknownFrequency     INT NOT NULL default '0', "
-		L"capitalizedFrequency INT NOT NULL default '0', "
-		L"allCapsFrequency     INT NOT NULL default '0', "
-		L"lastSourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (lastSourceId), "
-		L"nonEuropeanWord BIT "
-		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
+	if (!myquery(&mysql, u"CREATE TABLE wordFrequency ("
+		u"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT '',"
+		u"totalFrequency       INT NOT NULL default '0', "
+		u"unknownFrequency     INT NOT NULL default '0', "
+		u"capitalizedFrequency INT NOT NULL default '0', "
+		u"allCapsFrequency     INT NOT NULL default '0', "
+		u"lastSourceId INT UNSIGNED DEFAULT NULL, INDEX s_ind (lastSourceId), "
+		u"nonEuropeanWord BIT "
+		u") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ENGINE = INNODB"))  // must use INNODB because of per row locking required by multiple processes 
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create wordsFrequency table - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create wordsFrequency table - %S", mysql_error(&mysql));
 		return -1;
 	}
-	if (!myquery(&mysql, L"CREATE TABLE noRDFTypes ("
-		L"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT ''"
-		L") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+	if (!myquery(&mysql, u"CREATE TABLE noRDFTypes ("
+		u"word CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL DEFAULT ''"
+		u") DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create noRDFTypes table - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create noRDFTypes table - %S", mysql_error(&mysql));
 		return -1;
 	}
 	if (createObjectTables() < 0)
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create object tables - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create object tables - %S", mysql_error(&mysql));
 		return -1;
 	}
 	if (createRelationTables() < 0)
 	{
-		lplog(LOG_FATAL_ERROR, L"Failed to create relation tables - %S", mysql_error(&mysql));
+		lplog(LOG_FATAL_ERROR, u"Failed to create relation tables - %S", mysql_error(&mysql));
 		return -1;
 	}
 	return 0;

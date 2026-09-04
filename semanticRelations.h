@@ -31,6 +31,11 @@
 		  distance sum is non-zero, else explicitly 0.
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 #include "timeRelations.h"
 class cSyntacticRelationGroup;
 // accumulateProximityMaps
@@ -40,8 +45,8 @@ class cQuestionAnswering;
 class cProximityMap
 {
 public:
-	wstring SMPrincipalObject;
-	set <wstring> sourcePaths;
+	lpwstring SMPrincipalObject;
+	set <lpwstring> sourcePaths;
 	class cProximityEntry
 	{
 	public:
@@ -52,29 +57,29 @@ public:
 		int confidentTotalDistanceFromObject;
 		int confidentDirectRelation;
 		int confidenceSE;
-		wstring fullDescriptor;
+		lpwstring fullDescriptor;
 		int semanticMismatch;
 		bool subQueryNoMatch, tenseMismatch, confidenceCheck;
 		cSource *childSource;
-		set <wstring> childSourcePaths;
-		vector <wstring> relationSourcePaths;
+		set <lpwstring> childSourcePaths;
+		vector <lpwstring> relationSourcePaths;
 		vector <int> relationWheres;
-		wstring lastChildSourcePath;
+		lpwstring lastChildSourcePath;
 		int childWhere2;
 		int childObject;
 		float score;
 		// this is called from the parent
 		int semanticCheck(cQuestionAnswering &qa, cSyntacticRelationGroup* parentSRG, cSource *parentSource);
-		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, wstring &path, int where);
+		void printDirectRelations(cQuestionAnswering &qa, int logType, cSource *parentSource, lpwstring &path, int where);
 		cProximityEntry();
 		cProximityEntry(cQuestionAnswering &qa, cSource *childSource, unsigned int childSourceIndex, int childObject, cSyntacticRelationGroup* parentSRG);
 		// One-line LOG dump of this entry’s score / occurrence / mismatch flags.
-		void lplogFrequentOrProximateObjects(int logType, wstring objectStr)
+		void lplogFrequentOrProximateObjects(int logType, lpwstring objectStr)
 		{
-			wstring tmpstr;
-			::lplog(logType, L"SM object: %s: score=%f inSource=%d totalDistanceFromObject=%d directRelation=%d confidentInSource=%d confidentTotalDistanceFromObject=%d confidentDirectRelation=%d confidence=%d semanticMismatch=%d subQueryNoMatch=%s tenseMismatch=%s confidenceCheck=%s numSources=%d",
+			lpwstring tmpstr;
+			::lplog(logType, u"SM object: %s: score=%f inSource=%d totalDistanceFromObject=%d directRelation=%d confidentInSource=%d confidentTotalDistanceFromObject=%d confidentDirectRelation=%d confidence=%d semanticMismatch=%d subQueryNoMatch=%s tenseMismatch=%s confidenceCheck=%s numSources=%d",
 				objectStr.c_str(), score, inSource, totalDistanceFromObject, directRelation, confidentInSource, confidentTotalDistanceFromObject, confidentDirectRelation, confidenceSE,
-				semanticMismatch, (subQueryNoMatch) ? L"true" : L"false", (tenseMismatch) ? L"true" : L"false", (confidenceCheck) ? L"true" : L"false", childSourcePaths.size());
+				semanticMismatch, (subQueryNoMatch) ? u"true" : u"false", (tenseMismatch) ? u"true" : u"false", (confidenceCheck) ? u"true" : u"false", childSourcePaths.size());
 		}
 		// occurrence^2 / (totalDistance + confidentTotalDistance), or 0 when
 		// both distances are 0. A single child source halves occurrence.
@@ -92,7 +97,7 @@ public:
 	// Frequency order: more (confidentInSource + inSource) first; name tie-break.
 	struct semanticSetCompare
 	{
-		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
+		bool operator()(unordered_map <lpwstring, cProximityEntry>::iterator lhs, unordered_map <lpwstring, cProximityEntry>::iterator rhs) const
 		{
 			if (lhs->second.confidentInSource + lhs->second.inSource == rhs->second.confidentInSource + rhs->second.inSource)
 				return lhs->first < rhs->first;
@@ -102,36 +107,36 @@ public:
 	// Higher calculateScore() first. Equal scores compare as equivalent.
 	struct proximityScoreCompare
 	{
-		bool operator()(unordered_map <wstring, cProximityEntry>::iterator lhs, unordered_map <wstring, cProximityEntry>::iterator rhs) const
+		bool operator()(unordered_map <lpwstring, cProximityEntry>::iterator lhs, unordered_map <lpwstring, cProximityEntry>::iterator rhs) const
 		{
 			return lhs->second.score > rhs->second.score;
 		}
 	};
-	unordered_map <wstring, cProximityEntry> closestObjects;
-	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare> objectsSortedByFrequency;
-	set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
-	set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare > frequentOrProximateObjects;
+	unordered_map <lpwstring, cProximityEntry> closestObjects;
+	set < unordered_map <lpwstring, cProximityEntry>::iterator, semanticSetCompare> objectsSortedByFrequency;
+	set < unordered_map <lpwstring, cProximityEntry>::iterator, proximityScoreCompare> objectsSortedByProximityScore;
+	set < unordered_map <lpwstring, cProximityEntry>::iterator, semanticSetCompare > frequentOrProximateObjects;
 	// Rank closestObjects, semanticCheck the top 20 by frequency and by
 	// score, and keep those with confidence < CONFIDENCE_NOMATCH.
 	void sortByFrequencyAndProximity(cQuestionAnswering &qa,cSyntacticRelationGroup* parentSRG, cSource *parentSource)
 	{
 		objectsSortedByFrequency.clear();
 		objectsSortedByProximityScore.clear();
-		for (unordered_map <wstring, cProximityEntry>::iterator roi = closestObjects.begin(), roiEnd = closestObjects.end(); roi != roiEnd; roi++)
+		for (unordered_map <lpwstring, cProximityEntry>::iterator roi = closestObjects.begin(), roiEnd = closestObjects.end(); roi != roiEnd; roi++)
 		{
 			roi->second.calculateScore();
 			objectsSortedByFrequency.insert(roi);
 			objectsSortedByProximityScore.insert(roi);
 		}
 		int onlyTopResults = 0;
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <lpwstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRG, parentSource) < CONFIDENCE_NOMATCH)
 				frequentOrProximateObjects.insert((*sroi));
 		}
 		onlyTopResults = 0;
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <lpwstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			if ((*sroi)->second.semanticCheck(qa,parentSRG, parentSource) < CONFIDENCE_NOMATCH)
@@ -141,32 +146,32 @@ public:
 	// Dump the map, the top-20 frequency/score lists, and suggested answers.
 	void lplogFrequentOrProximateObjects(cQuestionAnswering &qa, int logType, cSource *parentSource, bool enhanced)
 	{
-		::lplog(logType, L"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E" : L"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
+		::lplog(logType, u"SM%s SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
+			(enhanced) ? u"E" : u"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
 		extern int logDetail;
 		if (logDetail)
-			for (set <wstring>::iterator spi = sourcePaths.begin(), spiEnd = sourcePaths.end(); spi != spiEnd; spi++)
-				::lplog(logType, L"SM%s sourcePath: %s", (enhanced) ? L"E" : L"", spi->c_str());
+			for (set <lpwstring>::iterator spi = sourcePaths.begin(), spiEnd = sourcePaths.end(); spi != spiEnd; spi++)
+				::lplog(logType, u"SM%s sourcePath: %s", (enhanced) ? u"E" : u"", spi->c_str());
 		int onlyTopResults = 0;
-		::lplog(logType, L"SM%s by frequency ***************", (enhanced) ? L"E" : L"");
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		::lplog(logType, u"SM%s by frequency ***************", (enhanced) ? u"E" : u"");
+		for (set < unordered_map <lpwstring, cProximityEntry>::iterator, semanticSetCompare>::iterator sroi = objectsSortedByFrequency.begin(), sroiEnd = objectsSortedByFrequency.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			(*sroi)->second.lplogFrequentOrProximateObjects(logType, (*sroi)->first);
 		}
-		::lplog(logType, L"SM%s by score ***************", (enhanced) ? L"E" : L"");
+		::lplog(logType, u"SM%s by score ***************", (enhanced) ? u"E" : u"");
 		onlyTopResults = 0;
-		for (set < unordered_map <wstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
+		for (set < unordered_map <lpwstring, cProximityEntry>::iterator, proximityScoreCompare>::iterator sroi = objectsSortedByProximityScore.begin(), sroiEnd = objectsSortedByProximityScore.end(); sroi != sroiEnd && onlyTopResults < 20; sroi++)
 		{
 			onlyTopResults++;
 			(*sroi)->second.lplogFrequentOrProximateObjects(logType, (*sroi)->first);
 		}
 		if (frequentOrProximateObjects.empty())
-			::lplog(logType, L"SM%s no suggested answers.", (enhanced) ? L"E" : L"");
+			::lplog(logType, u"SM%s no suggested answers.", (enhanced) ? u"E" : u"");
 		else
 		{
-			::lplog(logType, L"SM%s suggested answers ***************", (enhanced) ? L"E" : L"");
-			for (set < unordered_map <wstring, cProximityEntry>::iterator, semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
+			::lplog(logType, u"SM%s suggested answers ***************", (enhanced) ? u"E" : u"");
+			for (set < unordered_map <lpwstring, cProximityEntry>::iterator, semanticSetCompare >::iterator sai = frequentOrProximateObjects.begin(), saiEnd = frequentOrProximateObjects.end(); sai != saiEnd; sai++)
 			{
 				closestObjects[(*sai)->first].lplogFrequentOrProximateObjects(LOG_WHERE, (*sai)->first);
 				if (logProximityMap)
@@ -174,8 +179,8 @@ public:
 						(*sai)->second.printDirectRelations(qa,logType, parentSource, (*sai)->second.relationSourcePaths[I], (*sai)->second.relationWheres[I]);
 			}
 		}
-		::lplog(logType, L"SM%s END SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
-			(enhanced) ? L"E" : L"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
+		::lplog(logType, u"SM%s END SEMANTIC MAP %d objects %d sources principalObject %s ****************************************************************************",
+			(enhanced) ? u"E" : u"", closestObjects.size(), sourcePaths.size(), SMPrincipalObject.c_str());
 	}
 };
 
@@ -214,7 +219,7 @@ public:
 	bool beforePastHappening,pastHappening,presentHappening,futureHappening,futureInPastHappening;
 	bool negation;
 	int lastOpeningPrimaryQuote;
-  wstring presType;
+  lpwstring presType;
 	// All bools false, lastOpeningPrimaryQuote = -1, duplicateTimeTransitionFromWhere = 0.
 	cTimeFlowTense()
 	{
@@ -257,7 +262,7 @@ public:
 	int objectSubType;
 	int prepObjectSubType;
 	int timeProgression;
-	__int64 questionType;
+	int64_t questionType;
 	int whereQuestionType;
 	int whereQuestionTypeObject;
 	int sentenceNum;
@@ -285,7 +290,7 @@ public:
 	bool nonSemanticPrepositionObjectTotalMatch; 
 	int transformedPrep;
 	cTimeFlowTense tft;
-	wstring description;
+	lpwstring description;
 	int nextSPR;
 	vector <cTimeInfo> timeInfo;
 	cPattern* associatedPattern; // used only with question answering, particularly with verifying transformed questions
@@ -325,10 +330,10 @@ public:
 	bool canUpdate(cSyntacticRelationGroup &z);
 	cSyntacticRelationGroup(char *buffer, int &w, unsigned int total, bool &error);
 	int sanityCheck(int maxSourcePosition, int maxObjectIndex);
-	void convertToFlags(__int64 flags);
-	__int64 convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, __int64 questionFlags);
+	void convertToFlags(int64_t flags);
+	int64_t convertFlags(bool isQuestion, bool inPrimaryQuote, bool inSecondaryQuote, int64_t questionFlags);
 	bool write(void *buffer, int &w, int limit);
 	cSyntacticRelationGroup(cSyntacticRelationGroup *srg, unordered_map <int, int> &sourceMap);
-	bool adjustValue(int& val, int originalVal, wstring valString, unordered_map <int, int>& sourceIndexMap);
+	bool adjustValue(int& val, int originalVal, lpwstring valString, unordered_map <int, int>& sourceIndexMap);
 };
 

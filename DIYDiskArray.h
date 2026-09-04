@@ -40,26 +40,28 @@
 #include <string>
 #include <vector>
 #include <iterator>
-#include <io.h>
-#include <sys\stat.h>
+#include <sys/stat.h> // batch B5: was a backslash path, MSVC-only
 #include <fcntl.h> 
-#include <sys\types.h>
-#include <share.h>
-
+#include <sys/types.h>
 using namespace std;
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 template <class T>
 class DIYDiskArray
 {
 	vector<vector <T>> matrix;
 	vector<vector <T>> checkMatrix;
-	wstring path;
+	lpwstring path;
 	bool useDisk;
 	int matrixfp;
 	errno_t error;
 	bool anyErrorFatal;
-	wchar_t errbuffer[1024];
-	__int64 saveFirst, saveSecond;
+	lpchar_t errbuffer[1024];
+	int64_t saveFirst, saveSecond;
 	bool check=false;
 
 public:
@@ -68,27 +70,27 @@ public:
 	// second<=saveSecond range check).  Disk mode creates/opens 'path' and
 	// writes the fill in 4096-T chunks (the last write is a full chunk even
 	// if fewer bytes remain).
-	errno_t initialize(__int64 first, __int64 second, T value)
+	errno_t initialize(int64_t first, int64_t second, T value)
 	{
 		saveFirst = first;
 		saveSecond = second;
 		if (useDisk)
 		{
-			error = _wsopen_s(&matrixfp, path.c_str(), _O_BINARY | _O_RDWR | _O_RANDOM | _O_CREAT, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+			matrixfp = lp_wopen(path.c_str(), O_BINARY | O_RDWR | O_CREAT /* batch B5: _O_RANDOM was a Windows cache hint with no POSIX equivalent */, _S_IREAD | _S_IWRITE), error = (matrixfp < 0 ? errno : 0);
 			if (error && anyErrorFatal)
-				lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _wsopen failure = %d[%s] with path %s", error, errstr(), path.c_str());
+				lplog(LOG_FATAL_ERROR, u"DIYDiskArray:initialization _wsopen failure = %d[%s] with path %s", error, errstr(), path.c_str());
 			if (!error)
 			{
-				__int64 totalBytes = (first + 1) * (second + 1) * sizeof(T);
+				int64_t totalBytes = (first + 1) * (second + 1) * sizeof(T);
 				T buf[4096];
 				for (int I = 0; I < 4096; I++)
 					buf[I] = value;
-				for (__int64 bytes = 0; bytes < totalBytes; bytes += sizeof(buf))
-					if (_write(matrixfp, buf, sizeof(buf)) < 0)
+				for (int64_t bytes = 0; bytes < totalBytes; bytes += sizeof(buf))
+					if (::write(matrixfp, buf, sizeof(buf)) < 0)
 					{
 						error = errno;
 						if (error && anyErrorFatal)
-							lplog(LOG_FATAL_ERROR, L"DIYDiskArray:initialization _write [%I64d] failure = %d[%s] with path %s", bytes, error, errstr(), path.c_str());
+							lplog(LOG_FATAL_ERROR, u"DIYDiskArray:initialization ::write [%I64d] failure = %d[%s] with path %s", bytes, error, errstr(), path.c_str());
 					}
 			}
 			if (check)
@@ -100,48 +102,50 @@ public:
 		return 0;
 	}
 
-	// Format this->error into errbuffer (1024 wchar_t).  Returned pointer is
+	// Format this->error into errbuffer (1024 lpchar_t).  Returned pointer is
 	// owned by *this and is overwritten by the next errstr() call.
-	wchar_t *errstr()
+	lpchar_t *errstr()
 	{
-		_wcserror_s(errbuffer, 1024, error);
+		// Batch B5: strerror replaces _wcserror_s (which formatted into a wide buffer).
+		lpwstring errorText = lp_narrow_to_wide(std::string(strerror(error)));
+		lp_snprintf(errbuffer, 1024, u"%s", errorText.c_str());
 		return errbuffer;
 	}
 
 	// Store value at [first][second].  Out of range is FATAL.  Disk seek uses
 	// stride (saveSecond+1), matching the (saveFirst+1)x(saveSecond+1) allocation.
 	// Returns 0, or -1 if the fd is already in error.
-	int put(__int64 first, __int64 second, T value)
+	int put(int64_t first, int64_t second, T value)
 	{
 		if (check)
-			lplog(LOG_ERROR, L"DIYDiskArray:put [%I64d,%I64d] %f", first, second, value);
+			lplog(LOG_ERROR, u"DIYDiskArray:put [%I64d,%I64d] %f", first, second, value);
 		if (first > saveFirst || second > saveSecond || first < 0 || second < 0)
-			lplog(LOG_FATAL_ERROR, L"DIYDiskArray:illegal parameters put [%I64d,%I64d]", first, second);
+			lplog(LOG_FATAL_ERROR, u"DIYDiskArray:illegal parameters put [%I64d,%I64d]", first, second);
 		if (!useDisk)
 			matrix[first][second] = value;
 		else
 		{
 			if (matrixfp == -1 || error != 0)
 				return -1;
-			if (_lseeki64(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
+			if (::lseek(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray:put ::lseek [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
 				return -1;
 			}
-			if (_write(matrixfp, &value, sizeof(value)) < 0)
+			if (::write(matrixfp, &value, sizeof(value)) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_write failure = %d[%s] with path %s", error, errstr(), path.c_str());
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray:::write failure = %d[%s] with path %s", error, errstr(), path.c_str());
 				return -1;
 			}
 			if (check)
 			{
 				checkMatrix[first][second] = value;
 				if (get(first, second) != value)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray [%I64d,%I64d] put failure disk=%f memory check=%f", first, second, value, checkMatrix[first][second]);
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray [%I64d,%I64d] put failure disk=%f memory check=%f", first, second, value, checkMatrix[first][second]);
 			}
 		}
 		return 0;
@@ -149,12 +153,12 @@ public:
 
 	// Load [first][second].  Out of range is FATAL.  On a dead fd returns -1
 	// (not a valid T for every T); on seek/read failure returns 0.
-	T get(__int64 first, __int64 second)
+	T get(int64_t first, int64_t second)
 	{
 		if (check)
-			lplog(LOG_ERROR, L"DIYDiskArray:get [%I64d,%I64d]", first, second);
+			lplog(LOG_ERROR, u"DIYDiskArray:get [%I64d,%I64d]", first, second);
 		if (first > saveFirst || second > saveSecond || first < 0 || second < 0)
-			lplog(LOG_FATAL_ERROR, L"DIYDiskArray:illegal parameters get [%I64d,%I64d]", first, second);
+			lplog(LOG_FATAL_ERROR, u"DIYDiskArray:illegal parameters get [%I64d,%I64d]", first, second);
 		if (!useDisk)
 			return matrix[first][second];
 		else
@@ -162,32 +166,32 @@ public:
 			if (matrixfp == -1 || error != 0)
 				return -1;
 			T value;
-			if (_lseeki64(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
+			if (::lseek(matrixfp, (first*(saveSecond + 1) + second) * sizeof(value), SEEK_SET) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:put _lseeki64 [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray:put ::lseek [%I64d,%I64d] failure = %d[%s] with path %s", first, second, error, errstr(), path.c_str());
 				return 0;
 			}
-			if (_read(matrixfp, &value, sizeof(value)) < 0)
+			if (::read(matrixfp, &value, sizeof(value)) < 0)
 			{
 				error = errno;
 				if (error && anyErrorFatal)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray:_read failure = %d[%s] with path %s", error, errstr(), path.c_str());
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray:::read failure = %d[%s] with path %s", error, errstr(), path.c_str());
 				return 0;
 			}
 			if (check)
 			{
 				if (checkMatrix[first][second] != value)
-					lplog(LOG_FATAL_ERROR, L"DIYDiskArray [%I64d,%I64d] get failure disk=%f memory check=%f", first, second, value, checkMatrix[first][second]);
+					lplog(LOG_FATAL_ERROR, u"DIYDiskArray [%I64d,%I64d] get failure disk=%f memory check=%f", first, second, value, checkMatrix[first][second]);
 			}
 			return value;
 		}
 	}
 
-	// tpath is copied into an owned wstring, so a temporary c_str() is safe.
+	// tpath is copied into an owned lpwstring, so a temporary c_str() is safe.
 	// NULL path = RAM mode.  anyErrorFatal defaults true so I/O errors abort.
-	DIYDiskArray(const wchar_t *tpath)
+	DIYDiskArray(const lpchar_t *tpath)
 	{
 		useDisk = tpath != NULL;
 		if (useDisk)
@@ -203,8 +207,8 @@ public:
 	{
 		if (matrixfp != -1)
 		{
-			_commit(matrixfp);
-			_close(matrixfp);
+			::fsync(matrixfp);
+			::close(matrixfp);
 			matrixfp = -1;
 		}
 	}

@@ -35,14 +35,18 @@
 		- nextByPatternEnd < 0 is a circular-list back-pointer (-offset), not
 		  "end of list" (-1 is the empty-head sentinel).
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include "Winhttp.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include "io.h"
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -90,7 +94,7 @@ cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchA
 		content = (tPatternElementMatch*)tmalloc(allocated * sizeof(*content));
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (5)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (5)");
 			return;
 		}
 		memcpy(content, rhs.content, count * sizeof(*content));
@@ -111,18 +115,20 @@ void cPatternElementMatchArray::minimize(void)
 bool cPatternElementMatchArray::write(IOHANDLE file)
 {
 	LFS
-		_write(file, &count, sizeof(count));
-	_write(file, content, count * sizeof(*content));
+		::write(file, &count, sizeof(count));
+	::write(file, content, count * sizeof(*content));
 	return true;
 }
 
-// Win32 WriteFile of count + content.  Returns false if either write is short.
-bool cPatternElementMatchArray::WriteFile(HANDLE file)
+// Write count + content to a POSIX fd.  Returns false if either write is short.
+// Batch B5: was WriteFile(HANDLE), which shadowed the Win32 API of the same name and
+// then called it via ::WriteFile; renamed to writeToFile so nothing here is named
+// after an API that no longer exists.
+bool cPatternElementMatchArray::writeToFile(int file)
 {
 	LFS
-		DWORD dwBytesWritten;
-	if (!::WriteFile(file, &count, sizeof(count), &dwBytesWritten, NULL) || dwBytesWritten != sizeof(count)) return false;
-	if (!::WriteFile(file, content, count * sizeof(*content), &dwBytesWritten, NULL) || dwBytesWritten != count * sizeof(*content)) return false;
+		if (::write(file, &count, sizeof(count)) != (ssize_t)sizeof(count)) return false;
+	if (::write(file, content, count * sizeof(*content)) != (ssize_t)(count * sizeof(*content))) return false;
 	return true;
 }
 
@@ -131,15 +137,15 @@ bool cPatternElementMatchArray::WriteFile(HANDLE file)
 bool cPatternElementMatchArray::read(IOHANDLE file)
 {
 	LFS
-		if (_read(file, &count, sizeof(count)) < 0)
+		if (::read(file, &count, sizeof(count)) < 0)
 		{
-			lplog(LOG_ERROR, L"read error!");
+			lplog(LOG_ERROR, u"read error!");
 			return false;
 		}
 	allocated = count;
 	if (count > 1000000)
 	{
-		lplog(LOG_ERROR, L"Illegal count of %d (>1000000) encountered!", count);
+		lplog(LOG_ERROR, u"Illegal count of %d (>1000000) encountered!", count);
 		return false; // extremely unlikely to have more than this # of matches
 	}
 	content = (tPatternElementMatch*)tmalloc(count * sizeof(*content));
@@ -148,9 +154,9 @@ bool cPatternElementMatchArray::read(IOHANDLE file)
 		lplog();
 		return false;
 	}
-	if (_read(file, content, count * sizeof(*content)) < 0)
+	if (::read(file, content, count * sizeof(*content)) < 0)
 	{
-		lplog(LOG_ERROR, L"read error!");
+		lplog(LOG_ERROR, u"read error!");
 		return false;
 	}
 	return true;
@@ -162,7 +168,7 @@ bool cPatternElementMatchArray::write(void* buffer, int& where, unsigned int lim
 	LFS
 		if (!copy(buffer, count, where, limit)) return false;
 	if (where + count * sizeof(*content) > limit)
-		lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached! (15)", limit);
+		lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached! (15)", limit);
 	memcpy(((char*)buffer) + where, content, count * sizeof(*content));
 	where += count * sizeof(*content);
 	return true;
@@ -176,7 +182,7 @@ bool cPatternElementMatchArray::read(char* buffer, int& where, unsigned int limi
 		if (!copy(count, buffer, where, limit)) return false;
 	if (where + count * sizeof(*content) > limit)
 	{
-		lplog(LOG_ERROR, L"Maximum read copy limit of %d bytes reached! (15)", limit);
+		lplog(LOG_ERROR, u"Maximum read copy limit of %d bytes reached! (15)", limit);
 		count = 0;
 		return false;
 	}
@@ -214,7 +220,7 @@ cPatternElementMatchArray& cPatternElementMatchArray::operator=(const cPatternEl
 		content = (tPatternElementMatch*)tmalloc(allocated * sizeof(*content));
 		if (!content)
 		{
-			lplog(LOG_FATAL_ERROR, L"OUT OF MEMORY (7)");
+			lplog(LOG_FATAL_ERROR, u"OUT OF MEMORY (7)");
 			return *this;
 		}
 		memcpy(content, rhs.content, count * sizeof(*content));
@@ -238,7 +244,7 @@ cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray::oper
 		static int catchError = 0;
 	catchError++;
 	if (_P0 >= count || _P0 < 0)
-		lplog(LOG_FATAL_ERROR, L"Illegal reference (10) to element %d in an array with only %d elements! - %d", _P0, count, catchError);
+		lplog(LOG_FATAL_ERROR, u"Illegal reference (10) to element %d in an array with only %d elements! - %d", _P0, count, catchError);
 #endif
 	return (content[_P0]);
 }
@@ -251,7 +257,7 @@ const cPatternElementMatchArray::tPatternElementMatch& cPatternElementMatchArray
 		if (_P0 >= count || _P0 < 0)
 		{
 			logCache = 0;
-			lplog(L"Illegal reference (11) to element %d in an array with only %d elements!", _P0, count);
+			lplog(u"Illegal reference (11) to element %d in an array with only %d elements!", _P0, count);
 			if (count == 0) throw;
 			return content[0];
 		}
@@ -278,7 +284,7 @@ int cPatternElementMatchArray::push_back(int oCost, int iCost, unsigned int p, i
 		{
 			allocated += (allocationHint * 10); // 3000000
 			if (allocationHint < 1000) allocated += (allocationHint * 50);
-			//lplog(L"PEMA memory reallocation %d-%d:%d:%d->%d",begin,end,allocationHint,oldAllocated,allocated);
+			//lplog(u"PEMA memory reallocation %d-%d:%d:%d->%d",begin,end,allocationHint,oldAllocated,allocated);
 		}
 		content = (tPatternElementMatch*)trealloc(8, content, oldAllocated * sizeof(*content), allocated * sizeof(*content));
 	}
@@ -300,7 +306,7 @@ int cPatternElementMatchArray::push_back(int oCost, int iCost, unsigned int p, i
 	//c->sourcePosition=0; // BPM
 	c->cumulativeDeltaCost = 0;
 	if (begin<MIN_SIGNED_SHORT || begin>MAX_SIGNED_SHORT || end<MIN_SIGNED_SHORT || end>MAX_SIGNED_SHORT || iCost > MAX_SIGNED_SHORT)
-		lplog(LOG_FATAL_ERROR, L"elements exceeded maximum values.");
+		lplog(LOG_FATAL_ERROR, u"elements exceeded maximum values.");
 	return count - 1;
 }
 
@@ -331,7 +337,7 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 	{
 		if (PATMASK(elementMatchedSubIndex) >= patterns.size())
 		{
-			lplog(LOG_ERROR, L"%d:FATAL ERROR:Illegal pattern # reference %d at p=%d begin=%d end=%d elementMatchedSubIndex=%d",
+			lplog(LOG_ERROR, u"%d:FATAL ERROR:Illegal pattern # reference %d at p=%d begin=%d end=%d elementMatchedSubIndex=%d",
 				position, PATMASK(elementMatchedSubIndex), p, begin, end, elementMatchedSubIndex);
 			return newElement = false;
 		}
@@ -354,12 +360,12 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 			{
 #ifdef LOG_PATTERN_COST_CHECK
 				if (isPattern)
-					lplog(L"%d:%s[%s](%d,%d) %s[%s](%d,%d) element #%d PEMA cost reduced from %d to %d (child pattern)",
+					lplog(u"%d:%s[%s](%d,%d) %s[%s](%d,%d) element #%d PEMA cost reduced from %d to %d (child pattern)",
 						position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position + begin, position + end,
 						patterns[c->getChildPattern()]->name.c_str(), patterns[c->getChildPattern()]->differentiator.c_str(), position, position + c->getChildLen(),
 						c - content, c->getOCost(), oCost);
 				else
-					lplog(L"%d:%s[%s](%d,%d) PEMA cost reduced from %d to %d (child form)",
+					lplog(u"%d:%s[%s](%d,%d) PEMA cost reduced from %d to %d (child form)",
 						position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position + begin, position + end,
 						c->getOCost(), oCost);
 #endif
@@ -369,12 +375,12 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 			{
 #ifdef LOG_PATTERN_COST_CHECK
 				if (isPattern)
-					lplog(L"%d:%s[%s](%d,%d) %s[%s](%d,%d) element #%d PEMA ICost reduced from %d to %d (child pattern)",
+					lplog(u"%d:%s[%s](%d,%d) %s[%s](%d,%d) element #%d PEMA ICost reduced from %d to %d (child pattern)",
 						position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position + begin, position + end,
 						patterns[c->getChildPattern()]->name.c_str(), patterns[c->getChildPattern()]->differentiator.c_str(), position, position + c->getChildLen(),
 						c - content, c->iCost, iCost);
 				else
-					lplog(L"%d:%s[%s](%d,%d) PEMA ICost reduced from %d to %d (child form)",
+					lplog(u"%d:%s[%s](%d,%d) PEMA ICost reduced from %d to %d (child form)",
 						position, patterns[p]->name.c_str(), patterns[p]->differentiator.c_str(), position + begin, position + end,
 						c->iCost, iCost);
 #endif
@@ -396,7 +402,7 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 	if (POFlag)     firstPosition = ((int*)content) + keepOffset;
 #ifdef LOG_PATTERN_COST_CHECK
 	if (*firstPosition >= 0)
-		lplog(L"%d:Extended patternEnd %s[%s](%d,%d)->%s[%s](%d,%d) chain link %d->%d",
+		lplog(u"%d:Extended patternEnd %s[%s](%d,%d)->%s[%s](%d,%d) chain link %d->%d",
 			position,
 			patterns[content[PEMAOffset].getPattern()]->name.c_str(), patterns[content[PEMAOffset].getPattern()]->differentiator.c_str(),
 			position + content[PEMAOffset].begin, position + content[PEMAOffset].end,
@@ -404,7 +410,7 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 			position + content[*firstPosition].begin, position + content[*firstPosition].end,
 			PEMAOffset, *firstPosition);
 	else
-		lplog(L"%d:Created patternEnd %s[%s](%d,%d) child %s[%s](%d,%d) chain link %d->%d",
+		lplog(u"%d:Created patternEnd %s[%s](%d,%d) child %s[%s](%d,%d) chain link %d->%d",
 			position,
 			patterns[content[PEMAOffset].getPattern()]->name.c_str(), patterns[content[PEMAOffset].getPattern()]->differentiator.c_str(),
 			position + content[PEMAOffset].begin, position + content[PEMAOffset].end,
@@ -420,7 +426,7 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 		int p2;
 		for (p2 = *saveFirstPosition; content[p2].nextByPatternEnd >= 0; p2 = content[p2].nextByPatternEnd);
 #ifdef LOG_PATTERN_COST_CHECK
-		lplog(L"Changing last position in chain from %d to %d.", content[p2].nextByPatternEnd, -PEMAOffset);
+		lplog(u"Changing last position in chain from %d to %d.", content[p2].nextByPatternEnd, -PEMAOffset);
 #endif
 		content[p2].nextByPatternEnd = -PEMAOffset; // this is to create a circular list
 	}
@@ -433,7 +439,7 @@ int cPatternElementMatchArray::push_back_unique(int* firstPosition, unsigned int
 	len+=sprintf(temp+len,"%d ",p2);
 	temp[len]=0;
 	if (-p2!=*saveFirstPosition)
-	lplog(L"ERROR IN CHAIN %s!",temp);
+	lplog(u"ERROR IN CHAIN %s!",temp);
 	*/
 	return PEMAOffset;
 }
@@ -463,7 +469,7 @@ void cPatternElementMatchArray::check(void)
 	LFS
 		for (unsigned int I = 0; I < count; I++)
 			if (content[I].nextByPosition >= (signed)count || content[I].nextByPatternEnd >= (signed)count || content[I].nextByChildPatternEnd >= (signed)count)
-				lplog(LOG_FATAL_ERROR, L"FATAL!");
+				lplog(LOG_FATAL_ERROR, u"FATAL!");
 }
 
 // If *nextPosition still points into the already-consolidated prefix, walk
@@ -526,7 +532,7 @@ void cPatternElementMatchArray::translate(int lastPEMAConsolidationIndex, int* w
 	if (wa[*position - lastPEMAConsolidationIndex] == -1)
 	{
 		if (!translateLoopedPositions)
-			lplog(LOG_ERROR, L"PEMAIndex %d referenced but not winner.", *position);
+			lplog(LOG_ERROR, u"PEMAIndex %d referenced but not winner.", *position);
 		*position = -1;
 		return;
 	}
@@ -583,7 +589,7 @@ bool cPatternElementMatchArray::consolidateWinners(int lastPEMAConsolidationInde
 	}
 	if (wa) tfree((count - lastPEMAConsolidationIndex) * sizeof(*wa), wa);
 	if (t.tracePatternElimination)
-		lplog(L"PEMA reduced from %d to count %d", count, numWinners);
+		lplog(u"PEMA reduced from %d to count %d", count, numWinners);
 	count = lastPEMAConsolidationIndex + numWinners;
 	return numWinners > 1;
 }
@@ -595,7 +601,7 @@ int cPatternElementMatchArray::generatePEMACount(int nextPosition)
 		int I = 0;
 	for (; nextPosition != -1; I++, nextPosition = content[nextPosition].nextByPosition)
 		if (nextPosition < 0 || nextPosition >= (signed)count)
-			lplog(LOG_FATAL_ERROR, L"Incorrect PEMA Position %d", nextPosition);
+			lplog(LOG_FATAL_ERROR, u"Incorrect PEMA Position %d", nextPosition);
 	return I;
 }
 
@@ -648,12 +654,12 @@ bool cPatternElementMatchArray::ownedByOtherPattern(int nextPosition, int p, int
 // the child-tag roles (HAIL/SUBJECT/OBJECT/...).  Walks roleTagSet via
 // elementHasTagInSet.  Role tags are required to live on the child, not on
 // the parent pattern as a whole.
-__int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64& tagRole)
+int64_t cPatternElementMatchArray::tPatternElementMatch::getRole(int64_t& tagRole)
 {
 	LFS
 		// role tags must ONLY be child tags, not tags assigned to the whole pattern
 		int tag;
-	__int64 childTagRole = 0;
+	int64_t childTagRole = 0;
 	unsigned int tagNumBySet = 0;
 	tagRole = (patterns[getParentPattern()]->tags.find(MPLURAL_TAG) != patterns[getParentPattern()]->tags.end()) ? MPLURAL_ROLE : 0;
 	// a noun could have multiple nouns in it but still be singular - NOUN "O"
@@ -673,15 +679,17 @@ __int64 cPatternElementMatchArray::tPatternElementMatch::getRole(__int64& tagRol
 }
 
 // Format "PARENT[diff](absBegin,absEnd) child CHILD[*](...)" or "... form NAME"
-// into caller-provided temp.  No bound is passed to wsprintf.
-wchar_t* cPatternElementMatchArray::tPatternElementMatch::toText(unsigned int position, wchar_t* temp, vector <cWordMatch>& m)
+// into caller-provided temp.  No bound is passed to lp_wsprintf.
+// Batch B5: tempCount added -- temp is a pointer parameter, so the bounded
+// lp_wsprintf cannot deduce its size; every caller passes a 1024-element buffer.
+lpchar_t* cPatternElementMatchArray::tPatternElementMatch::toText(unsigned int position, lpchar_t* temp, size_t tempCount, vector <cWordMatch>& m)
 {
 	LFS
-		int len = wsprintf(temp, L"%s[%s](%u,%u) child",
+		int len = lp_snprintf(temp, tempCount, u"%s[%s](%u,%u) child",
 			patterns[getParentPattern()]->name.c_str(), patterns[getParentPattern()]->differentiator.c_str(), position + begin, position + end);
 	if (isChildPattern())
-		len += wsprintf(temp + len, L" %s[*](%u,%u)", patterns[getChildPattern()]->name.c_str(), position, position + getChildLen());
+		len += ((size_t)len < tempCount) ? lp_snprintf(temp + len, tempCount - len, u" %s[*](%u,%u)", patterns[getChildPattern()]->name.c_str(), position, position + getChildLen()) : 0;
 	else
-		len += wsprintf(temp + len, L" form %s", Forms[m[position].getFormNum(getChildForm())]->shortName.c_str());
+		len += ((size_t)len < tempCount) ? lp_snprintf(temp + len, tempCount - len, u" form %s", Forms[m[position].getFormNum(getChildForm())]->shortName.c_str()) : 0;
 	return temp;
 }

@@ -1,42 +1,47 @@
 /*
-	memoryStat.cpp - WMI PrivateBytes sampler, GlobalMemoryStatusEx dump, and the tmalloc family
+	memoryStat.cpp - process/system memory reporting and the tmalloc family
 
 	Overview:
-		initializeCounter() sets up a Wbem refresher against root\\cimv2 (the
-		AddEnum of Win32_PerfRawData_PerfProc_Process is commented out, so
-		getCounter() currently always fails).  reportMemoryUsage() logs physical /
-		virtual / pagefile totals plus the process PrivateBytes.  tmalloc / tcalloc
-		/ trealloc / tfree wrap CRT allocators and keep the process-wide
-		memoryAllocated counter; OOM logs FATAL (which exits) and then exit(0).
+		getCounter() reports this process's memory footprint via the Mach task API.
+		reportMemoryUsage() logs system physical totals plus this process's
+		footprint.  tmalloc / tcalloc / trealloc / tfree wrap the CRT allocators and
+		keep the process-wide memoryAllocated counter; OOM logs FATAL (which exits)
+		and then a dead exit(0).
+
+		Batch B5 replaced a WMI/COM implementation of the first two that had never
+		worked (see the note above getCounter below).
 
 	Pipeline position:
 		tmalloc is the allocator used by the binary cache, wordForms buffers, and
 		DIYDiskArray.  reportMemoryUsage is called only from the OOM path.
 
 	Key entry points:
-		- initializeCounter() / getCounter() / freeCounter() - WMI (currently inert).
+		- getCounter() - this process's memory footprint (Mach task_info).
+		- initializeCounter() / freeCounter() - now no-ops, kept for their call sites.
 		- reportMemoryUsage() - one-line memory dump to main.lplog.
 		- tmalloc / tcalloc / trealloc / tfree - tracked malloc.
 
 	Key data structures / globals:
 		- memoryAllocated - process-wide; comment says "protect with mutex" but
 			there is no lock.
-		- pRefresher / pEnum / pNameSpace - COM objects; pEnum is never assigned
-			because AddEnum is commented out.
+		(the COM objects that used to live here are gone -- batch B5)
 
 	Notes / gotchas:
-		- initializeCounter leaks the locator/BSTR on several early-return paths
-			and never adds the enumerator, so getCounter is a no-op.
 		- tcalloc's OOM message uses 'num' (element count), not num*SizeOfElements.
 		- trealloc bumps memoryAllocated before realloc; on failure the counter is
 			wrong and the original pointer is still valid (but FATAL exits anyway).
 		- In _DEBUG, trealloc memset's the new tail - the comment says this is to
 			keep checked iterators happy.
 */
-// from MSDN
-#define _WIN32_DCOM
 
-#include <windows.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -44,128 +49,105 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
-#include <Wbemidl.h>
 using namespace std;
 #include "logging.h"
 #include "mysql.h"
 #include "general.h"
 #include "profile.h"
-# pragma comment(lib, "wbemuuid.lib")
+#include <mach/mach.h>
+#include <mach/task_info.h>
+#include <sys/sysctl.h>
 #pragma warning(disable: 4267)
 
-__int64 memoryAllocated = 0; // protect with mutex
+int64_t memoryAllocated = 0; // protect with mutex
 
-IWbemRefresher* pRefresher = NULL;
-IWbemHiPerfEnum* pEnum = NULL;
-IWbemServices* pNameSpace = NULL;
+// ---------------------------------------------------------------------------
+// Batch B5: the WMI apparatus (a Wbem refresher against root\cimv2, plus the COM
+// initialization around it) is DELETED, not ported. It was already dead on
+// Windows: the pConfig->AddEnum() that would have registered the
+// Win32_PerfRawData_PerfProc_Process enumerator is commented out, so pEnum was
+// never assigned and getCounter() always returned -1. Rather than reproduce a
+// non-functional subsystem, this implements what it was supposed to do, using the
+// Mach task API -- which is both a working replacement and far less code than the
+// COM dance it replaces.
+// ---------------------------------------------------------------------------
 
-// CoInitialize + connect to \\\\.\\root\\cimv2 and create a WbemRefresher.
-// Returns 0-ish HRESULT on success, -1 on any failure.  AddEnum is commented
-// out, so pEnum stays NULL and getCounter will always return -1.
-// Early-return paths leak pWbemLocator / bstrNameSpace / pNameSpace.
+// Nothing to set up: the Mach calls below need no initialization or teardown.
+// Both are kept (rather than deleted along with the WMI code) because main.cpp and
+// specials_main.cpp call them during startup and shutdown; batch B4a/B4b can drop
+// the call sites, at which point these can go too.
 int initializeCounter(void)
 {
-	LFS
-		HRESULT hr = S_OK;
-	// To add error checking,
-	// check returned HRESULT below where collected.
-	if (FAILED(hr = CoInitializeEx(NULL, COINIT_MULTITHREADED))) return -1;
-	if (FAILED(hr = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_NONE, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, 0))) return -1;
-	IWbemLocator* pWbemLocator = NULL;
-	if (FAILED(hr = CoCreateInstance(CLSID_WbemLocator, NULL, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (void**)&pWbemLocator))) return -1;
-	// Connect to the desired namespace.
-	BSTR bstrNameSpace;
-	if ((bstrNameSpace = SysAllocString(L"\\\\.\\root\\cimv2")) == NULL) return -1;
-	if (FAILED(hr = pWbemLocator->ConnectServer(
-		bstrNameSpace,
-		NULL, // User name
-		NULL, // Password
-		NULL, // Locale
-		0L,   // Security flags
-		NULL, // Authority
-		NULL, // Wbem context
-		&pNameSpace)))
-		return -1;
-	pWbemLocator->Release();
-	SysFreeString(bstrNameSpace);
-	bstrNameSpace = NULL;
-	if (FAILED(hr = CoCreateInstance(CLSID_WbemRefresher, NULL, CLSCTX_INPROC_SERVER, IID_IWbemRefresher, (void**)&pRefresher))) return -1;
-	IWbemConfigureRefresher* pConfig = NULL;
-	if (FAILED(hr = pRefresher->QueryInterface(IID_IWbemConfigureRefresher, (void**)&pConfig))) return -1;
-	// Add an enumerator to the refresher.
-	//long lID = 0;
-	//hr = pConfig->AddEnum(pNameSpace, L"Win32_PerfRawData_PerfProc_Process", 0, NULL, &pEnum, &lID);
-	pConfig->Release();
-	return hr;
+	return 0;
 }
 
-// Read the named DWORD property of this process from the (never-added) WMI
-// enumerator.  Always returns -1 today because pEnum is NULL.  On a live
-// enumerator, early returns after new[] leak apEnumAccess.
-int getCounter(const wchar_t* counter, DWORD& dwValue)
-{
-	LFS
-		HRESULT hr = S_OK;
-	DWORD dwNumObjects = 0, dwNumReturned = 0, dwIDProcess = 0;
-
-	if (pRefresher == NULL || FAILED(hr = pRefresher->Refresh(0L)) || !pEnum) return -1;
-	IWbemObjectAccess** apEnumAccess = NULL;
-	hr = pEnum->GetObjects(0L, dwNumObjects, apEnumAccess, &dwNumReturned);
-	// If the buffer was not big enough,
-	// allocate a bigger buffer and retry.
-	if (hr == WBEM_E_BUFFER_TOO_SMALL && dwNumReturned > dwNumObjects)
-	{
-		if ((apEnumAccess = new IWbemObjectAccess * [dwNumReturned]) == NULL) return -1;
-		SecureZeroMemory(apEnumAccess, dwNumReturned * sizeof(IWbemObjectAccess*));
-		dwNumObjects = dwNumReturned;
-		if (FAILED(hr = pEnum->GetObjects(0L, dwNumObjects, apEnumAccess, &dwNumReturned))) return -1;
-	}
-	else
-		if (hr == WBEM_S_NO_ERROR) return -1;
-	// First time through, get the handles.
-	long lValueHandle = 0, lIDProcessHandle = 0;
-	CIMTYPE ValueType, ProcessHandleType;
-	if (FAILED(hr = apEnumAccess[0]->GetPropertyHandle(counter, &ValueType, &lValueHandle))) return -1;
-	if (FAILED(hr = apEnumAccess[0]->GetPropertyHandle(L"IDProcess", &ProcessHandleType, &lIDProcessHandle))) return -1;
-	int processId = GetCurrentProcessId();
-	unsigned int I;
-	for (I = 0; I < dwNumReturned; I++)
-	{
-		//DWORD dwProcessId = 0;
-		if (FAILED(hr = apEnumAccess[I]->ReadDWORD(lIDProcessHandle, &dwIDProcess))) return -1;
-		if (processId == dwIDProcess) break;
-	}
-	if (I != dwNumReturned) hr = apEnumAccess[I]->ReadDWORD(lValueHandle, &dwValue);
-	for (I = 0; I < dwNumReturned; I++) apEnumAccess[I]->Release();
-	delete[] apEnumAccess;
-	return hr;
-}
-
-// Release the three WMI objects (NULL-safe) and CoUninitialize.  Safe to call
-// even if initializeCounter failed part-way (NULLs are skipped).
 void freeCounter(void)
 {
-	LFS
-		if (pNameSpace)   pNameSpace->Release();
-	if (pEnum)        pEnum->Release();
-	if (pRefresher)   pRefresher->Release();
-	CoUninitialize();
 }
 
-// Log GlobalMemoryStatusEx totals (MB) and this process's PrivateBytes.
-// PrivateBytes is 0 when getCounter fails (the current case).
+// Report one named process counter. Only "PrivateBytes" is meaningful, and it is
+// answered with this task's phys_footprint -- the number macOS itself treats as
+// "how much memory this process is responsible for", and the closest analogue to
+// Windows' private commit charge. Returns 0 on success, -1 if the counter is
+// unknown or the kernel call fails (the same convention the WMI version declared,
+// and unlike that one this actually succeeds).
+int getCounter(const lpchar_t* counter, unsigned long& dwValue)
+{
+	dwValue = 0;
+	if (!counter || lp_strcmp(counter, u"PrivateBytes") != 0)
+		return -1;
+	task_vm_info_data_t vmInfo;
+	mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+	if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &count) != KERN_SUCCESS)
+		return -1;
+	dwValue = (unsigned long)vmInfo.phys_footprint;
+	return 0;
+}
+
+// Log a one-line memory dump. Batch B5: host_statistics64 + sysctl replace
+// GlobalMemoryStatusEx.
+//
+// Two figures the Windows version printed are deliberately absent rather than
+// faked: the page-file totals (macOS has dynamically sized swap files, not a
+// preallocated page file, so "total page file" has no value to report) and the
+// "extended virtual" figure (a 32-bit-Windows AWE concept with no counterpart at
+// all). The virtual-size figures are this process's address space rather than a
+// system-wide total, which is what the Mach API exposes and is the more useful
+// number anyway.
 void reportMemoryUsage(void)
 {
 	LFS
-		DWORD privateBytes = 0;
-	getCounter(L"PrivateBytes", privateBytes);
-	MEMORYSTATUSEX statex;
-	statex.dwLength = sizeof(statex);
-	GlobalMemoryStatusEx(&statex);
-	int MB = 1024 * 1024;
-	lplog(L"%ld%% memory in use: Physical (%I64dMB total,%I64dMB free)  Virtual (%I64dMB total,%I64dMB free)  Extended (%I64dMB free)  Page file: (%I64dMB total,%I64dMB free) ProcessBytes=%dMB",
-		statex.dwMemoryLoad, statex.ullTotalPhys / MB, statex.ullAvailPhys / MB, statex.ullTotalVirtual / MB, statex.ullAvailVirtual / MB, statex.ullAvailExtendedVirtual / MB,
-		statex.ullTotalPageFile / MB, statex.ullAvailPageFile / MB, privateBytes / MB);
+		unsigned long privateBytes = 0;
+	getCounter(u"PrivateBytes", privateBytes);
+
+	int64_t totalPhysical = 0;
+	size_t totalPhysicalSize = sizeof(totalPhysical);
+	if (sysctlbyname("hw.memsize", &totalPhysical, &totalPhysicalSize, nullptr, 0) != 0)
+		totalPhysical = 0;
+
+	int64_t freePhysical = 0;
+	vm_size_t pageSize = 0;
+	mach_port_t host = mach_host_self();
+	if (host_page_size(host, &pageSize) == KERN_SUCCESS)
+	{
+		vm_statistics64_data_t vmStat;
+		mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+		if (host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&vmStat, &count) == KERN_SUCCESS)
+			// "Free" as the OS means it: untouched pages plus those it can reclaim
+			// without writing anything out.
+			freePhysical = (int64_t)(vmStat.free_count + vmStat.inactive_count + vmStat.purgeable_count) * (int64_t)pageSize;
+	}
+
+	int64_t virtualSize = 0;
+	task_basic_info_64_data_t taskInfo;
+	mach_msg_type_number_t taskCount = TASK_BASIC_INFO_64_COUNT;
+	if (task_info(mach_task_self(), TASK_BASIC_INFO_64, (task_info_t)&taskInfo, &taskCount) == KERN_SUCCESS)
+		virtualSize = (int64_t)taskInfo.virtual_size;
+
+	const int64_t MB = 1024 * 1024;
+	int memoryLoad = (totalPhysical > 0) ? (int)(100 - (freePhysical * 100 / totalPhysical)) : 0;
+	lplog(u"%d%% memory in use: Physical (%I64dMB total,%I64dMB free)  Process (%I64dMB virtual) ProcessBytes=%I64dMB",
+		memoryLoad, totalPhysical / MB, freePhysical / MB, virtualSize / MB, (int64_t)privateBytes / MB);
 }
 
 /* memtrack */
@@ -178,7 +160,7 @@ void* tmalloc(size_t num)
 	void* newMemory = malloc(num);
 	if (newMemory != NULL) return newMemory;
 	reportMemoryUsage();
-	lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes!", num);
+	lplog(LOG_FATAL_ERROR, u"Out of memory requesting %d bytes!", num);
 	::lplog(NULL);
 	exit(0);
 }
@@ -192,7 +174,7 @@ void* tcalloc(size_t num, size_t SizeOfElements)
 	void* newMemory = calloc(num, SizeOfElements);
 	if (newMemory != NULL) return newMemory;
 	reportMemoryUsage();
-	lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes!", num);
+	lplog(LOG_FATAL_ERROR, u"Out of memory requesting %d bytes!", num);
 	::lplog(NULL);
 	exit(0);
 }
@@ -210,7 +192,7 @@ void* trealloc(int from, void* original, unsigned int oldbytes, unsigned int new
 #endif
 	if (newMemory != NULL) return newMemory;
 	reportMemoryUsage();
-	lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes! (%d)", newbytes, from);
+	lplog(LOG_FATAL_ERROR, u"Out of memory requesting %d bytes! (%d)", newbytes, from);
 	::lplog(NULL);
 	//char buf[11];
 	//_fgets(buf,10,stdin);

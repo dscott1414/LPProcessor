@@ -16,16 +16,21 @@
 			allowFailure==true only logs an error and returns false.
 
 	Notes / gotchas:
-		- Buffer convention: declare wchar_t qt[QUERY_BUFFER_LEN_OVERFLOW] but format
-			into it with QUERY_BUFFER_LEN as the limit, so the extra 1024 wchar_t are
+		- Buffer convention: declare lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW] but format
+			into it with QUERY_BUFFER_LEN as the limit, so the extra 1024 lpchar_t are
 			slack for the "one more row than expected" case; checkFull() (DBUtility.cpp)
 			flushes an accumulating INSERT/IN list once it passes
-			QUERY_BUFFER_LEN_UNDERFLOW, i.e. 1024 wchar_t before the nominal limit.
-		- QUERY_BUFFER_LEN is in wchar_t units, not bytes: a buffer is ~508KB.
+			QUERY_BUFFER_LEN_UNDERFLOW, i.e. 1024 lpchar_t before the nominal limit.
+		- QUERY_BUFFER_LEN is in lpchar_t units, not bytes: a buffer is ~508KB.
 */
 #pragma once
-bool myquery(MYSQL *mysql, const wchar_t *q, bool allowFailure = false);
-bool myquery(MYSQL *mysql, const wchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
+bool myquery(MYSQL *mysql, const lpchar_t *q, bool allowFailure = false);
+bool myquery(MYSQL *mysql, const lpchar_t *q, MYSQL_RES * &result, bool allowFailure = false);
 #define QUERY_BUFFER_LEN (1024*256-1024*2)
 #define QUERY_BUFFER_LEN_OVERFLOW (QUERY_BUFFER_LEN+1024)
 #define QUERY_BUFFER_LEN_UNDERFLOW (QUERY_BUFFER_LEN-1024)

@@ -22,6 +22,11 @@
 			re-entrant and are not serialized (reset to -1 on read).
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
 template <int sizeOfInteger = 32, int bitsPerInteger = 5, class T = unsigned int, int storeSize = 16> class cBitObject
 {
 public:
@@ -38,10 +43,10 @@ public:
 	}
 	// FATAL-exit if 'limit' is outside the bit storage.  Returns true on success
 	// (the return is dead after FATAL).  'type' is only for the error message.
-	bool check(const wchar_t *type, int limit)
+	bool check(const lpchar_t *type, int limit)
 	{
 		if (limit >= (sizeof(bits) << 3))
-			lplog(LOG_FATAL_ERROR, L"FATAL ERROR: bit storage for %s exceeded - size %d cannot fit into bit storage for %d.", type, limit, (sizeof(bits) << 3) - 1);
+			lplog(LOG_FATAL_ERROR, u"FATAL ERROR: bit storage for %s exceeded - size %d cannot fit into bit storage for %d.", type, limit, (sizeof(bits) << 3) - 1);
 		return true;
 	}
 	// Set bit.  No range check - callers must check() first.  `1 << (bit&31)` is
@@ -162,7 +167,7 @@ public:
 	{
 		if (where + sizeof(bits) > limit)
 		{
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (1)!", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached (1)!", limit);
 			return false;
 		}
 		memcpy(bits, buffer + where, sizeof(bits));
@@ -176,7 +181,7 @@ public:
 	bool write(void *buffer, int &where, int limit)
 	{
 		if (where + sizeof(bits) > limit)
-			lplog(LOG_FATAL_ERROR, L"Maximum copy limit of %d bytes reached (2)!", limit);
+			lplog(LOG_FATAL_ERROR, u"Maximum copy limit of %d bytes reached (2)!", limit);
 		memcpy(((char *)buffer) + where, bits, sizeof(bits));
 		where += sizeof(bits);
 		return true;

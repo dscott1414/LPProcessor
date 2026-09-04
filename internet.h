@@ -1,5 +1,5 @@
 /*
-	internet.h - WinINet wrapper for HTTP GET, on-disk web cache, and the Jericho HTML-to-text launcher
+	internet.h - libcurl wrapper for HTTP GET, on-disk web cache, and the Jericho HTML-to-text launcher
 
 	Overview:
 		cInternet is the only first-party HTTP client.  readPage() opens a process-wide
@@ -14,7 +14,7 @@
 		Also used to scrape Wikipedia tables and SPARQL/Virtuoso.
 
 	Key entry points:
-		- readPage() - GET a URL into a wstring (decoded via mTW).
+		- readPage() - GET a URL into a lpwstring (decoded via mTW).
 		- readBinaryPage() - GET a URL and write raw bytes to an fd.
 		- cacheWebPath() / getWebPath() - cache-aside read of a URL.
 		- LPInternetOpen() / closeConnection() - process-wide session handle.
@@ -35,36 +35,48 @@
 			on that path it has already closed the request handle, so the caller must not.
 */
 #pragma once
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
+#include <shared_mutex> // batch B3: totalInternetTimeWaitBandwidthControlSRWLock's type
+#include <string>
+// Batch B9: the WinINet client is gone, replaced by libcurl. The public surface
+// below (readPage / readBinaryPage / cacheWebPath / getWebPath / LPInternetOpen /
+// closeConnection / runJavaJerichoHTML) is unchanged, exactly as the port plan
+// requires, so none of the ~10 consumer files needed a signature change.
+//
+// What went away with WinINet, and why nothing replaces it:
+//   - InetOption / InternetStatusCallback: WinINet-specific option and status
+//     plumbing. libcurl's equivalents are set directly in LPInternetOpen.
+//   - InternetReadFile_Wait / InternetReadFile_Child / tIRFW: an entire worker
+//     thread plus handle-closing dance existed only to put a timeout on a read
+//     that WinINet could not time out itself. CURLOPT_TIMEOUT does that natively,
+//     so the thread (the sole CreateThread in the codebase) is deleted rather
+//     than ported -- a net simplification, and it removes the only place where
+//     two threads shared the log handles.
+//   - PrepAndLaunchRedirectedChild / ReadAndHandleOutput(HANDLE): CreateProcess
+//     with inherited pipe handles, now posix_spawn with a pipe and file actions.
 class cInternet
 {
-
-	typedef struct
-	{
-		HINTERNET RequestHandle;
-		char *buffer;
-		int bufsize;
-		DWORD *dwRead;
-	} tIRFW;
-
 public:
-	static int readPage(const wchar_t *str, wstring &buffer);
-	static bool InetOption(bool global, int option, const wchar_t * description, unsigned long value);
-	static void InternetStatusCallback(HINTERNET hInternet,DWORD_PTR dwContext,DWORD dwInternetStatus,LPVOID lpvStatusInformation,DWORD dwStatusInformationLength);
+	static int readPage(const lpchar_t *str, lpwstring &buffer);
 	static bool LPInternetOpen(int timer);
-	static int readPage(const wchar_t *str, wstring &buffer, wstring &headers);
-	static int readBinaryPage(wchar_t *str, int destfile, int &total);
+	static int readPage(const lpchar_t *str, lpwstring &buffer, lpwstring &headers);
+	static int readBinaryPage(lpchar_t *str, int destfile, int &total);
 	static bool closeConnection(void);
-	static int cacheWebPath(wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool &networkAccessed, wstring &diskPath);
-	static DWORD WINAPI InternetReadFile_Child(void *vThreadParm);
-	static bool InternetReadFile_Wait(HINTERNET RequestHandle, char *buffer, int bufsize, DWORD *dwRead, bool &timedOut);
-	static HINTERNET hINet;
+	static int cacheWebPath(lpwstring webAddress, lpwstring &buffer, lpwstring epath, lpwstring cacheTypePath, bool forceWebReread, bool &networkAccessed, lpwstring &diskPath);
+	// The process-wide libcurl easy handle (void* so this header does not have to
+	// pull in curl/curl.h; Internet.cpp casts it back to CURL*). Replaces hINet.
+	static void *curlHandle;
 	static int bandwidthControl;
-	static wstring redirectUrl;
-	static SRWLOCK totalInternetTimeWaitBandwidthControlSRWLock;
-	static int getWebPath(int where, wstring webAddress, wstring &buffer, wstring epath, wstring cacheTypePath, wstring &filePathOut, wstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread=false);
-	static void ReadAndHandleOutput(HANDLE hPipeRead, string &outbuf);
-	static HANDLE PrepAndLaunchRedirectedChild(wstring commandLine,HANDLE hChildStdOut, HANDLE hChildStdIn, HANDLE hChildStdErr);
-	static int runJavaJerichoHTML(wstring webAddress, wstring outputPath, string &outbuf);
+	static lpwstring redirectUrl;
+	static std::shared_mutex totalInternetTimeWaitBandwidthControlSRWLock; // batch B3: was a Win32 SRWLOCK, see general.h
+	static int getWebPath(int where, lpwstring webAddress, lpwstring &buffer, lpwstring epath, lpwstring cacheTypePath, lpwstring &filePathOut, lpwstring &headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread=false);
+	// Reads everything from a pipe read-end into outbuf. Batch B9: an int fd now.
+	static void ReadAndHandleOutput(int pipeReadFd, std::string &outbuf);
+	static int runJavaJerichoHTML(lpwstring webAddress, lpwstring outputPath, std::string &outbuf);
 
 	enum {
 		GETWEBPATH_CANNOT_OPEN_PATH = -7, INTERNET_OPEN_FAILED = -13, INTERNET_OPEN_URL_FAILED = -14,

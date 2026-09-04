@@ -50,19 +50,21 @@
 		- LFS is the profiling macro from profile.h and expands to nothing unless
 			PROFILE is defined, which is why declarations appear to hang off it.
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <windows.h>
-#include <winsock.h>
-#include "Winhttp.h"
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
@@ -70,6 +72,7 @@
 #include "sys/stat.h"
 #include "profile.h"
 #include "mysqldb.h"
+#include "utfConvert.h"
 
 static void* sqlQueryBuffer = NULL; // protect by mySQLQueryBufferSRWLock
 static unsigned int sqlQueryBufSize = 0; // protect by mySQLQueryBufferSRWLock
@@ -85,26 +88,29 @@ static unsigned int sqlQueryBufSize = 0; // protect by mySQLQueryBufferSRWLock
 // Returns true if the server accepted the statement.
 // Side effects: mutates the shared query buffer; adds the elapsed time to
 // cProfile::mySQLTotalTime under mySQLTotalTimeSRWLock.
-bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
+bool myquery(MYSQL* mysql, const lpchar_t* q, bool allowFailure)
 {
 	LFS
 		int seconds = clock(), queryLength;
-	AcquireSRWLockExclusive(&mySQLQueryBufferSRWLock);
-	// this is the 4-argument overload below, not the Win32 API of the same name; it may
-	// grow/replace sqlQueryBuffer.  The lock is held across mysql_real_query() itself (not
-	// released right after the conversion) because buffer points into that same
-	// process-wide sqlQueryBuffer: releasing early would let a concurrent caller
-	// grow/realloc it out from under this pointer while mysql_real_query() is still
-	// reading it.
-	void* buffer = WideCharToMultiByte(q, queryLength, sqlQueryBuffer, sqlQueryBufSize);
-	int queryFailed = mysql_real_query(mysql, (char*)buffer, queryLength) != 0;
-	ReleaseSRWLockExclusive(&mySQLQueryBufferSRWLock);
+	int queryFailed;
+	{
+		// this is the 4-argument overload below, not the Win32 API of the same name; it may
+		// grow/replace sqlQueryBuffer.  The lock is held across mysql_real_query() itself (not
+		// released right after the conversion) because buffer points into that same
+		// process-wide sqlQueryBuffer: releasing early would let a concurrent caller
+		// grow/realloc it out from under this pointer while mysql_real_query() is still
+		// reading it.  Batch B3: the explicit scope is what holds the lock for exactly
+		// that span now that it is a std::shared_mutex taken by a scoped unique_lock.
+		std::unique_lock<std::shared_mutex> queryBufferLock(mySQLQueryBufferSRWLock);
+		void* buffer = WideCharToMultiByte(q, queryLength, sqlQueryBuffer, sqlQueryBufSize);
+		queryFailed = mysql_real_query(mysql, (char*)buffer, queryLength) != 0;
+	}
 	if (queryFailed)
 	{
-		//if (wcslen(q)>QUERY_BUFFER_LEN) q[QUERY_BUFFER_LEN]=0;
-		lplog(LOG_ERROR, L"mysql_real_query failed - %S (len=%d): ", mysql_error(mysql), queryLength);
-		wstring q2 = q;
-		q2 += L"\n";
+		//if (lp_strlen(q)>QUERY_BUFFER_LEN) q[QUERY_BUFFER_LEN]=0;
+		lplog(LOG_ERROR, u"mysql_real_query failed - %S (len=%d): ", mysql_error(mysql), queryLength);
+		lpwstring q2 = q;
+		q2 += u"\n";
 		if (!allowFailure)
 			logstring(LOG_FATAL_ERROR, q2.c_str());
 		else
@@ -113,17 +119,18 @@ bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
 		//logstring(-1,NULL);
 		//exit(0);
 	}
-	AcquireSRWLockExclusive(&mySQLTotalTimeSRWLock);
-	cProfile::mySQLTotalTime += clock() - seconds;
-	ReleaseSRWLockExclusive(&mySQLTotalTimeSRWLock);
+	{
+		std::unique_lock<std::shared_mutex> totalTimeLock(mySQLTotalTimeSRWLock);
+		cProfile::mySQLTotalTime += clock() - seconds;
+	}
 	if (logDatabaseDetails)
 	{
-		//lplog(LOG_INFO,L"SQL: %08d:%S",clock()-seconds,buffer);
+		//lplog(LOG_INFO,u"SQL: %08d:%S",clock()-seconds,buffer);
 		//lplog(LOG_INFO,NULL);
 	}
 	//if ((seconds=clock()-seconds) && seconds/CLOCKS_PER_SEC && !logDatabaseDetails)
-	//	lplog(L"%d seconds: query %s",seconds/CLOCKS_PER_SEC,q);
-	//lplog(LOG_INFO,L"SQL: %08d:%S",clock()-seconds,buffer);
+	//	lplog(u"%d seconds: query %s",seconds/CLOCKS_PER_SEC,q);
+	//lplog(LOG_INFO,u"SQL: %08d:%S",clock()-seconds,buffer);
 	return true;
 }
 
@@ -134,13 +141,13 @@ bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure)
 // Returns false if the statement failed OR if it produced no result set at all
 // (which for a statement that should return rows means the query was not a SELECT,
 // or the server ran out of memory); an empty-but-valid result set still returns true.
-bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure)
+bool myquery(MYSQL* mysql, const lpchar_t* q, MYSQL_RES*& result, bool allowFailure)
 {
 	LFS
 		if (!myquery(mysql, q, allowFailure))
 			return false;
 	if (!(result = mysql_store_result(mysql)))
-		lplog(LOG_INFO, L"%S: Failed to retrieve any results for %s", mysql_error(mysql), q);
+		lplog(LOG_INFO, u"%S: Failed to retrieve any results for %s", mysql_error(mysql), q);
 	return result != NULL;
 }
 
@@ -153,49 +160,41 @@ bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailu
 // -1 (NUL-terminated) source INCLUDES the terminating NUL byte.
 // Returns buffer, or NULL on a conversion/allocation failure - though the
 // LOG_FATAL_ERROR logging on those paths exits the process first.
-void* WideCharToMultiByte(const wchar_t* q, int& queryLength, void*& buffer, unsigned int& bufSize)
+// Batch B7: rewritten onto utfConvert's UTF-8 encoder. The Win32 API this used to
+// call is gone, and with it the whole two-call sizing protocol (probe with size 0
+// to learn the byte count, allocate, convert for real) plus the
+// ERROR_INSUFFICIENT_BUFFER retry path that existed only to service it -- three
+// nearly identical conversion calls collapse into one.
+//
+// The caller's growable buffer contract is unchanged, because callers depend on it:
+// buffer/bufSize are in/out, the buffer is tmalloc'd on first use and trealloc'd
+// when it must grow, and it is never freed. queryLength is out, and still INCLUDES
+// the terminating NUL byte -- the Win32 call with cchWideChar == -1 counted the NUL,
+// and mysql_real_query's length argument is derived from it, so getting this wrong
+// would silently truncate or over-read every query.
+void* WideCharToMultiByte(const lpchar_t* q, int& queryLength, void*& buffer, unsigned int& bufSize)
 {
 	LFS
-		queryLength = WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL);
-	// first ever call: the probe above passed bufSize 0, so Win32 returned the required
-	// byte count without writing anything - allocate that (doubled, minimum 10000) and
-	// convert for real.
-	if (bufSize == 0)
+		const std::string& utf8 = lp_utf16_to_utf8(lpwstring(q ? q : u""));
+	queryLength = (int)utf8.size() + 1; // + the NUL, matching the old contract
+	if (bufSize < (unsigned int)queryLength)
 	{
-		bufSize = max(queryLength * 2, 10000);
-		buffer = tmalloc(bufSize);
-		if (!WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL))
-		{
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", q);
-			return NULL;
-		}
-	}
-	if (!queryLength)
-	{
-		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-		{
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", q);
-			return NULL;
-		}
-		queryLength = WideCharToMultiByte(CP_UTF8, 0, q, -1, NULL, 0, NULL, NULL);
 		unsigned int previousBufSize = bufSize;
-		bufSize = queryLength * 2;
-		if (!(buffer = trealloc(21, buffer, previousBufSize, bufSize)))
+		unsigned int desired = max((unsigned int)queryLength * 2, 10000u);
+		buffer = (previousBufSize == 0) ? tmalloc(desired) : trealloc(21, buffer, previousBufSize, desired);
+		if (!buffer)
 		{
-			lplog(LOG_FATAL_ERROR, L"Out of memory requesting %d bytes from sql query %s!", bufSize, q);
+			lplog(LOG_FATAL_ERROR, u"Out of memory requesting %d bytes from sql query %s!", desired, q);
 			return NULL;
 		}
-		if (!WideCharToMultiByte(CP_UTF8, 0, q, -1, (LPSTR)buffer, bufSize, NULL, NULL))
-		{
-			lplog(LOG_FATAL_ERROR, L"Error in translating sql request: %s", q);
-			return NULL;
-		}
+		bufSize = desired;
 	}
+	memcpy(buffer, utf8.c_str(), (size_t)queryLength);
 	return buffer;
 }
 
 /*
-Tries to obtain a lock with a name given by the wstring str, using a timeout of timeout seconds.
+Tries to obtain a lock with a name given by the lpwstring str, using a timeout of timeout seconds.
 Returns 1 if the lock was obtained successfully,
 				0 if the attempt timed out (for example, because another client has previously locked the name), or
 				NULL if an error occurred (such as running out of memory or the thread was killed with mysqladmin kill).
@@ -205,34 +204,34 @@ bool cWord::acquireLock(MYSQL& mysql, bool persistent)
 {
 	LFS
 		int startTime = clock();
-	wprintf(L"Acquiring lock on database...\r");
+	lp_wprintf(u"Acquiring lock on database...\r");
 	while (true)
 	{
 		MYSQL_RES* result = NULL;
-		if (!myquery(&mysql, L"SELECT GET_LOCK('lp_lock',20)", result)) return false;
+		if (!myquery(&mysql, u"SELECT GET_LOCK('lp_lock',20)", result)) return false;
 		MYSQL_ROW sqlrow = mysql_fetch_row(result);
 		if (sqlrow == NULL)
-			lplog(LOG_FATAL_ERROR, L"Error acquiring lock.");
+			lplog(LOG_FATAL_ERROR, u"Error acquiring lock.");
 		int lockAcquired = atoi(sqlrow[0]);
 		mysql_free_result(result);
 		if (lockAcquired == 1)
 		{
 			if ((clock() - startTime) > CLOCKS_PER_SEC && logDatabaseDetails)
-				lplog(L"Acquiring global database lock took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
+				lplog(u"Acquiring global database lock took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
 			return true;
 		}
 		else if (!persistent)
 		{
-			//lplog(L"Skipping global database lock (%d seconds).",(clock()-startTime)/CLOCKS_PER_SEC);
+			//lplog(u"Skipping global database lock (%d seconds).",(clock()-startTime)/CLOCKS_PER_SEC);
 			return false;
 		}
-		wprintf(L"Acquiring lock on database (%05ld seconds)...\r", (clock() - startTime) / CLOCKS_PER_SEC);
+		lp_wprintf(u"Acquiring lock on database (%05ld seconds)...\r", (clock() - startTime) / CLOCKS_PER_SEC);
 	}
 	return true;
 }
 
 /*
-Releases the lock named by the wstring str that was obtained with GET_LOCK().
+Releases the lock named by the lpwstring str that was obtained with GET_LOCK().
 Returns 1 if the lock was released, 0 if the lock was not established by this thread (in which case the lock is not released), and NULL if the named lock did not exist.
 The lock does not exist if it was never obtained by a call to GET_LOCK() or if it has previously been released.
 */
@@ -241,60 +240,60 @@ void cWord::releaseLock(MYSQL& mysql)
 {
 	LFS
 		MYSQL_RES* result = NULL;
-	if (!myquery(&mysql, L"SELECT RELEASE_LOCK('lp_lock')", result)) return;
+	if (!myquery(&mysql, u"SELECT RELEASE_LOCK('lp_lock')", result)) return;
 	MYSQL_ROW sqlrow = mysql_fetch_row(result);
 	if (sqlrow == NULL)
-		lplog(LOG_FATAL_ERROR, L"Lock does not exist.");
+		lplog(LOG_FATAL_ERROR, u"Lock does not exist.");
 	if (sqlrow[0] == NULL || atoi(sqlrow[0]) == 0)
-		lplog(LOG_ERROR, L"Lock was never acquired.");
+		lplog(LOG_ERROR, u"Lock was never acquired.");
 	mysql_free_result(result);
 }
 #endif
 
-bool checkFull(MYSQL* mysql, wchar_t* qt, size_t& len, bool flush, wchar_t* qualifier)
+bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qualifier)
 {
 	LFS
 		bool ret = true;
-	if (len > QUERY_BUFFER_LEN_UNDERFLOW || (flush && qt[len - 1] == L','))
+	if (len > QUERY_BUFFER_LEN_UNDERFLOW || (flush && qt[len - 1] == u','))
 	{
-		if (qt[len - 2] == L')')
+		if (qt[len - 2] == u')')
 			qt[--len] = 0; // must be INSERT strip off extra ,
 		else
-			qt[len - 1] = L')'; // must be IN - put in ending )
+			qt[len - 1] = u')'; // must be IN - put in ending )
 		if (qualifier != NULL)
 		{
-			wcscpy(qt + len, qualifier);
-			len += wcslen(qualifier);
+			lp_strcpy(qt + len, qualifier);
+			len += lp_strlen(qualifier);
 		}
 		qt[len] = 0;
 		if (!myquery(mysql, qt, false))
 		{
-			lplog(L"checkFull %S (len=%d): ", mysql_error(mysql), len);
-			wcscat(qt, L"\n");
-			myquery(mysql, L"UNLOCK TABLES");
+			lplog(u"checkFull %S (len=%d): ", mysql_error(mysql), len);
+			lp_strcpy((qt) + lp_strlen(qt), u"\n");
+			myquery(mysql, u"UNLOCK TABLES");
 			logstring(LOG_INFO | LOG_FATAL_ERROR, qt);
 		}
-		wchar_t* ch = wcsstr(qt, L"VALUES");
+		lpchar_t* ch = lp_strstr(qt, u"VALUES");
 		if (ch)
 		{
 			ch[7] = 0; // must be INSERT
 			len = ch + 7 - qt;
 		}
-		else if (ch = wcschr(qt, '('))
+		else if (ch = lp_strchr(qt, '('))
 		{
 			ch[1] = 0; // must be IN
 			len = ch + 1 - qt;
 		}
 		else
 		{
-			myquery(mysql, L"UNLOCK TABLES");
-			lplog(LOG_FATAL_ERROR, L"Incorrect command %s given to checkFull", qt);
+			myquery(mysql, u"UNLOCK TABLES");
+			lplog(LOG_FATAL_ERROR, u"Incorrect command %s given to checkFull", qt);
 		}
 	}
 	return ret;
 }
 
-unsigned long encodeEscape(MYSQL& mysql, wstring& to, wstring from)
+unsigned long encodeEscape(MYSQL& mysql, lpwstring& to, lpwstring from)
 {
 	LFS
 		string sFrom;
@@ -308,22 +307,22 @@ unsigned long encodeEscape(MYSQL& mysql, wstring& to, wstring from)
 
 // Escape everything MySQL treats specially inside a quoted literal, so the result is
 // safe in both '...' and "..." contexts.  NUL is escaped as \0 rather than dropped.
-void escapeStr(wstring& str)
+void escapeStr(lpwstring& str)
 {
 	LFS
-		wstring ess;
+		lpwstring ess;
 	ess.reserve(str.length());
 	for (unsigned int I = 0; I < str.length(); I++)
 	{
 		switch (str[I])
 		{
-		case L'\'': ess += L"\\'"; break;
-		case L'"': ess += L"\\\""; break;
-		case L'\\': ess += L"\\\\"; break;
-		case L'\n': ess += L"\\n"; break;
-		case L'\r': ess += L"\\r"; break;
-		case L'\032': ess += L"\\Z"; break;
-		case L'\0': ess += L"\\0"; break;
+		case u'\'': ess += u"\\'"; break;
+		case u'"': ess += u"\\\""; break;
+		case u'\\': ess += u"\\\\"; break;
+		case u'\n': ess += u"\\n"; break;
+		case u'\r': ess += u"\\r"; break;
+		case u'\032': ess += u"\\Z"; break;
+		case u'\0': ess += u"\\0"; break;
 		default: ess += str[I]; break;
 		}
 	}
@@ -331,9 +330,9 @@ void escapeStr(wstring& str)
 }
 
 // escapeStr for a value used inline: returns the escaped copy and leaves the input alone.
-wstring escaped(const wstring& str)
+lpwstring escaped(const lpwstring& str)
 {
-	wstring copy(str);
+	lpwstring copy(str);
 	escapeStr(copy);
 	return copy;
 }
@@ -356,7 +355,7 @@ void cWord::generateFormStatistics(void)
 		if (iWord->second.forms()[0] == UNDEFINED_FORM_NUM)
 		{
 			formsCount[UNDEFINED_FORM_NUM]++;
-			lplog(L"%s", iWord->first.c_str());
+			lplog(u"%s", iWord->first.c_str());
 		}
 		else
 			for (unsigned int I = 0; I < iWord->second.formsSize(); I++)
@@ -366,16 +365,16 @@ void cWord::generateFormStatistics(void)
 			}
 	}
 	int numFormAlone = 0, numFormSingle = 0;
-	lplog(L"%30s: %6s %s", "FORM NAME", "COUNT", "ALWAYS ALONE");
+	lplog(u"%30s: %6s %s", "FORM NAME", "COUNT", "ALWAYS ALONE");
 	for (f = 0; f < (signed)Forms.size(); f++)
 	{
-		lplog(L"%30s: %6d %s", Forms[f]->name.c_str(), formsCount[f], (formAlone[f]) ? L"true" : L"false");
+		lplog(u"%30s: %6d %s", Forms[f]->name.c_str(), formsCount[f], (formAlone[f]) ? u"true" : u"false");
 		if (formAlone[f] == true) numFormAlone++;
 		if (formsCount[f] == 1) numFormSingle++;
 	}
-	lplog(L"# forms = %d.", Forms.size());
-	lplog(L"Forms alone=%d.\nForms having one word=%d.\n# unknown Personal Nouns=%d.\n", numFormAlone, numFormSingle, unknownAlwaysCapitalized);
-	lplog(L"# total words=%d.", WMM.size());
+	lplog(u"# forms = %d.", Forms.size());
+	lplog(u"Forms alone=%d.\nForms having one word=%d.\n# unknown Personal Nouns=%d.\n", numFormAlone, numFormSingle, unknownAlwaysCapitalized);
+	lplog(u"# total words=%d.", WMM.size());
 	tfree(Forms.size() * sizeof(int), formsCount);
 	tfree(Forms.size() * sizeof(bool), formAlone);
 }

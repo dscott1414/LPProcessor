@@ -19,18 +19,21 @@
 		- Both bodies are one-line forwards.  The MusicBrainz implementations
 			live in getMusicBrainz.cpp (out of this assignment).
 */
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <mbstring.h>
 #include <ctype.h>
 #include <stdarg.h>
-#include <winsock.h>
-#include "Winhttp.h"
-#include "io.h"
 #include "word.h"
 #include "mysql.h"
 #include "mysqld_error.h"
-#include "odbcinst.h"
 #include "time.h"
 #include "ontology.h"
 #include "source.h"
@@ -49,7 +52,7 @@ using namespace std;
 
 // True if parentSRG describes an ownership relation that MusicBrainz can
 // answer (artist-recording, etc.).  derivation is an in/out trace string.
-bool cQuestionAnswering::matchOwnershipDbQuery(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG)
+bool cQuestionAnswering::matchOwnershipDbQuery(cSource* questionSource, lpchar_t* derivation, cSyntacticRelationGroup* parentSRG)
 {
 	LFS
 		return matchOwnershipDbMusicBrainz(questionSource, derivation, parentSRG);
@@ -57,7 +60,7 @@ bool cQuestionAnswering::matchOwnershipDbQuery(cSource* questionSource, wchar_t*
 
 // Search the (MusicBrainz) DB for answers to parentSRG and append them to
 // answerSRGs.  Returns true if at least one answer was added.
-bool cQuestionAnswering::dbSearchForQuery(cSource* questionSource, wchar_t* derivation, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs)
+bool cQuestionAnswering::dbSearchForQuery(cSource* questionSource, lpchar_t* derivation, cSyntacticRelationGroup* parentSRG, vector < cAS >& answerSRGs)
 {
 	LFS
 		return dbSearchMusicBrainz(questionSource, derivation, parentSRG, answerSRGs);

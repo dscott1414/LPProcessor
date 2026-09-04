@@ -29,6 +29,15 @@
 		- copy() serializers omit resourceType / superClassResourceTypes / key / derivation.
 		- Ontology type constants match README Structure members item 7.
 */
+// Batch B2: this header uses lpchar_t/lpwstring/lp_* directly but (like most headers
+// in this codebase, which historically relied on wchar_t/wstring needing zero project-
+// specific include) does not include its own dependencies -- self-sufficient fix, same
+// reasoning as logging.h (see its own comment) rather than trusting caller include order.
+#include "lpchar.h"
+#pragma once
+// Batch B12: include guard added -- source.h now includes this header for
+// cTreeCat rather than depending on every .cpp to include ontology.h first,
+// and several .cpp files include it directly as well.
 #define maxCategoryLength 1024
 #define dbPedia_Ontology_Type 1
 #define YAGO_Ontology_Type 2
@@ -38,19 +47,19 @@
 class cOntologyEntry
 {
 public:
-	wstring compactLabel;
-	wstring infoPage;
-	wstring abstractDescription;
-	wstring commentDescription;
-	wstring birthDate;
-	wstring birthPlace;
-	wstring occupation;
+	lpwstring compactLabel;
+	lpwstring infoPage;
+	lpwstring abstractDescription;
+	lpwstring commentDescription;
+	lpwstring birthDate;
+	lpwstring birthPlace;
+	lpwstring occupation;
 	int numLine;
 	int ontologyHierarchicalRank;
 	int ontologyType;
 	int resourceType;
 	int descriptionFilled;
-	unordered_set <wstring> superClasses;
+	unordered_set <lpwstring> superClasses;
 	vector <int> superClassResourceTypes;
 	// Rank 100 means "not yet placed in the hierarchy" (fillRanks / findCategoryRank).
 	// descriptionFilled is the SPARQL row count from getDescription, or -1 if never fetched.
@@ -61,27 +70,27 @@ public:
 		descriptionFilled = -1; // number of rows found in ontology
 	}
 	// Format this entry into tmpstr (reused scratch).  origin is the map key / caller label.
-	wstring toString(wstring& tmpstr, wstring origin)
+	lpwstring toString(lpwstring& tmpstr, lpwstring origin)
 	{
-		wstring tmpstr2, tmpstr3, tmpstr4, tmpstr5;
-		tmpstr = origin + L":" + ontologyTypeString(ontologyType, resourceType, tmpstr5) + L":" + compactLabel;
+		lpwstring tmpstr2, tmpstr3, tmpstr4, tmpstr5;
+		tmpstr = origin + u":" + ontologyTypeString(ontologyType, resourceType, tmpstr5) + u":" + compactLabel;
 		if (infoPage.length() > 0)
-			tmpstr += L"\ninfoPage:" + infoPage;
+			tmpstr += u"\ninfoPage:" + infoPage;
 		if (birthDate.length() > 0)
-			tmpstr += L"\nbirthDate:" + birthDate;
+			tmpstr += u"\nbirthDate:" + birthDate;
 		if (birthPlace.length() > 0)
-			tmpstr += L"\nbirthPlace:" + birthPlace;
+			tmpstr += u"\nbirthPlace:" + birthPlace;
 		if (occupation.length() > 0)
-			tmpstr += L"\noccupation:" + occupation;
+			tmpstr += u"\noccupation:" + occupation;
 		if (abstractDescription.length() > 0)
-			tmpstr += L"\nabstract:" + abstractDescription;
+			tmpstr += u"\nabstract:" + abstractDescription;
 		if (commentDescription.length() > 0)
-			tmpstr += L"\ncomment:" + commentDescription;
-		setString(superClasses, tmpstr2, L" ");
+			tmpstr += u"\ncomment:" + commentDescription;
+		setString(superClasses, tmpstr2, u" ");
 		if (tmpstr2.length() > 0)
-			tmpstr += L"[" + tmpstr2 + L"]";
+			tmpstr += u"[" + tmpstr2 + u"]";
 		if (ontologyHierarchicalRank > 0)
-			tmpstr += L":ontologyHierarchicalRank " + itos(ontologyHierarchicalRank, tmpstr3);
+			tmpstr += u":ontologyHierarchicalRank " + itos(ontologyHierarchicalRank, tmpstr3);
 		return tmpstr;
 	}
 	// Field-wise equality, including resourceType and superClassResourceTypes.
@@ -111,39 +120,39 @@ public:
 		return !(*this == o);
 	}
 	// Log toString(origin) to whichLog via the process-wide lplog.
-	void lplog(int whichLog, wstring origin)
+	void lplog(int whichLog, lpwstring origin)
 	{
-		wstring tmpstr;
-		::lplog(whichLog, L"%s", toString(tmpstr, origin).c_str());
+		lpwstring tmpstr;
+		::lplog(whichLog, u"%s", toString(tmpstr, origin).c_str());
 	}
 };
 
 // Binary-cache insert: deserialize key+entry from buf into hm and set hint to the inserted iterator.
-bool copy(unordered_map <wstring, cOntologyEntry>::iterator& hint, void* buf, int& where, int limit, unordered_map <wstring, cOntologyEntry>& hm);
+bool copy(unordered_map <lpwstring, cOntologyEntry>::iterator& hint, void* buf, int& where, int limit, unordered_map <lpwstring, cOntologyEntry>& hm);
 
 class cTreeCat
 {
 public:
-	unordered_map <wstring, cOntologyEntry>::iterator cli;
-	wstring typeObject;
+	unordered_map <lpwstring, cOntologyEntry>::iterator cli;
+	lpwstring typeObject;
 	int confidence;
-	wstring abstract;
-	wstring birthDate;
-	wstring birthPlace;
-	wstring occupation;
-	wstring qtype;
-	wstring key;
-	wstring top; // temporary used for back mapping of top class types
-	wstring parentObject;
-	wstring derivation; // which classes lead to most superclasses? (attempt to go up the heirarchy of types in the ontology may result in a multiplicity of types which is unhelpful.  This helps track which types lend most to the multiplicity)
-	vector <wstring> wikipediaLinks;
-	vector <wstring> professionLinks;
+	lpwstring abstract;
+	lpwstring birthDate;
+	lpwstring birthPlace;
+	lpwstring occupation;
+	lpwstring qtype;
+	lpwstring key;
+	lpwstring top; // temporary used for back mapping of top class types
+	lpwstring parentObject;
+	lpwstring derivation; // which classes lead to most superclasses? (attempt to go up the heirarchy of types in the ontology may result in a multiplicity of types which is unhelpful.  This helps track which types lend most to the multiplicity)
+	vector <lpwstring> wikipediaLinks;
+	vector <lpwstring> professionLinks;
 	bool preferred;
 	bool exactMatch;
 	bool preferredUnknownClass;
 
 	// Freebase hit: k/description are narrow strings converted with mTW.  preferred stays false.
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli, wstring typeObject, wstring& parentObject, wstring qtype, int confidence, string& k, string& description, vector <wstring>& wikipediaLinks, vector <wstring>& professionLinks, bool exactMatch)
+	cTreeCat(unordered_map <lpwstring, cOntologyEntry>::iterator cli, lpwstring typeObject, lpwstring& parentObject, lpwstring qtype, int confidence, string& k, string& description, vector <lpwstring>& wikipediaLinks, vector <lpwstring>& professionLinks, bool exactMatch)
 	{
 		this->cli = cli;
 		this->typeObject = typeObject;
@@ -159,7 +168,7 @@ public:
 		preferredUnknownClass = false;
 	}
 	// Hierarchy-walk hit (includeAllSuperClasses).  derivation records the path of class keys.
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli, wstring typeObject, wstring& parentObject, wstring qtype, int confidence, wstring derivation)
+	cTreeCat(unordered_map <lpwstring, cOntologyEntry>::iterator cli, lpwstring typeObject, lpwstring& parentObject, lpwstring qtype, int confidence, lpwstring derivation)
 	{
 		this->cli = cli;
 		this->typeObject = typeObject;
@@ -172,7 +181,7 @@ public:
 		preferredUnknownClass = false;
 	}
 	// Separator / placeholder: only cli is meaningful (often the SEPARATOR category).
-	cTreeCat(unordered_map <wstring, cOntologyEntry>::iterator cli)
+	cTreeCat(unordered_map <lpwstring, cOntologyEntry>::iterator cli)
 	{
 		this->cli = cli;
 		preferred = false;
@@ -227,10 +236,10 @@ public:
 	{
 		return !(*this == o);
 	}
-	wstring toString(wstring& tmpstr);
-	void lplogTC(int whichLog, wstring object);
+	lpwstring toString(lpwstring& tmpstr);
+	void lplogTC(int whichLog, lpwstring object);
 	// Copy DBpedia description fields from getDescription() onto this hit.
-	void assignDetails(wstring& a, wstring& c, wstring& ip, wstring& bd, wstring& bp, wstring& occ)
+	void assignDetails(lpwstring& a, lpwstring& c, lpwstring& ip, lpwstring& bd, lpwstring& bp, lpwstring& occ)
 	{
 		this->abstract = a;
 		this->comment = c;
@@ -260,7 +269,7 @@ public:
 	}
 
 	// Serialize the category key plus the entry that dbsi points at.
-	bool copy(void* buf, unordered_map <wstring, cOntologyEntry>::iterator dbsi, int& where, int limit)
+	bool copy(void* buf, unordered_map <lpwstring, cOntologyEntry>::iterator dbsi, int& where, int limit)
 	{
 		if (!::copy(buf, dbsi->first, where, limit)) return false;
 		if (!copy(buf, dbsi->second, where, limit)) return false;
@@ -269,7 +278,7 @@ public:
 
 	// Deserialize this cTreeCat from an .rdfTypes cache file, resolving cli against hm.
 	// Flags packed as bit0 preferred, bit1 exactMatch, bit2 preferredUnknownClass.
-	bool copy(unordered_map <wstring, cOntologyEntry>& hm, void* buf, int& where, int limit)
+	bool copy(unordered_map <lpwstring, cOntologyEntry>& hm, void* buf, int& where, int limit)
 	{
 		if (!::copy(cli, buf, where, limit, hm)) return false;
 		if (!::copy(typeObject, buf, where, limit)) return false;
@@ -315,25 +324,25 @@ public:
 
 	// Log one ISTYPE[LI] line.  If printOnlyPreferred, skip unless preferred or exactMatch.
 	// rdfInfoPrinted suppresses repeat abstract dumps for the same description text.
-	void logIdentity(int logType, wstring object, bool printOnlyPreferred, wstring& rdfInfoPrinted)
+	void logIdentity(int logType, lpwstring object, bool printOnlyPreferred, lpwstring& rdfInfoPrinted)
 	{
 		if (printOnlyPreferred && !preferred && !exactMatch) return;
-		wstring tmpstr, tmpstr2, tmpstr3;
-		::lplog(logType, L"%s%s%s%s[%d]ISTYPE[LI] %s:%s(%s):%s:rank %d (%s,%s)",
-			object.c_str(), (preferred) ? L":PREFERRED " : L"", (exactMatch) ? L"EM " : L"", (preferredUnknownClass) ? L"PU " : L"", confidence,
+		lpwstring tmpstr, tmpstr2, tmpstr3;
+		::lplog(logType, u"%s%s%s%s[%d]ISTYPE[LI] %s:%s(%s):%s:rank %d (%s,%s)",
+			object.c_str(), (preferred) ? u":PREFERRED " : u"", (exactMatch) ? u"EM " : u"", (preferredUnknownClass) ? u"PU " : u"", confidence,
 			cli->first.c_str(), ontologyTypeString(cli->second.ontologyType, cli->second.resourceType, tmpstr3), qtype.c_str(), cli->second.compactLabel.c_str(), cli->second.ontologyHierarchicalRank,
-			setString(cli->second.superClasses, tmpstr, L" ").c_str(), parentObject.c_str());
+			setString(cli->second.superClasses, tmpstr, u" ").c_str(), parentObject.c_str());
 		if (rdfInfoPrinted != abstract)
 		{
-			::lplog(logType, L"    %s:%s:%s:%s",
+			::lplog(logType, u"    %s:%s:%s:%s",
 				parentObject.c_str(), typeObject.c_str(), infoPage.c_str(), abstract.c_str());
 			rdfInfoPrinted = abstract;
 		}
 	}
 
 private:
-	wstring infoPage;
-	wstring comment;
+	lpwstring infoPage;
+	lpwstring comment;
 };
 
 // Static facade for the blended ontology.  All members are process-lifetime.
@@ -342,25 +351,25 @@ class cOntology
 {
 public:
 	static bool cacheRdfTypes;  // determines whether rdfTypes are cached in memory.  fileCaching is whether they are cached on disk.
-	static unordered_map <wstring, cOntologyEntry> dbPediaOntologyCategoryList;
+	static unordered_map <lpwstring, cOntologyEntry> dbPediaOntologyCategoryList;
 	static bool maxFieldLengths();
 	static bool writeOntologyList();
 	static bool readOntologyList();
-	static bool setPreferred(unordered_map <wstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes);
-	static void rdfIdentify(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
-	static void includeSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes);
-	static void compressPath(wchar_t *path);
+	static bool setPreferred(unordered_map <lpwstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes);
+	static void rdfIdentify(lpwstring object, vector <cTreeCat *> &rdfTypes, lpwstring fromWhere, bool fileCaching=true);
+	static void includeSuperClasses(unordered_map <lpwstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes);
+	static void compressPath(lpchar_t *path);
 	static void compareRDFTypes();
-	static bool inNoERDFTypesDBTable(wstring newPath);
-	static bool insertNoERDFTypesDBTable(wstring newPath);
-	static int printRDFTypes(const wchar_t * kind, vector <cTreeCat *> &rdfTypes);
-	static int printExtendedRDFTypes(wchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <wstring, int > &topHierarchyClassIndexes);
+	static bool inNoERDFTypesDBTable(lpwstring newPath);
+	static bool insertNoERDFTypesDBTable(lpwstring newPath);
+	static int printRDFTypes(const lpchar_t * kind, vector <cTreeCat *> &rdfTypes);
+	static int printExtendedRDFTypes(lpchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <lpwstring, int > &topHierarchyClassIndexes);
 	static void readOpenLibraryInternetArchiveWorksDump();
 	static int fillOntologyList(bool reInitialize);
 
 private:
-	static unordered_map<wstring, vector <cTreeCat *> > rdfTypeMap; 
-	static unordered_map<wstring, int > rdfTypeNumMap; 
+	static unordered_map<lpwstring, vector <cTreeCat *> > rdfTypeMap; 
+	static unordered_map<lpwstring, int > rdfTypeNumMap; 
 	static bool superClassesAllPopulated;
 
 	static MYSQL mysql;
@@ -368,49 +377,49 @@ private:
 	static set<string> rejectCategories; // only written during initialize
 	static bool forceWebReread;
 	// available for future use
-	static int lookupInFreebaseSuggest(wstring object,vector <cTreeCat *> &rdfTypes);
-	static int getAcronymRDFTypes(wstring &object,vector <cTreeCat *> &rdfTypes);
+	static int lookupInFreebaseSuggest(lpwstring object,vector <cTreeCat *> &rdfTypes);
+	static int getAcronymRDFTypes(lpwstring &object,vector <cTreeCat *> &rdfTypes);
 	// Freebase
-	static wstring getFBDescription(wstring id,wstring name);
-	static int lookupInFreebase(wstring object,vector <cTreeCat *> &rdfTypes);
+	static lpwstring getFBDescription(lpwstring id,lpwstring name);
+	static int lookupInFreebase(lpwstring object,vector <cTreeCat *> &rdfTypes);
 
-	static int getAcronyms(wstring &object,vector <wstring> &acronyms);
-	static unordered_map <wstring, cOntologyEntry>::iterator findAnyYAGOSuperClass(wstring cl);
-	static unordered_map <wstring, cOntologyEntry>::iterator findCategory(wstring &icat);
-	static int findCategoryRank(wstring &qtype,wstring &parentObject,wstring &object,vector <cTreeCat *> &rdfTypes,wstring &uri);
-	static bool extractResults(wstring begin,wstring uobject,wstring end,wstring qtype, vector <cTreeCat *> &rdfTypes,vector <wstring> &resources,wstring parentObject);
-	static bool inRDFTypeNotFoundTable(wchar_t *object);
-	static bool insertRDFTypeNotFoundTable(wchar_t *object);
-	static int getRDFTypesMaster(wstring object, vector <cTreeCat *> &rdfTypes, wstring fromWhere, bool fileCaching=true);
-	static bool topClassesAvailableToBeAdded(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
-	static void includeAllSuperClasses(unordered_map <wstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int recursionLevel, int rdfBaseTypeOffset);
+	static int getAcronyms(lpwstring &object,vector <lpwstring> &acronyms);
+	static unordered_map <lpwstring, cOntologyEntry>::iterator findAnyYAGOSuperClass(lpwstring cl);
+	static unordered_map <lpwstring, cOntologyEntry>::iterator findCategory(lpwstring &icat);
+	static int findCategoryRank(lpwstring &qtype,lpwstring &parentObject,lpwstring &object,vector <cTreeCat *> &rdfTypes,lpwstring &uri);
+	static bool extractResults(lpwstring begin,lpwstring uobject,lpwstring end,lpwstring qtype, vector <cTreeCat *> &rdfTypes,vector <lpwstring> &resources,lpwstring parentObject);
+	static bool inRDFTypeNotFoundTable(lpchar_t *object);
+	static bool insertRDFTypeNotFoundTable(lpchar_t *object);
+	static int getRDFTypesMaster(lpwstring object, vector <cTreeCat *> &rdfTypes, lpwstring fromWhere, bool fileCaching=true);
+	static bool topClassesAvailableToBeAdded(unordered_map <lpwstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int rdfBaseTypeOffset);
+	static void includeAllSuperClasses(unordered_map <lpwstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes, int recursionLevel, int rdfBaseTypeOffset);
 	static int fillRanks(int ontologyType);
-	static void getRDFTypesFromDbPedia(wstring object,vector <cTreeCat *> &rdfTypes,wstring fromWhere);
-	static int enterCategory(string &id,string &k,string &propertyValue,string &description,string &slobject,wstring &object,string &objectType,string &name,vector <wstring> &wikipediaLinks,vector <wstring> &professionLinks,vector <cTreeCat *> &rdfTypes);
-	static int lookupInFreebaseQuery(wstring &object,string &slobject,wstring &q,vector <cTreeCat *> &rdfTypes,bool accumulateAliases);
-	static int lookupLinks(vector <wstring> &links);
-	static wstring stripUmbel(wstring umbelClass, wstring &compactLabel, wstring &labelWithSpace, int &UMBELType);
-	static void importUMBELN3Files(const wchar_t * basepath, const wchar_t * extension, unordered_map < wstring, unordered_map <wstring, set< wstring > > > &triplets);
+	static void getRDFTypesFromDbPedia(lpwstring object,vector <cTreeCat *> &rdfTypes,lpwstring fromWhere);
+	static int enterCategory(string &id,string &k,string &propertyValue,string &description,string &slobject,lpwstring &object,string &objectType,string &name,vector <lpwstring> &wikipediaLinks,vector <lpwstring> &professionLinks,vector <cTreeCat *> &rdfTypes);
+	static int lookupInFreebaseQuery(lpwstring &object,string &slobject,lpwstring &q,vector <cTreeCat *> &rdfTypes,bool accumulateAliases);
+	static int lookupLinks(vector <lpwstring> &links);
+	static lpwstring stripUmbel(lpwstring umbelClass, lpwstring &compactLabel, lpwstring &labelWithSpace, int &UMBELType);
+	static void importUMBELN3Files(const lpchar_t * basepath, const lpchar_t * extension, unordered_map < lpwstring, unordered_map <lpwstring, set< lpwstring > > > &triplets);
 	static bool readUMBELSuperClasses();
-	static int readYAGOOntology(const wchar_t * filepath, int &numYAGOEntries, int &numSuperClasses);
+	static int readYAGOOntology(const lpchar_t * filepath, int &numYAGOEntries, int &numSuperClasses);
 	static int readYAGOOntology();
-	static int readRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
-	static wstring extractLinkedFreebaseDescription(string &properties,wstring &description);
-	static void cutFinalDigits(wstring &cat);
-	static wstring decodeURL(wstring input,wstring &decodedURL);
+	static int readRDFTypes(lpchar_t path[4096],vector <cTreeCat *> &rdfTypes);
+	static lpwstring extractLinkedFreebaseDescription(string &properties,lpwstring &description);
+	static void cutFinalDigits(lpwstring &cat);
+	static lpwstring decodeURL(lpwstring input,lpwstring &decodedURL);
 	static bool copy(void *buf,cOntologyEntry &dbsn,int &where,int limit);
-	static bool copy(void *buf,unordered_map <wstring, cOntologyEntry>::iterator dbsi,int &where,int limit);
-	static int getDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath);
-	static int followDbpediaLink(wstring link, wstring property, wstring& value);
-	static int getDescription(wstring label, wstring objectName, wstring& abstract, wstring& comment, wstring& infoPage, wstring& birthDate, wstring& birthPlace, wstring& occupation);
-	//static int getDescription(unordered_map <wstring, cOntologyEntry>::iterator cli);
-	//static int getDescription(vector <wstring> labels,wstring objectName,wstring &abstract,wstring &comment,wstring &infoPage, wstring& occupation);
-	static int writeRDFTypes(wchar_t path[4096],vector <cTreeCat *> &rdfTypes);
+	static bool copy(void *buf,unordered_map <lpwstring, cOntologyEntry>::iterator dbsi,int &where,int limit);
+	static int getDBPediaPath(int where,lpwstring webAddress,lpwstring &buffer,lpwstring epath);
+	static int followDbpediaLink(lpwstring link, lpwstring property, lpwstring& value);
+	static int getDescription(lpwstring label, lpwstring objectName, lpwstring& abstract, lpwstring& comment, lpwstring& infoPage, lpwstring& birthDate, lpwstring& birthPlace, lpwstring& occupation);
+	//static int getDescription(unordered_map <lpwstring, cOntologyEntry>::iterator cli);
+	//static int getDescription(vector <lpwstring> labels,lpwstring objectName,lpwstring &abstract,lpwstring &comment,lpwstring &infoPage, lpwstring& occupation);
+	static int writeRDFTypes(lpchar_t path[4096],vector <cTreeCat *> &rdfTypes);
 	//test
-	static int testDBPediaPath(int where,wstring webAddress,wstring &buffer,wstring epath);
+	static int testDBPediaPath(int where,lpwstring webAddress,lpwstring &buffer,lpwstring epath);
 	static void testWikipedia();
-	static void printIdentities(wchar_t *objects[]);
-	static void printIdentity(wstring object);
+	static void printIdentities(lpchar_t *objects[]);
+	static void printIdentity(lpwstring object);
 	static bool copy(cOntologyEntry &dbsn,void *buf,int &where,int limit);
 	static int readDbPediaOntology();
 };

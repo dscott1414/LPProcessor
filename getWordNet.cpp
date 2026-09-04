@@ -22,7 +22,8 @@
 
 	Key data structures / globals:
 		- synonymMap / synonymDeletionMap / mostCommonSynonymMap - hand overrides
-		- orderedHyperNymsMap - cached hypernym chains (SRWLOCK documented, not taken here)
+		- orderedHyperNymsMap - cached hypernym chains, guarded by
+			orderedHyperNymsMapSRWLock (a std::shared_mutex since batch B3)
 		- nounVerbMap - agentive nominalization mapping
 		- internalSynonymMap[4] - per-POS memo of getSynonyms results
 
@@ -40,8 +41,14 @@
 		SynsetPtrs from findtheinfo_ds are not freed.
 */
 #pragma warning(disable : 4786 ) // disable warning C4786
-#include <windows.h>
-#include <io.h>
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 #include "word.h"
 #include "ontology.h"
 #include "source.h"
@@ -51,51 +58,50 @@
 #include "sys/stat.h"
 #include "vcXML.h"
 #include "profile.h"
-#include "wininet.h"
 #include "internet.h"
 
-bool myquery(MYSQL* mysql, const wchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
-bool myquery(MYSQL* mysql, const wchar_t* q, bool allowFailure = false);
+bool myquery(MYSQL* mysql, const lpchar_t* q, MYSQL_RES*& result, bool allowFailure = false);
+bool myquery(MYSQL* mysql, const lpchar_t* q, bool allowFailure = false);
 bool wordNetInitialized = false; // initialized
-unordered_map <wstring, wstring> mostCommonSynonymMap; // initialized
-unordered_map <wstring, wstring> synonymMap; // synonyms that are left out of WordNet // initialized
-unordered_map <wstring, wstring> synonymDeletionMap; // initialized
+unordered_map <lpwstring, lpwstring> mostCommonSynonymMap; // initialized
+unordered_map <lpwstring, lpwstring> synonymMap; // synonyms that are left out of WordNet // initialized
+unordered_map <lpwstring, lpwstring> synonymDeletionMap; // initialized
 
 set <int> offsets; // initialized
-extern unordered_map <wstring, int> levinVerbToClassSectionMap; // dictionary initialized 
-extern unordered_map <int, wstring> levinClassSectionNames; // dictionary initialized 
-extern unordered_map <wstring, set <int> > vbNetVerbToClassMap;
+extern unordered_map <lpwstring, int> levinVerbToClassSectionMap; // dictionary initialized 
+extern unordered_map <int, lpwstring> levinClassSectionNames; // dictionary initialized 
+extern unordered_map <lpwstring, set <int> > vbNetVerbToClassMap;
 int numVbNetClassFound = 0, numOneSenseVbNetClassFound = 0, numMultiSenseVbNetClassFound = 0, numVbNetClassMultiSenseNotFound = 0, verbsMappedToVerbNet = 0;
 
 bool cacheOrderedHyperNyms = true; // initialized
-unordered_map<wstring, vector < vector <string> > > orderedHyperNymsMap; // protected with orderedHyperNymsMapSRWLock
-unordered_map<wstring, int > orderedHyperNymsNumMap; // protected with orderedHyperNymsMapSRWLock
+unordered_map<lpwstring, vector < vector <string> > > orderedHyperNymsMap; // protected with orderedHyperNymsMapSRWLock
+unordered_map<lpwstring, int > orderedHyperNymsNumMap; // protected with orderedHyperNymsMapSRWLock
 // used for agentiveNominalizations 
-unordered_map <wstring, set < wstring > > nounVerbMap; // initialized
+unordered_map <lpwstring, set < lpwstring > > nounVerbMap; // initialized
 void printEntry(sDefinition d);
 
 // Walks synset_ptr (ptrlist then nextss), collecting lowercased space-normalized synonyms
 // per sense into words. Skips the query 'word' itself. ignoreTopLevel drops the first sense
 // at recur==0. Returns the number of synonyms inserted. Does not free synset_ptr.
-int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <unordered_set <wstring> >& words, bool ignoreTopLevel, sTrace& t)
+int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <unordered_set <lpwstring> >& words, bool ignoreTopLevel, sTrace& t)
 {
 	LFS
 		if (!synset_ptr) return 0;
 	/*
 		for (int I=0; I<synset_ptr -> ptrcount; I++)
 		{
-			wchar_t *synTypes[]={ "","ANTPTR","HYPERPTR","HYPOPTR","ENTAILPTR","SIMPTR","ISMEMBERPTR","ISSTUFFPTR","ISPARTPTR","HASMEMBERPTR","HASSTUFFPTR","HASPARTPTR",
+			lpchar_t *synTypes[]={ "","ANTPTR","HYPERPTR","HYPOPTR","ENTAILPTR","SIMPTR","ISMEMBERPTR","ISSTUFFPTR","ISPARTPTR","HASMEMBERPTR","HASSTUFFPTR","HASPARTPTR",
 					 "MERONYM","HOLONYM","CAUSETO","PPLPTR","SEEALSOPTR","PERTPTR","ATTRIBUTE","VERBGROUP","DERIVATION","CLASSIFICATION","CLASS",
 					 "SYNS","FREQ","FRAMES","COORDS","RELATIVES","HMERONYM","HHOLONYM","WNGREP","OVERVIEW" };
-			wprintf(L"%d:%s\n",I,synTypes[synset_ptr->ptrtyp[I]]);
+			lp_wprintf(u"%d:%s\n",I,synTypes[synset_ptr->ptrtyp[I]]);
 		}
-		wprintf(L"%s\n",FmtSynset(synset_ptr, 1));
+		lp_wprintf(u"%s\n",FmtSynset(synset_ptr, 1));
 	*/
 	int numWords = 0;
 	if (recur || !ignoreTopLevel)
 	{
-		unordered_set <wstring> sense;
-		//if (recur && synset_ptr -> wcount && t.traceSpeakerResolution) lplogNR(LOG_WORDNET,L"  =>");
+		unordered_set <lpwstring> sense;
+		//if (recur && synset_ptr -> wcount && t.traceSpeakerResolution) lplogNR(LOG_WORDNET,u"  =>");
 		for (int I = 0; I < synset_ptr->wcount; I++)
 		{
 			if (!strcmp(word, synset_ptr->words[I])) continue;
@@ -103,26 +109,26 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <
 			char synword[WORDBUF];
 			strcpy(synword, synset_ptr->words[I]);
 			strsubst(synword, '_', ' ');
-			strlwr(synword);
-			wstring w;
+			lp_towlower_str(synword);
+			lpwstring w;
 			sense.insert(mTW(synword, w));
 			//if (t.traceSpeakerResolution)
-				//lplogNR(LOG_WORDNET,L"%S%c",synset_ptr -> words[I],(I==synset_ptr -> wcount-1)? L' ':L',');
+				//lplogNR(LOG_WORDNET,u"%S%c",synset_ptr -> words[I],(I==synset_ptr -> wcount-1)? u' ':u',');
 		}
 		words.push_back(sense);
-		if (!recur && synset_ptr->wcount && t.traceSpeakerResolution) lplog(LOG_WORDNET, L"");
+		if (!recur && synset_ptr->wcount && t.traceSpeakerResolution) lplog(LOG_WORDNET, u"");
 	}
 	int tmpNumWords;
 	if ((tmpNumWords = extractWordsFromSynset(word, synset_ptr->ptrlist, recur + 1, words, ignoreTopLevel, t)) && !recur && t.traceSpeakerResolution)
-		lplog(LOG_WORDNET, L"");
+		lplog(LOG_WORDNET, u"");
 	numWords += extractWordsFromSynset(word, synset_ptr->nextss, recur, words, ignoreTopLevel, t) + tmpNumWords;
 	return numWords;
 }
 
 // Flat overload: unions every sense from the vector version into words. Returns words.size().
-int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, unordered_set <wstring>& words, bool ignoreTopLevel, sTrace& t)
+int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, unordered_set <lpwstring>& words, bool ignoreTopLevel, sTrace& t)
 {
-	vector <unordered_set <wstring> > wordsBySense;
+	vector <unordered_set <lpwstring> > wordsBySense;
 	extractWordsFromSynset(word, synset_ptr, recur, wordsBySense, ignoreTopLevel, t);
 	for (int I = 0; I < wordsBySense.size(); I++)
 		words.insert(wordsBySense[I].begin(), wordsBySense[I].end());
@@ -133,10 +139,10 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, unordere
 void addToWordNet()
 {
 	LFS
-		synonymMap[L"professor"] = L"teacher";
-	synonymDeletionMap[L"book"] = L"album"; // allowing book and album to be synonyms would be mixing the two largest categories of named items
-	synonymDeletionMap[L"detail"] = L"specialty"; // this is not correct - leads to 'full detail' = 'Krugman's specialty'
-	synonymDeletionMap[L"person"] = L"party"; // this is not correct - leads to 'full detail' = 'Krugman's specialty'
+		synonymMap[u"professor"] = u"teacher";
+	synonymDeletionMap[u"book"] = u"album"; // allowing book and album to be synonyms would be mixing the two largest categories of named items
+	synonymDeletionMap[u"detail"] = u"specialty"; // this is not correct - leads to 'full detail' = 'Krugman's specialty'
+	synonymDeletionMap[u"person"] = u"party"; // this is not correct - leads to 'full detail' = 'Krugman's specialty'
 }
 
 // One-shot wninit(); LOG_FATAL_ERROR if the WordNet dict files cannot be opened.
@@ -146,7 +152,7 @@ void initWordNet()
 		if (!wordNetInitialized)
 		{
 			if (wninit() < 0)
-				lplog(LOG_FATAL_ERROR, L"WordNet failed initialization!");
+				lplog(LOG_FATAL_ERROR, u"WordNet failed initialization!");
 			wordNetInitialized = true;
 			addToWordNet();
 		}
@@ -179,24 +185,24 @@ int cWord::wordCheck(void)
 	//SynsetPtr sp=findtheinfo_ds("entity", NOUN, HYPOPTR, ALLSENSES);
 	//if (sp)
 	//  printSynsetStruct(0,"entity",-1,-2,sp,false);
-	//wprintf(L"offsets=%d.",offsets.size());
+	//lp_wprintf(u"offsets=%d.",offsets.size());
 	tIWMM w = begin(), wEnd = end();
 	int combinations = 0, unknown = 0, notInWordNet = 0, derivations = 0, numWords = 0, word = 0;
 	for (; w != wEnd; w++) numWords++;
 	for (w = begin(); w != wEnd; w++)
 	{
 		word++;
-		if ((word & 15) == 15) wprintf(L"%07d out of %07d\r", word, numWords);
+		if ((word & 15) == 15) lp_wprintf(u"%07d out of %07d\r", word, numWords);
 		//SynsetPtr sp=findtheinfo_ds((char *)w->first.c_str(), NOUN, HYPERPTR, ALLSENSES);
 		//if (sp)
 		//  printSynsetStruct(0,(char *)w->first.c_str(),0,2,sp,true);
-		lplog(L"Word %s has no mainEntry!", w->first.c_str());
+		lplog(u"Word %s has no mainEntry!", w->first.c_str());
 		if (w->second.mainEntry == wNULL &&
 			(w->second.query(nounForm) >= 0 ||
 				w->second.query(verbForm) >= 0 ||
 				w->second.query(adjectiveForm) >= 0 ||
 				w->second.query(adverbForm) >= 0))
-			lplog(L"Word %s has no mainEntry!", w->first.c_str());
+			lplog(u"Word %s has no mainEntry!", w->first.c_str());
 		if (w->first[1] && w->first[0] >= 'a' && w->first[0] <= 'z')
 		{
 			if (w->second.isUnknown())
@@ -211,9 +217,9 @@ int cWord::wordCheck(void)
 					else
 					{
 						notInWordNet++;
-						//wprintf(L"\nWord %s was not found in WordNet - (%d) ",w->first.c_str(),fi->usagePatterns[cSourceWordInfo::TRANSFER_COUNT]);
+						//lp_wprintf(u"\nWord %s was not found in WordNet - (%d) ",w->first.c_str(),fi->usagePatterns[cSourceWordInfo::TRANSFER_COUNT]);
 						//for (unsigned int f=0; f<fi->count; f++)
-						//  wprintf(L"%s ",fi->Form(f)->name.c_str());
+						//  lp_wprintf(u"%s ",fi->Form(f)->name.c_str());
 					}
 				}
 				else
@@ -221,7 +227,7 @@ int cWord::wordCheck(void)
 			}
 		}
 	}
-	lplog(LOG_FATAL_ERROR, L"combinations=%d unknown=%d derivations=%d notInWordNet=%d.", combinations, unknown, derivations, notInWordNet);
+	lplog(LOG_FATAL_ERROR, u"combinations=%d unknown=%d derivations=%d notInWordNet=%d.", combinations, unknown, derivations, notInWordNet);
 	return 0;
 }
 
@@ -243,49 +249,49 @@ int setWordNetCategoryBits(void)
 // Big Huge Thesaurus: http://words.bighugelabs.com/api/2/<api-key>/'word'/json
 // Fetches the old thesaurus.com t2opt page for word/POS and scrapes the Synonyms: comma list
 // into synonyms. Spaces become '+'. Stops at ads / www. prefixes.
-void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int synonymType, bool forceWebReread)
+void scrapeOldThesaurus(lpwstring word, unordered_set <lpwstring>& synonyms, int synonymType, bool forceWebReread)
 {
 	LFS
-		wstring webAddress = L"http://thesaurus.com/t2opt/out?desturl=browse/" + word + L"&posFilter=", epath = word + L".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
+		lpwstring webAddress = u"http://thesaurus.com/t2opt/out?desturl=browse/" + word + u"&posFilter=", epath = word + u".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
 	switch (synonymType)
 	{
-	case NOUN: webAddress += L"noun"; break;
-	case ADJ: webAddress += L"adjective";  break; // may not work! 
-	case VERB: webAddress += L"verb"; break;
-	case ADV: webAddress += L"adverb"; break; // may not work!
+	case NOUN: webAddress += u"noun"; break;
+	case ADJ: webAddress += u"adjective";  break; // may not work! 
+	case VERB: webAddress += u"verb"; break;
+	case ADV: webAddress += u"adverb"; break; // may not work!
 	default: break;
 	}
 	int space, lastNewLine = 1000;
-	while ((space = webAddress.find(' ')) != wstring::npos)
+	while ((space = webAddress.find(' ')) != lpwstring::npos)
 		webAddress[space] = '+';
-	while ((space = epath.find(' ')) != wstring::npos)
+	while ((space = epath.find(' ')) != lpwstring::npos)
 		epath[space] = '+';
-	cInternet::getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType + 1, true, true, forceWebReread);
-	size_t beginPos = buffer.find(L"Main Entry:", 0);
-	if (beginPos == wstring::npos)
+	cInternet::getWebPath(-1, webAddress, buffer, epath, u"webSearchCache", filePathOut, headers, synonymType + 1, true, true, forceWebReread);
+	size_t beginPos = buffer.find(u"Main Entry:", 0);
+	if (beginPos == lpwstring::npos)
 		return;
-	beginPos += wcslen(L"Main Entry:");
+	beginPos += lp_strlen(u"Main Entry:");
 	size_t endPos = 1000000, tmpPos;
-	const wchar_t* endStr[] = { L"Main Entry:",L"Roget's 21st Century Thesaurus",L"Adjective Finder",L"Synonym Collection",L"Search another word",L"Antonyms:", L"* = informal/non-formal usage",NULL };
+	const lpchar_t* endStr[] = { u"Main Entry:",u"Roget's 21st Century Thesaurus",u"Adjective Finder",u"Synonym Collection",u"Search another word",u"Antonyms:", u"* = informal/non-formal usage",NULL };
 	for (int I = 0; endStr[I] != NULL; I++)
-		if ((tmpPos = buffer.find(endStr[I], beginPos)) != wstring::npos && tmpPos < endPos)
+		if ((tmpPos = buffer.find(endStr[I], beginPos)) != lpwstring::npos && tmpPos < endPos)
 			endPos = tmpPos;
-	if (endPos == wstring::npos)
+	if (endPos == lpwstring::npos)
 		return;
 	match = buffer.substr(beginPos, endPos - beginPos);
-	bool noMainEntryMatch = (match.find(word) == wstring::npos), addressEncountered = false;
-	size_t pos = match.find(L"Synonyms:");
-	if (pos != wstring::npos)
+	bool noMainEntryMatch = (match.find(word) == lpwstring::npos), addressEncountered = false;
+	size_t pos = match.find(u"Synonyms:");
+	if (pos != lpwstring::npos)
 	{
-		wstring s;
-		for (pos += wcslen(L"Synonyms:"); pos < (signed)match.length(); pos++)
-			if (iswalpha(match[pos]) || match[pos] == L'\'')
+		lpwstring s;
+		for (pos += lp_strlen(u"Synonyms:"); pos < (signed)match.length(); pos++)
+			if (iswalpha(match[pos]) || match[pos] == u'\'')
 				s += match[pos];
-			else if (match[pos] == L' ')
+			else if (match[pos] == u' ')
 			{
 				if (!s.empty()) s += match[pos];
 			}
-			else if (match[pos] == L',')
+			else if (match[pos] == u',')
 			{
 				while (s.length() > 0 && iswspace(s[s.length() - 1]))
 					s.erase(s.length() - 1);
@@ -293,20 +299,20 @@ void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int syn
 				if (s.length() > 0)
 				{
 					if (s.length() >= WORDBUF)
-						lplog(LOG_WHERE | LOG_ERROR, L"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
+						lplog(LOG_WHERE | LOG_ERROR, u"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
 					else
 						synonyms.insert(s);
 				}
 				s.clear();
 			}
-			else if (match[pos - 1] != L',' && match[pos] == 13 && match[pos + 1] == 10 &&
+			else if (match[pos - 1] != u',' && match[pos] == 13 && match[pos + 1] == 10 &&
 				(iswupper(match[pos + 2]) || iswdigit(match[pos + 2]) || !iswalpha(match[pos + 2]))) // Ads start with unpredictable strings, but always capitalized, after a newline.
 			{
 				break;
 			}
 			else if (match[pos] == 13 && match[pos + 1] == 10)
 				lastNewLine = s.length();
-			else if (addressEncountered = match[pos] == L'.' && pos > 3 && match[pos - 1] == L'w' && match[pos - 2] == L'w' && match[pos - 3] == L'w')
+			else if (addressEncountered = match[pos] == u'.' && pos > 3 && match[pos - 1] == u'w' && match[pos - 2] == u'w' && match[pos - 3] == u'w')
 				break;
 		transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
 		if (s.length() > 0)
@@ -314,54 +320,54 @@ void scrapeOldThesaurus(wstring word, unordered_set <wstring>& synonyms, int syn
 			if ((s.length() >= 64 || addressEncountered) && lastNewLine < (signed)s.length())
 				s = s.substr(0, lastNewLine);
 			if (s.length() >= 64)
-				lplog(LOG_WHERE | LOG_ERROR, L"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
+				lplog(LOG_WHERE | LOG_ERROR, u"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
 			else
 				synonyms.insert(s);
 		}
 	}
 	extern int logSynonymDetail;
 	if (noMainEntryMatch && synonyms.find(word) == synonyms.end() && logSynonymDetail > 0)
-		lplog(LOG_WHERE, L"%s itself not found in synonyms [%s].", word.c_str(), setString(synonyms, buffer, L"|").c_str());
+		lplog(LOG_WHERE, u"%s itself not found in synonyms [%s].", word.c_str(), setString(synonyms, buffer, u"|").c_str());
 }
 
 // Scrapes the current thesaurus.com/browse page into sDefinition rows (wordType, primary
 // synonym, accumulated synonyms/antonyms with complexity|length). LOG_FATAL_ERROR if the
 // expected HTML markers are missing mid-parse.
-void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
+void scrapeNewThesaurus(lpwstring word, int synonymType, vector <sDefinition>& vd)
 {
 	int space;
-	while ((space = word.find('_')) != wstring::npos)
+	while ((space = word.find('_')) != lpwstring::npos)
 		word[space] = ' ';
-	wstring webAddress = L"http://thesaurus.com/browse/" + word + L"?posfilter=", epath = word + L".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
+	lpwstring webAddress = u"http://thesaurus.com/browse/" + word + u"?posfilter=", epath = word + u".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
 	switch (synonymType)
 	{
-	case NOUN: webAddress += L"noun"; break;
-	case ADJ: webAddress += L"adjective";  break; // may not work! 
-	case VERB: webAddress += L"verb"; break;
-	case ADV: webAddress += L"adverb"; break; // may not work!
+	case NOUN: webAddress += u"noun"; break;
+	case ADJ: webAddress += u"adjective";  break; // may not work! 
+	case VERB: webAddress += u"verb"; break;
+	case ADV: webAddress += u"adverb"; break; // may not work!
 	default: break;
 	}
 	//int lastNewLine = 1000;
-	while ((space = webAddress.find(' ')) != wstring::npos)
+	while ((space = webAddress.find(' ')) != lpwstring::npos)
 		webAddress[space] = '+';
-	while ((space = epath.find(' ')) != wstring::npos)
+	while ((space = epath.find(' ')) != lpwstring::npos)
 		epath[space] = '+';
-	cInternet::getWebPath(-1, webAddress, buffer, epath, L"webSearchCache", filePathOut, headers, synonymType, false, true);
-	if (buffer.find(L"<li id=\"words-gallery-no-results\">no thesaurus results</li>") != wstring::npos ||
-		buffer.find(L"there's not a match") != wstring::npos)
+	cInternet::getWebPath(-1, webAddress, buffer, epath, u"webSearchCache", filePathOut, headers, synonymType, false, true);
+	if (buffer.find(u"<li id=\"words-gallery-no-results\">no thesaurus results</li>") != lpwstring::npos ||
+		buffer.find(u"there's not a match") != lpwstring::npos)
 		return;
 	size_t beginPos = 0;
-	wstring spaceTest;
-	if (firstMatch(buffer, L"<strong>0</strong>", L"<span>Synonyms found <span class=\"headword\">", beginPos, spaceTest, false) != wstring::npos)
+	lpwstring spaceTest;
+	if (firstMatch(buffer, u"<strong>0</strong>", u"<span>Synonyms found <span class=\"headword\">", beginPos, spaceTest, false) != lpwstring::npos)
 		return;
 	while (true)
 	{
 		sDefinition d;
 		wTM(word, d.mainEntry);
-		wstring beginString = L"<div class=\"synonym-description\">", endString = L"</div>", description, synonymList;
+		lpwstring beginString = u"<div class=\"synonym-description\">", endString = u"</div>", description, synonymList;
 		size_t endPos;
 		beginPos = buffer.find(beginString);
-		if (beginPos != wstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != wstring::npos)
+		if (beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
 		{
 			description = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
 			buffer.erase(beginPos, endPos - beginPos);
@@ -371,26 +377,26 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 				<strong class="ttl">dig and search</strong>
 				</div>
 				*/
-			wstring wordTypeStr;
+			lpwstring wordTypeStr;
 			beginPos = 0;
-			if (nextMatch(description, L"<em class=\"txt\">", L"</em>", beginPos, wordTypeStr, false))
-				lplog(LOG_FATAL_ERROR, L"Can't find wordType");
+			if (nextMatch(description, u"<em class=\"txt\">", u"</em>", beginPos, wordTypeStr, false))
+				lplog(LOG_FATAL_ERROR, u"Can't find wordType");
 			wTM(wordTypeStr, d.wordType);
-			wstring primarySynonym;
+			lpwstring primarySynonym;
 			beginPos = 0;
-			if (nextMatch(description, L"<strong class=\"ttl\">", L"</strong>", beginPos, primarySynonym, false))
-				lplog(LOG_FATAL_ERROR, L"Can't find short description");
+			if (nextMatch(description, u"<strong class=\"ttl\">", u"</strong>", beginPos, primarySynonym, false))
+				lplog(LOG_FATAL_ERROR, u"Can't find short description");
 			string ps;
 			d.primarySynonyms.push_back(wTM(primarySynonym, ps));
-			beginString = L"<div class=\"relevancy-list\">";
+			beginString = u"<div class=\"relevancy-list\">";
 			beginPos = buffer.find(beginString, beginPos);
-			if (beginPos != wstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != wstring::npos)
+			if (beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
 			{
 				synonymList = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
 				buffer.erase(beginPos, endPos - beginPos);
-				wstring synonymEntry;
+				lpwstring synonymEntry;
 				beginPos = 0;
-				while (!nextMatch(synonymList, L"<li", L"</li>", beginPos, synonymEntry, false))
+				while (!nextMatch(synonymList, u"<li", u"</li>", beginPos, synonymEntry, false))
 				{
 					/*
 					<li >
@@ -405,37 +411,37 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 					</li>
 					*/
 					size_t bp = 0;
-					wstring complexity, length, synonym;
-					if (nextMatch(synonymEntry, L"data-complexity=\"", L"\"", bp, complexity, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find complexity");
+					lpwstring complexity, length, synonym;
+					if (nextMatch(synonymEntry, u"data-complexity=\"", u"\"", bp, complexity, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find complexity");
 					bp = 0;
-					if (nextMatch(synonymEntry, L"data-length=\"", L"\"", bp, length, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find length");
+					if (nextMatch(synonymEntry, u"data-length=\"", u"\"", bp, length, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find length");
 					bp = 0;
-					if (nextMatch(synonymEntry, L"<span class=\"text\">", L"</span>", bp, synonym, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find synonym entry");
-					synonym += L"|" + complexity + L"|" + length;
+					if (nextMatch(synonymEntry, u"<span class=\"text\">", u"</span>", bp, synonym, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find synonym entry");
+					synonym += u"|" + complexity + u"|" + length;
 					string ss;
 					d.accumulatedSynonyms.push_back(wTM(synonym, ss));
 				}
 			}
 			else
 			{
-				lplog(LOG_FATAL_ERROR, L"Thesaurus has no synonyms");
+				lplog(LOG_FATAL_ERROR, u"Thesaurus has no synonyms");
 			}
 			size_t nextBeginPos = buffer.find(beginString);
-			beginString = L"<section class=\"container-info antonyms\" >";
-			endString = L"</section>";
+			beginString = u"<section class=\"container-info antonyms\" >";
+			endString = u"</section>";
 			beginPos = buffer.find(beginString);
 			// antonym list for next synonym
-			if (!(beginPos >= nextBeginPos && nextBeginPos != wstring::npos) &&
-				beginPos != wstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != wstring::npos)
+			if (!(beginPos >= nextBeginPos && nextBeginPos != lpwstring::npos) &&
+				beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
 			{
-				wstring antonymList = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
+				lpwstring antonymList = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
 				buffer.erase(beginPos, endPos - beginPos);
-				wstring antonymEntry;
+				lpwstring antonymEntry;
 				beginPos = 0;
-				while (!nextMatch(antonymList, L"<li", L"</li>", beginPos, antonymEntry, false))
+				while (!nextMatch(antonymList, u"<li", u"</li>", beginPos, antonymEntry, false))
 				{
 					/*
 					<li >
@@ -450,15 +456,15 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 					</li>
 					*/
 					size_t bp = 0;
-					wstring complexity, length, antonym;
-					if (nextMatch(antonymEntry, L"data-complexity=\"", L"\"", bp, complexity, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find complexity");
+					lpwstring complexity, length, antonym;
+					if (nextMatch(antonymEntry, u"data-complexity=\"", u"\"", bp, complexity, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find complexity");
 					bp = 0;
-					if (nextMatch(antonymEntry, L"data-length=\"", L"\"", bp, length, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find length");
-					if (nextMatch(antonymEntry, L"<span class=\"text\">", L"</span>", bp, antonym, false))
-						lplog(LOG_FATAL_ERROR, L"Can't find antonym entry");
-					antonym += L"|" + complexity + L"|" + length;
+					if (nextMatch(antonymEntry, u"data-length=\"", u"\"", bp, length, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find length");
+					if (nextMatch(antonymEntry, u"<span class=\"text\">", u"</span>", bp, antonym, false))
+						lplog(LOG_FATAL_ERROR, u"Can't find antonym entry");
+					antonym += u"|" + complexity + u"|" + length;
 					string as;
 					d.accumulatedAntonyms.push_back(wTM(antonym, as));
 				}
@@ -469,7 +475,7 @@ void scrapeNewThesaurus(wstring word, int synonymType, vector <sDefinition>& vd)
 		{
 			if (vd.empty())
 			{
-				//lplog(LOG_FATAL_ERROR, L"Thesaurus has no description");
+				//lplog(LOG_FATAL_ERROR, u"Thesaurus has no description");
 				//printf("\nThesaurus has no description for %S (%S)\n", word.c_str(), filePathOut.c_str());
 				break;
 			}
@@ -484,38 +490,38 @@ void split(string str, vector <string>& words, const char* splitch);
 // SELECT accumulated/primary synonyms for mainEntry=word and wordType bitmask. word is
 // escaped (escaped(), source.h) before being concatenated into SQL. LOCKs thesaurus READ.
 // Returns true if any sense was pushed.
-bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstring> >& synonyms, int synonymType)
+bool getSynonymsFromDB(MYSQL mysql, lpwstring word, vector < unordered_set <lpwstring> >& synonyms, int synonymType)
 {
 	bool entriesAdded = false;
-	wstring query = L"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += escaped(word) + L"' and ";
+	lpwstring query = u"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
+	query += escaped(word) + u"' and ";
 	// thesaurus mappings
 	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
 	if (synonymType == 1) // NOUN
-		query += L"(wordType&128)=128";
+		query += u"(wordType&128)=128";
 	else if (synonymType == 2) // VERB
-		query += L"(wordType&256)=256";
+		query += u"(wordType&256)=256";
 	else if (synonymType == 3) // ADJ
-		query += L"(wordType&1)=1";
+		query += u"(wordType&1)=1";
 	else if (synonymType == 4) // ADV
-		query += L"(wordType&2)=2";
-	if (!myquery(&mysql, L"LOCK TABLES thesaurus READ")) return false;
+		query += u"(wordType&2)=2";
+	if (!myquery(&mysql, u"LOCK TABLES thesaurus READ")) return false;
 	MYSQL_RES* result = NULL;
 	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (wchar_t*)query.c_str(), result))
+	if (myquery(&mysql, (lpchar_t*)query.c_str(), result))
 	{
 		if ((sqlrow = mysql_fetch_row(result)) != NULL)
 		{
 			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
 			string properties = (sqlrow[1] == NULL) ? "" : sqlrow[1];
 			int lastBegin = 0;
-			unordered_set <wstring> sense;
+			unordered_set <lpwstring> sense;
 			for (int s = 0; s < properties.size(); s++)
 				if (properties[s] == ';')
 				{
-					wstring wtmp;
+					lpwstring wtmp;
 					mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
-					if (!wtmp.empty() && wtmp[wtmp.length() - 1] == L'*')
+					if (!wtmp.empty() && wtmp[wtmp.length() - 1] == u'*')
 						wtmp.erase(wtmp.length() - 1);
 					sense.insert(wtmp);
 					lastBegin = s + 1;
@@ -525,7 +531,7 @@ bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstrin
 			split(primarySynonyms, ps, ";");
 			for (int psi = 0; psi < ps.size(); psi++)
 			{
-				wstring tmpstr;
+				lpwstring tmpstr;
 				if (ps[psi].find(" ") == string::npos)
 					sense.insert(mTW(ps[psi], tmpstr));
 				else
@@ -548,15 +554,15 @@ bool getSynonymsFromDB(MYSQL mysql, wstring word, vector < unordered_set <wstrin
 		}
 		mysql_free_result(result);
 	}
-	myquery(&mysql, L"UNLOCK TABLES");
+	myquery(&mysql, u"UNLOCK TABLES");
 	return entriesAdded;
 }
 
-unordered_map <wstring, vector < unordered_set <wstring> > > internalSynonymMap[4];
+unordered_map <lpwstring, vector < unordered_set <lpwstring> > > internalSynonymMap[4];
 // Flattens the per-sense getSynonyms overload into one set.
-void cSource::getSynonyms(wstring word, unordered_set <wstring>& synonyms, int synonymType)
+void cSource::getSynonyms(lpwstring word, unordered_set <lpwstring>& synonyms, int synonymType)
 {
-	vector <unordered_set <wstring> > synonymsSenses;
+	vector <unordered_set <lpwstring> > synonymsSenses;
 	getSynonyms(word, synonymsSenses, synonymType);
 	for (int s = 0; s < synonymsSenses.size(); s++)
 		synonyms.insert(synonymsSenses[s].begin(), synonymsSenses[s].end());
@@ -564,14 +570,14 @@ void cSource::getSynonyms(wstring word, unordered_set <wstring>& synonyms, int s
 
 // WordNet SIMPTR + synonymMap + DB/scrapeNewThesaurus, minus synonymDeletionMap. Memoized
 // in internalSynonymMap[synonymType]. Ignores non-alpha/_ words and anything containing "http".
-void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synonyms, int synonymType)
+void cSource::getSynonyms(lpwstring word, vector <unordered_set <lpwstring> >& synonyms, int synonymType)
 {
 	LFS
 		// check if word is legal
 		for (int I = 0; I < word.length(); I++)
-			if (!iswalpha(word[I]) && word[I] != L'_') // two words has a _ in it
+			if (!iswalpha(word[I]) && word[I] != u'_') // two words has a _ in it
 				return;
-	if (word.find(L"http") != wstring::npos)
+	if (word.find(u"http") != lpwstring::npos)
 		return;
 	auto smi = internalSynonymMap[synonymType].find(word);
 	if (smi != internalSynonymMap[synonymType].end())
@@ -584,7 +590,7 @@ void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synon
 	SynsetPtr sp = findtheinfo_ds(wTM(word, sWord), synonymType, SIMPTR, ALLSENSES);
 
 	extractWordsFromSynset(wTM(word, sWord), sp, 0, synonyms, false, debugTrace);
-	unordered_map <wstring, wstring>::iterator si = synonymMap.find(word);
+	unordered_map <lpwstring, lpwstring>::iterator si = synonymMap.find(word);
 	if (si != synonymMap.end())
 	{
 		for (int I = 0; I < synonyms.size(); I++)
@@ -598,14 +604,14 @@ void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synon
 			scrapeNewThesaurus(word, synonymType, d);
 			for (int n = 0; n < d.size(); n++)
 			{
-				unordered_set <wstring> sense;
+				unordered_set <lpwstring> sense;
 				for (int I = 0; I < d[n].accumulatedSynonyms.size(); I++)
 				{
-					wstring tmp;
+					lpwstring tmp;
 					mTW(d[n].accumulatedSynonyms[I], tmp);
 					transform(tmp.begin(), tmp.end(), tmp.begin(), (int(*)(int)) tolower);
-					wchar_t chopSense = tmp.find('|');
-					if (chopSense != wstring::npos)
+					lpchar_t chopSense = tmp.find('|');
+					if (chopSense != lpwstring::npos)
 						tmp.erase(chopSense);
 					sense.insert(tmp);
 				}
@@ -621,7 +627,7 @@ void cSource::getSynonyms(wstring word, vector <unordered_set <wstring> >& synon
 }
 
 // WordNet SIMPTR only (no thesaurus DB/scrape, no synonymMap). Fills synonyms per sense.
-void cSource::getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstring> >& synonyms, int synonymType)
+void cSource::getWordNetSynonymsOnly(lpwstring word, vector <unordered_set <lpwstring> >& synonyms, int synonymType)
 {
 	LFS
 		initWordNet();
@@ -632,7 +638,7 @@ void cSource::getWordNetSynonymsOnly(wstring word, vector <unordered_set <wstrin
 
 
 // WordNet ANTPTR on ADJ for word; ignoreTopLevel so the queried adjective itself is omitted.
-void getAntonyms(wstring word, unordered_set <wstring>& antonyms, sTrace& t)
+void getAntonyms(lpwstring word, unordered_set <lpwstring>& antonyms, sTrace& t)
 {
 	LFS
 		initWordNet();
@@ -642,7 +648,7 @@ void getAntonyms(wstring word, unordered_set <wstring>& antonyms, sTrace& t)
 }
 
 // WordNet sense_cnt for word as ADJ or NOUN. Returns 0 if the index lookup misses.
-int getFamiliarity(wstring word, bool isAdjective)
+int getFamiliarity(lpwstring word, bool isAdjective)
 {
 	LFS
 		initWordNet();
@@ -653,7 +659,7 @@ int getFamiliarity(wstring word, bool isAdjective)
 }
 
 // Max sense_cnt across ADJ/NOUN/VERB/ADV. Returns -1 if word is empty or wTM produced "".
-int getHighestFamiliarity(wstring word)
+int getHighestFamiliarity(lpwstring word)
 {
 	LFS
 		if (word.empty())
@@ -737,7 +743,7 @@ void getOrderedHyperNyms(SynsetPtr sp, vector < vector <string> >& objects, bool
 }
 
 // findtheinfo_ds(word, NOUN, HYPERPTR), trying morphstr if needed. Writes sp; true if non-NULL.
-bool initHyperNym(wstring word, SynsetPtr& sp)
+bool initHyperNym(lpwstring word, SynsetPtr& sp)
 {
 	LFS
 		initWordNet();
@@ -774,7 +780,7 @@ bool hasHyperNym(SynsetPtr sp, string MBCSHyperNum, bool& found, bool trace)
 					if (!trace) break;
 				}
 				if (trace)
-					lplog(LOG_WHERE, L"  SENSE %d:HYPERNYM %S [%d found]", numSenses, o->words[w], numHypernymFound);
+					lplog(LOG_WHERE, u"  SENSE %d:HYPERNYM %S [%d found]", numSenses, o->words[w], numHypernymFound);
 			}
 			o->ptrlist = traceptrs_ds(o, o->searchtype = HYPERPTR, NOUN, 0);
 		}
@@ -783,7 +789,7 @@ bool hasHyperNym(SynsetPtr sp, string MBCSHyperNum, bool& found, bool trace)
 }
 
 // initHyperNym(word) then hasHyperNym(sp, hyperNym). found is not cleared first.
-bool hasHyperNym(wstring word, wstring hyperNym, bool& found, bool trace)
+bool hasHyperNym(lpwstring word, lpwstring hyperNym, bool& found, bool trace)
 {
 	LFS
 		SynsetPtr sp;
@@ -791,24 +797,24 @@ bool hasHyperNym(wstring word, wstring hyperNym, bool& found, bool trace)
 	string MBCSHyperNym;
 	wTM(hyperNym, MBCSHyperNym);
 	if (trace && sp)
-		lplog(LOG_WHERE, L"HYPERNYMS of %s:", word.c_str());
+		lplog(LOG_WHERE, u"HYPERNYMS of %s:", word.c_str());
 	return hasHyperNym(sp, MBCSHyperNym, found, trace);
 }
 
-// MBCS→wide then splitMultiWord(wstring).
-void splitMultiWord(string MBCSMultiWord, vector <wstring>& words)
+// MBCS→wide then splitMultiWord(lpwstring).
+void splitMultiWord(string MBCSMultiWord, vector <lpwstring>& words)
 {
 	LFS
-		wstring w;
+		lpwstring w;
 	splitMultiWord(mTW(MBCSMultiWord, w), words);
 }
 
 // Splits multiWord on space or '_' into words (clears words first). Consecutive separators skipped.
-void splitMultiWord(wstring multiWord, vector <wstring>& words)
+void splitMultiWord(lpwstring multiWord, vector <lpwstring>& words)
 {
 	LFS
 		words.clear();
-	wstring word;
+	lpwstring word;
 	for (unsigned I = 0; I < multiWord.length(); I++)
 		if (multiWord[I] == ' ' || multiWord[I] == '_')
 		{
@@ -896,7 +902,7 @@ static struct {
 // Appends WordNet coordinate (sister) terms of word in wnClass. preferredSense / ignoreSenses
 // filter which synsets are used. Writes the count after sense 0 into numFirstSense.
 // Returns true if idx was found (objects may be unchanged).
-bool addCoords(wchar_t* word, vector <tmWS >& objects, int wnClass, wchar_t* preferredSense, int& numFirstSense, set <string>& ignoreSenses, bool print)
+bool addCoords(lpchar_t* word, vector <tmWS >& objects, int wnClass, lpchar_t* preferredSense, int& numFirstSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
 		initWordNet();
@@ -907,7 +913,7 @@ bool addCoords(wchar_t* word, vector <tmWS >& objects, int wnClass, wchar_t* pre
 		wTM(preferredSense, MBCSPreferredSense);
 	int originalSize = objects.size();
 	numFirstSense = 0;
-	vector <wstring> words;
+	vector <lpwstring> words;
 	IndexPtr idx = index_lookup((char*)MBCSWord.c_str(), wnClass);
 	if (!idx) return false;
 	for (int sense = 0; sense < idx->off_cnt; sense++)
@@ -976,7 +982,7 @@ bool addCoords(wchar_t* word, vector <tmWS >& objects, int wnClass, wchar_t* pre
 }
 
 // Like addCoords but only the first sense, into a set. Writes the sense count into numSense.
-bool addOneSenseCoords(wchar_t* word, set < wstring >& objects, int wnClass, int& numSense)
+bool addOneSenseCoords(lpchar_t* word, set < lpwstring >& objects, int wnClass, int& numSense)
 {
 	LFS
 		initWordNet();
@@ -989,7 +995,7 @@ bool addOneSenseCoords(wchar_t* word, set < wstring >& objects, int wnClass, int
 	for (int sense = 0; sense < idx->off_cnt; sense++)
 	{
 		SynsetPtr synptr = read_synset(wnClass, idx->offset[sense], idx->wd);
-		wstring tw;
+		lpwstring tw;
 		for (int w = 0; w < synptr->wcount; w++)
 			if (strcmp(MBCSWord.c_str(), synptr->words[w]))
 				objects.insert(mTW(synptr->words[w], tw));
@@ -1021,7 +1027,7 @@ bool addOneSenseCoords(wchar_t* word, set < wstring >& objects, int wnClass, int
 void recurseHyponym(int index, int depth, vector <tmWS >& objects, char* preferredSense, bool& foundSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
-		vector <wstring> words;
+		vector <lpwstring> words;
 	SynsetPtr cursyn = read_synset(NOUN, index, "");
 	if (print && cursyn->wcount) printf("%*s==>", depth * 2, " ");
 	bool ignoreSense = false;
@@ -1040,7 +1046,7 @@ void recurseHyponym(int index, int depth, vector <tmWS >& objects, char* preferr
 		splitMultiWord(cursyn->words[w], words);
 		objects.push_back(words);
 	}
-	if (print && cursyn->wcount) wprintf(L"\n");
+	if (print && cursyn->wcount) lp_wprintf(u"\n");
 	if (ignoreSense) return;
 	for (int k = 0; k < cursyn->ptrcount; k++)
 		if (cursyn->ptrtyp[k] == HYPOPTR || cursyn->ptrtyp[k] == INSTANCES)
@@ -1049,7 +1055,7 @@ void recurseHyponym(int index, int depth, vector <tmWS >& objects, char* preferr
 
 // Collects hyponyms (and INSTANCES) of word as NOUN, optionally restricted to preferredSense.
 // Morphs if the surface form has no index. Returns true if any object was appended.
-bool addHyponyms(wchar_t* word, vector <tmWS >& objects, wchar_t* preferredSense, set <string>& ignoreSenses, bool print)
+bool addHyponyms(lpchar_t* word, vector <tmWS >& objects, lpchar_t* preferredSense, set <string>& ignoreSenses, bool print)
 {
 	LFS
 		initWordNet();
@@ -1057,7 +1063,7 @@ bool addHyponyms(wchar_t* word, vector <tmWS >& objects, wchar_t* preferredSense
 	wTM(word, MBCSWord);
 	if (preferredSense) wTM(preferredSense, MBCSPreferredSense);
 	int originalSize = objects.size();
-	vector <wstring> words;
+	vector <lpwstring> words;
 	IndexPtr idx = index_lookup((char*)MBCSWord.c_str(), NOUN);
 	if (!idx)
 	{
@@ -1111,11 +1117,11 @@ bool addHyponyms(wchar_t* word, vector <tmWS >& objects, wchar_t* preferredSense
 }
 
 // Unfiltered hyponym DFS: inserts every single-word hyponym lemma into objects.
-void recurseHyponym(int index, int depth, set <wstring>& objects, bool print)
+void recurseHyponym(int index, int depth, set <lpwstring>& objects, bool print)
 {
 	LFS
-		vector <wstring> words;
-	wstring tw;
+		vector <lpwstring> words;
+	lpwstring tw;
 	SynsetPtr cursyn = read_synset(NOUN, index, "");
 	if (print && cursyn->wcount) printf("%*s==>", depth * 2, " ");
 	for (int w = 0; w < cursyn->wcount; w++)
@@ -1128,14 +1134,14 @@ void recurseHyponym(int index, int depth, set <wstring>& objects, bool print)
 }
 
 // Unfiltered NOUN hyponym collection (morph fallback). Returns objects.size() > 0.
-bool addHyponyms(wchar_t* word, set <wstring>& objects, bool print)
+bool addHyponyms(lpchar_t* word, set <lpwstring>& objects, bool print)
 {
 	LFS
 		initWordNet();
 	string MBCSWord;
 	wTM(word, MBCSWord);
 	//int originalSize=objects.size();
-	vector <wstring> words;
+	vector <lpwstring> words;
 	IndexPtr idx = index_lookup((char*)MBCSWord.c_str(), NOUN);
 	if (!idx)
 	{
@@ -1149,7 +1155,7 @@ bool addHyponyms(wchar_t* word, set <wstring>& objects, bool print)
 	{
 		//bool foundSense=false;
 		SynsetPtr synptr = read_synset(NOUN, idx->offset[sense], idx->wd);
-		wstring stw;
+		lpwstring stw;
 		for (int w = 0; w < synptr->wcount; w++)
 		{
 			if (!strcmp(MBCSWord.c_str(), synptr->words[w]))
@@ -1172,11 +1178,11 @@ bool addHyponyms(wchar_t* word, set <wstring>& objects, bool print)
 
 // Picks the synonym of 'in' with the highest WordNet sense_cnt (memoized in mostCommonSynonymMap).
 // Fills out, synonyms, familiarity counts, and the live sp/index. Returns out.
-wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb,
-	SynsetPtr& sp, IndexPtr& index, unordered_set <wstring>& synonyms, int& initialFamiliarity, int& highestFamiliarity, sTrace& t)
+lpwstring getMostCommonSynonym(lpwstring in, lpwstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb,
+	SynsetPtr& sp, IndexPtr& index, unordered_set <lpwstring>& synonyms, int& initialFamiliarity, int& highestFamiliarity, sTrace& t)
 {
 	LFS
-		unordered_map <wstring, wstring>::iterator smi;
+		unordered_map <lpwstring, lpwstring>::iterator smi;
 	if ((smi = mostCommonSynonymMap.find(in)) == mostCommonSynonymMap.end())
 	{
 		initWordNet();
@@ -1218,26 +1224,26 @@ wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb,
 }
 
 // Convenience overload: stack temporaries for sp/index/synonyms/familiarity.
-wstring getMostCommonSynonym(wstring in, wstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb, sTrace& t)
+lpwstring getMostCommonSynonym(lpwstring in, lpwstring& out, bool isNoun, bool isVerb, bool isAdjective, bool isAdverb, sTrace& t)
 {
 	LFS
 		SynsetPtr sp;
 	IndexPtr index;
-	unordered_set <wstring> synonyms;
+	unordered_set <lpwstring> synonyms;
 	int initialFamiliarity;
 	int highestFamiliarity;
 	return getMostCommonSynonym(in, out, isNoun, isVerb, isAdjective, isAdverb, sp, index, synonyms, initialFamiliarity, highestFamiliarity, t);
 }
 
 // Returns the most familiar hypernym of 'in' (a "kind of" label) and its sense_cnt.
-wstring getIsKindOf(wstring in, int& highestFamiliarity)
+lpwstring getIsKindOf(lpwstring in, int& highestFamiliarity)
 {
 	LFS
 		initWordNet();
-	wstring out = in;
+	lpwstring out = in;
 	string inStr;
 	IndexPtr idx = index_lookup(wTM(in, inStr), NOUN);
-	if (!idx || idx->off_cnt > 1) return L"";
+	if (!idx || idx->off_cnt > 1) return u"";
 	//int initialFamiliarity=highestFamiliarity=idx->sense_cnt;
 	for (int sense = 0; sense < idx->off_cnt; sense++)
 	{
@@ -1274,13 +1280,13 @@ wstring getIsKindOf(wstring in, int& highestFamiliarity)
 
 // If 'in' ends with 'ending', replace that suffix with 'replace' and OR inflectionFlags
 // with the matching VERB_* bit. Returns true if a strip happened.
-bool stripEndingIfFound(wstring& in, const wchar_t* ending, const wchar_t* replace, int& inflectionFlags)
+bool stripEndingIfFound(lpwstring& in, const lpchar_t* ending, const lpchar_t* replace, int& inflectionFlags)
 {
 	LFS
-		if (in.length() > wcslen(ending) && !wcscmp(in.c_str() + in.length() - wcslen(ending), ending))
+		if (in.length() > lp_strlen(ending) && !lp_strcmp(in.c_str() + in.length() - lp_strlen(ending), ending))
 		{
-			wstring save = in;
-			save.erase(save.length() - wcslen(ending), wcslen(ending));
+			lpwstring save = in;
+			save.erase(save.length() - lp_strlen(ending), lp_strlen(ending));
 			save += replace;
 			tIWMM w = Words.query(save);
 			if (w != Words.end())
@@ -1295,23 +1301,23 @@ bool stripEndingIfFound(wstring& in, const wchar_t* ending, const wchar_t* repla
 
 // Morphs 'in' toward a WordNet lemma (strip -ing/-ed/-s etc.) and updates inflectionFlags.
 // lastNounNotFound / lastVerbNotFound suppress repeat logs for the same miss.
-void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags, bool isVerb, bool isNoun, wstring& lastNounNotFound, wstring& lastVerbNotFound)
+void deriveMainEntry(int where, int fromWhere, lpwstring& in, int& inflectionFlags, bool isVerb, bool isNoun, lpwstring& lastNounNotFound, lpwstring& lastVerbNotFound)
 {
 	LFS
 		if (isVerb && !(inflectionFlags & VERB_PRESENT_FIRST_SINGULAR))
 		{
 			if (in == lastVerbNotFound) return;
-			if (in == L"ishas" || in == L"wouldhad" || in == L"ishasdoes" || in == L"should") return;
+			if (in == u"ishas" || in == u"wouldhad" || in == u"ishasdoes" || in == u"should") return;
 			if (inflectionFlags & VERB_PRESENT_PARTICIPLE)
 			{
-				if (!stripEndingIfFound(in, L"ing", L"", inflectionFlags) && !stripEndingIfFound(in, L"ing", L"e", inflectionFlags) &&
-					!stripEndingIfFound(in, L"nning", L"n", inflectionFlags))
-					stripEndingIfFound(in, L"rring", L"r", inflectionFlags);
+				if (!stripEndingIfFound(in, u"ing", u"", inflectionFlags) && !stripEndingIfFound(in, u"ing", u"e", inflectionFlags) &&
+					!stripEndingIfFound(in, u"nning", u"n", inflectionFlags))
+					stripEndingIfFound(in, u"rring", u"r", inflectionFlags);
 			}
 			else if (inflectionFlags & VERB_PAST)
 			{
-				if (!stripEndingIfFound(in, L"ied", L"y", inflectionFlags) && !stripEndingIfFound(in, L"ed", L"", inflectionFlags))
-					stripEndingIfFound(in, L"ed", L"e", inflectionFlags);
+				if (!stripEndingIfFound(in, u"ied", u"y", inflectionFlags) && !stripEndingIfFound(in, u"ed", u"", inflectionFlags))
+					stripEndingIfFound(in, u"ed", u"e", inflectionFlags);
 			}
 			tIWMM me;
 			if ((inflectionFlags & VERB_INFLECTIONS_MASK) && (me = Words.gquery(in)->second.mainEntry) != wNULL &&
@@ -1322,11 +1328,11 @@ void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags
 			}
 			if ((inflectionFlags & VERB_INFLECTIONS_MASK) && !(inflectionFlags & VERB_PRESENT_FIRST_SINGULAR))
 			{
-				wstring sFlags;
+				lpwstring sFlags;
 				tIWMM meError = Words.gquery(in);
 				if (!(meError->second.flags & cSourceWordInfo::mainEntryErrorNoted))
-					lplog(LOG_DICTIONARY, L"%06d:%s irregular verb [mainEntry %s] (%s,%d).", where, in.c_str(),
-						(meError->second.mainEntry != wNULL) ? meError->second.mainEntry->first.c_str() : L"",
+					lplog(LOG_DICTIONARY, u"%06d:%s irregular verb [mainEntry %s] (%s,%d).", where, in.c_str(),
+						(meError->second.mainEntry != wNULL) ? meError->second.mainEntry->first.c_str() : u"",
 						inflectionFlagsToStr(inflectionFlags & VERB_INFLECTIONS_MASK, sFlags), fromWhere);
 				meError->second.flags |= cSourceWordInfo::mainEntryErrorNoted;
 				lastVerbNotFound = in;
@@ -1336,7 +1342,7 @@ void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags
 	{
 		if (in == lastNounNotFound) return;
 		if (inflectionFlags & PLURAL)
-			stripEndingIfFound(in, L"s", L"", inflectionFlags);
+			stripEndingIfFound(in, u"s", u"", inflectionFlags);
 		tIWMM me;
 		if (!(inflectionFlags & SINGULAR) && (inflectionFlags & NOUN_INFLECTIONS_MASK) && (me = Words.gquery(in)->second.mainEntry) != wNULL &&
 			me->first != in && (me->second.inflectionFlags & SINGULAR))
@@ -1346,10 +1352,10 @@ void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags
 		}
 		if (!(inflectionFlags & SINGULAR) && (inflectionFlags & NOUN_INFLECTIONS_MASK))
 		{
-			wstring sFlags;
-			if (in == L"many" || in == L"various") return;
-			lplog(LOG_DICTIONARY, L"%06d:%s irregular noun not found [mainEntry %s] (%s,%d).", where, in.c_str(),
-				(Words.gquery(in)->second.mainEntry != wNULL) ? Words.gquery(in)->second.mainEntry->first.c_str() : L"",
+			lpwstring sFlags;
+			if (in == u"many" || in == u"various") return;
+			lplog(LOG_DICTIONARY, u"%06d:%s irregular noun not found [mainEntry %s] (%s,%d).", where, in.c_str(),
+				(Words.gquery(in)->second.mainEntry != wNULL) ? Words.gquery(in)->second.mainEntry->first.c_str() : u"",
 				inflectionFlagsToStr(inflectionFlags & NOUN_INFLECTIONS_MASK, sFlags), fromWhere);
 			lastNounNotFound = in;
 		}
@@ -1358,19 +1364,19 @@ void deriveMainEntry(int where, int fromWhere, wstring& in, int& inflectionFlags
 
 // Among coordinate terms in objects, finds the most familiar one that is in vbNetVerbToClassMap
 // and copies that class set onto original. Sets proposedSubstitution / oneSenseVbNetClassFound.
-void scanCoordObjects(wstring& original, wstring& cdstr, set <wstring>& objects, int wnClass, int& highestCoordFamiliarity, wstring& coordFamiliarity, bool& proposedSubstitution, bool& oneSenseVbNetClassFound)
+void scanCoordObjects(lpwstring& original, lpwstring& cdstr, set <lpwstring>& objects, int wnClass, int& highestCoordFamiliarity, lpwstring& coordFamiliarity, bool& proposedSubstitution, bool& oneSenseVbNetClassFound)
 {
 	LFS
-		wstring tmp;
-	unordered_map <wstring, set<int> >::iterator inlvtoCi = vbNetVerbToClassMap.end();
-	for (set <wstring>::iterator oi = objects.begin(), oiEnd = objects.end(); oi != oiEnd; oi++)
+		lpwstring tmp;
+	unordered_map <lpwstring, set<int> >::iterator inlvtoCi = vbNetVerbToClassMap.end();
+	for (set <lpwstring>::iterator oi = objects.begin(), oiEnd = objects.end(); oi != oiEnd; oi++)
 	{
 		cdstr += *oi;
 		string oiStr;
 		IndexPtr index = index_lookup(wTM(*oi, oiStr), wnClass);
 		if (index)
 		{
-			cdstr += L"[" + itos(index->sense_cnt, tmp) + L"]";
+			cdstr += u"[" + itos(index->sense_cnt, tmp) + u"]";
 			if (index->sense_cnt > highestCoordFamiliarity)
 			{
 				highestCoordFamiliarity = index->sense_cnt;
@@ -1383,11 +1389,11 @@ void scanCoordObjects(wstring& original, wstring& cdstr, set <wstring>& objects,
 				if (inlvtoCi != vbNetVerbToClassMap.end())
 				{
 					vbNetVerbToClassMap[original].insert(inlvtoCi->second.begin(), inlvtoCi->second.end());
-					// lplog(LOG_TIME,L"mapped %s",original.c_str());
+					// lplog(LOG_TIME,u"mapped %s",original.c_str());
 				}
 			}
 		}
-		cdstr += L"|";
+		cdstr += u"|";
 	}
 	if (cdstr.length())
 		cdstr.erase(cdstr.length() - 1);
@@ -1404,15 +1410,15 @@ bool inEveryGroup(string word, vector < set <string> >& objects)
 }
 
 // Loads CACHEDIR\\wordNetCache\\<in> (renames "con" → "_con_"). Returns false if missing.
-bool readHyperNymCache(wstring& in, vector < set <string> >& objects)
+bool readHyperNymCache(lpwstring& in, vector < set <string> >& objects)
 {
 	LFS
-		if (in == L"con") in = L"_con_"; // prevent Windows redirection
-	wstring path = wstring(CACHEDIR) + L"\\wordNetCache\\" + in;
-	IOHANDLE fd = _wopen(path.c_str(), O_RDWR | O_BINARY);
+		if (in == u"con") in = u"_con_"; // prevent Windows redirection
+	lpwstring path = lpwstring(CACHEDIR) + u"\\wordNetCache\\" + in;
+	IOHANDLE fd = lp_wopen(path.c_str(), O_RDWR | O_BINARY);
 	if (fd < 0) return false;
 	void* buffer;
-	int bufferlen = filelength(fd);
+	int bufferlen = lp_filelength(fd);
 	buffer = (void*)tmalloc(bufferlen + 10);
 	::read(fd, buffer, bufferlen);
 	close(fd);
@@ -1422,7 +1428,7 @@ bool readHyperNymCache(wstring& in, vector < set <string> >& objects)
 	{
 		set <string> tobjects;
 		if (!copy(tobjects, buffer, where, bufferlen))
-			::lplog(LOG_FATAL_ERROR, L"Buffer overrun encountered in read buffer at location %d (limit=%d).", where, bufferlen);
+			::lplog(LOG_FATAL_ERROR, u"Buffer overrun encountered in read buffer at location %d (limit=%d).", where, bufferlen);
 		objects.push_back(tobjects);
 	}
 	tfree(bufferlen, buffer);
@@ -1430,15 +1436,15 @@ bool readHyperNymCache(wstring& in, vector < set <string> >& objects)
 }
 
 // Loads CACHEDIR\\wordNetCache\\orderedHyperNyms_<in> into objects.
-bool readHyperNymCache(wstring& in, vector < vector <string> >& objects)
+bool readHyperNymCache(lpwstring& in, vector < vector <string> >& objects)
 {
 	LFS
-		if (in == L"con") in = L"_con_"; // prevent Windows redirection
-	wstring path = wstring(CACHEDIR) + L"\\wordNetCache\\orderedHyperNyms_" + in;
-	IOHANDLE fd = _wopen(path.c_str(), O_RDWR | O_BINARY);
+		if (in == u"con") in = u"_con_"; // prevent Windows redirection
+	lpwstring path = lpwstring(CACHEDIR) + u"\\wordNetCache\\orderedHyperNyms_" + in;
+	IOHANDLE fd = lp_wopen(path.c_str(), O_RDWR | O_BINARY);
 	if (fd < 0) return false;
 	void* buffer;
-	int bufferlen = filelength(fd);
+	int bufferlen = lp_filelength(fd);
 	buffer = (void*)tmalloc(bufferlen + 10);
 	::read(fd, buffer, bufferlen);
 	close(fd);
@@ -1449,7 +1455,7 @@ bool readHyperNymCache(wstring& in, vector < vector <string> >& objects)
 	{
 		vector <string> tobjects;
 		if (!copy(tobjects, buffer, where, bufferlen))
-			::lplog(LOG_FATAL_ERROR, L"Buffer overrun encountered in read buffer at location %d (limit=%d).", where, bufferlen);
+			::lplog(LOG_FATAL_ERROR, u"Buffer overrun encountered in read buffer at location %d (limit=%d).", where, bufferlen);
 		objects.push_back(tobjects);
 	}
 	tfree(bufferlen, buffer);
@@ -1458,12 +1464,12 @@ bool readHyperNymCache(wstring& in, vector < vector <string> >& objects)
 
 // Writes objects to wordNetCache\\<in>. Returns false if open/copy fails (fd leaked on copy fail).
 #define MAX_BUF 102400
-bool writeHyperNymCache(wstring& in, vector < set <string> >& objects)
+bool writeHyperNymCache(lpwstring& in, vector < set <string> >& objects)
 {
 	LFS
-		if (in == L"con") in = L"_con_"; // prevent Windows redirection
-	wstring path = wstring(CACHEDIR) + L"\\wordNetCache\\" + in;
-	int fd = _wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE), where = 0;
+		if (in == u"con") in = u"_con_"; // prevent Windows redirection
+	lpwstring path = lpwstring(CACHEDIR) + u"\\wordNetCache\\" + in;
+	int fd = lp_wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE), where = 0;
 	if (fd < 0) return false;
 	char buffer[MAX_BUF];
 	if (!copy(buffer, (int)objects.size(), where, MAX_BUF)) return false;
@@ -1471,7 +1477,7 @@ bool writeHyperNymCache(wstring& in, vector < set <string> >& objects)
 		if (!copy(buffer, objects[I], where, MAX_BUF)) return false;
 	if (write(fd, buffer, where) < 0)
 	{
-		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		lplog(LOG_FATAL_ERROR, u"Cannot write rdfTypes dbPediaCache - %S.", strerror(errno));
 		return false;
 	}
 	close(fd);
@@ -1479,12 +1485,12 @@ bool writeHyperNymCache(wstring& in, vector < set <string> >& objects)
 }
 
 // Writes ordered hypernyms to wordNetCache\\orderedHyperNyms_<in>. Same leak-on-copy-fail as the set version.
-bool writeHyperNymCache(wstring& in, vector < vector <string> >& objects)
+bool writeHyperNymCache(lpwstring& in, vector < vector <string> >& objects)
 {
 	LFS
-		if (in == L"con") in = L"_con_"; // prevent Windows redirection
-	wstring path = wstring(CACHEDIR) + L"\\wordNetCache\\orderedHyperNyms_" + in;
-	int fd = _wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE), where = 0;
+		if (in == u"con") in = u"_con_"; // prevent Windows redirection
+	lpwstring path = lpwstring(CACHEDIR) + u"\\wordNetCache\\orderedHyperNyms_" + in;
+	int fd = lp_wopen(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, _S_IREAD | _S_IWRITE), where = 0;
 	if (fd < 0) return false;
 	char buffer[MAX_BUF];
 	if (!copy(buffer, (int)objects.size(), where, MAX_BUF)) return false;
@@ -1492,22 +1498,22 @@ bool writeHyperNymCache(wstring& in, vector < vector <string> >& objects)
 		if (!copy(buffer, objects[I], where, MAX_BUF)) return false;
 	if (write(fd, buffer, where) < 0)
 	{
-		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		lplog(LOG_FATAL_ERROR, u"Cannot write rdfTypes dbPediaCache - %S.", strerror(errno));
 		return false;
 	}
 	close(fd);
 	return true;
 }
 
-// L"communication" includes such things as screaming, etc.
-// L"measure" includes milkshake and other things which are measured
-// L"attribute" includes all diseases
-// L"relation" includes all familial relations (husband)
-// L"group" includes all groups like bikers, rockers, skinheads
-// L"set" includes tormentor and radio
+// u"communication" includes such things as screaming, etc.
+// u"measure" includes milkshake and other things which are measured
+// u"attribute" includes all diseases
+// u"relation" includes all familial relations (husband)
+// u"group" includes all groups like bikers, rockers, skinheads
+// u"set" includes tormentor and radio
 // Walks hypernyms of 'in' to set measurableObject / notMeasurableObject / grouping
 // (physical object vs. abstraction vs. collection). Updates last*NotFound for log suppression.
-void analyzeNounClass(int where, int fromWhere, wstring in, int inflectionFlags, bool& measurableObject, bool& notMeasurableObject, bool& grouping, sTrace& t, wstring& lastNounNotFound, wstring& lastVerbNotFound)
+void analyzeNounClass(int where, int fromWhere, lpwstring in, int inflectionFlags, bool& measurableObject, bool& notMeasurableObject, bool& grouping, sTrace& t, lpwstring& lastNounNotFound, lpwstring& lastVerbNotFound)
 {
 	LFS
 		initWordNet();
@@ -1538,15 +1544,15 @@ void analyzeNounClass(int where, int fromWhere, wstring in, int inflectionFlags,
 			measurableObject = false;
 			notMeasurableObject = true;
 			if (t.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, L"mcs %s: physical=%s notPhysical=%s",
-					in.c_str(), (measurableObject) ? L"true" : L"false", (notMeasurableObject) ? L"true" : L"false");
+				lplog(LOG_RESOLUTION, u"mcs %s: physical=%s notPhysical=%s",
+					in.c_str(), (measurableObject) ? u"true" : u"false", (notMeasurableObject) ? u"true" : u"false");
 		}
 	}
 	grouping = inEveryGroup("grouping", objects);
 	/*
 		int initialFamiliarity=-1,highestFamiliarity=-1,numSense=0,wnClass=VERB;
-		wstring synonym,cdstr,coordFamiliarity,tmp;
-		set <wstring> synonyms,objects;
+		lpwstring synonym,cdstr,coordFamiliarity,tmp;
+		set <lpwstring> synonyms,objects;
 		SynsetPtr sp=NULL;
 		if (index)
 		{
@@ -1557,22 +1563,22 @@ void analyzeNounClass(int where, int fromWhere, wstring in, int inflectionFlags,
 		if (synonyms.size())
 		{
 			int kindFamiliarity;
-			wstring kindOf=getIsKindOf(in,kindFamiliarity);
+			lpwstring kindOf=getIsKindOf(in,kindFamiliarity);
 			if (kindFamiliarity>highestFamiliarity)
 			{
 				synonym=kindOf;
 				highestFamiliarity=kindFamiliarity;
-				//lplog(LOG_RESOLUTION,L"%s is a kind of %s.",in.c_str(),synonym.c_str());
+				//lplog(LOG_RESOLUTION,u"%s is a kind of %s.",in.c_str(),synonym.c_str());
 			}
 		}
 	*/
 	if (!measurableObject && !notMeasurableObject && t.traceSpeakerResolution)
-		lplog(LOG_WORDNET, L"%d:mcs %s: physical=%s notPhysical=%s", where,
-			in.c_str(), (measurableObject) ? L"true" : L"false", (notMeasurableObject) ? L"true" : L"false");
+		lplog(LOG_WORDNET, u"%d:mcs %s: physical=%s notPhysical=%s", where,
+			in.c_str(), (measurableObject) ? u"true" : u"false", (notMeasurableObject) ? u"true" : u"false");
 }
 
 // Fills kindOfObjects from cache or initHyperNym+getHyperNyms (then writes the cache).
-void getAllHyperNyms(wstring in, vector < set <string> >& kindOfObjects)
+void getAllHyperNyms(lpwstring in, vector < set <string> >& kindOfObjects)
 {
 	LFS
 		initWordNet();
@@ -1586,23 +1592,30 @@ void getAllHyperNyms(wstring in, vector < set <string> >& kindOfObjects)
 }
 
 // Ordered-chain cousin of getAllHyperNyms (memory map + disk cache keyed orderedHyperNyms_*).
-void getAllOrderedHyperNyms(wstring in, vector < vector <string> >& kindOfObjects)
+void getAllOrderedHyperNyms(lpwstring in, vector < vector <string> >& kindOfObjects)
 {
 	LFS
 		if (cacheOrderedHyperNyms)
 		{
-			AcquireSRWLockShared(&orderedHyperNymsMapSRWLock);
-			unordered_map<wstring, int >::iterator ohnmi;
+			// Batch B3: EXCLUSIVE, where the Win32 original took this lock SHARED --
+			// a pre-existing bug, not a porting choice. Both branches below write:
+			// the miss path inserts into orderedHyperNymsNumMap (which can rehash
+			// the whole table) and the hit path increments a counter in it. A shared
+			// lock let those writes run concurrently with each other, so porting it
+			// as a shared_lock would have carried a real data race forward. The
+			// structurally identical cache in createOntology.cpp's
+			// getRDFTypesMaster() already took its lock exclusively and even
+			// documents why; this is now consistent with it.
+			std::unique_lock<std::shared_mutex> orderedHyperNymsLock(orderedHyperNymsMapSRWLock);
+			unordered_map<lpwstring, int >::iterator ohnmi;
 			if ((ohnmi = orderedHyperNymsNumMap.find(in)) == orderedHyperNymsNumMap.end())
 				orderedHyperNymsNumMap[in] = 1;
 			else
 			{
 				(*ohnmi).second++;
 				kindOfObjects = orderedHyperNymsMap[in];
-				ReleaseSRWLockShared(&orderedHyperNymsMapSRWLock);
 				return;
 			}
-			ReleaseSRWLockShared(&orderedHyperNymsMapSRWLock);
 		}
 	initWordNet();
 	if (!readHyperNymCache(in, kindOfObjects))
@@ -1614,14 +1627,13 @@ void getAllOrderedHyperNyms(wstring in, vector < vector <string> >& kindOfObject
 	}
 	if (cacheOrderedHyperNyms)
 	{
-		AcquireSRWLockExclusive(&orderedHyperNymsMapSRWLock);
+		std::unique_lock<std::shared_mutex> orderedHyperNymsLock(orderedHyperNymsMapSRWLock);
 		orderedHyperNymsMap[in] = kindOfObjects;
-		ReleaseSRWLockExclusive(&orderedHyperNymsMapSRWLock);
 	}
 }
 
 // True if any hypernym set of 'in' contains 'group' (after deriveMainEntry).
-bool inWordNetClass(int where, wstring in, int inflectionFlags, string group, wstring& lastNounNotFound, wstring& lastVerbNotFound)
+bool inWordNetClass(int where, lpwstring in, int inflectionFlags, string group, lpwstring& lastNounNotFound, lpwstring& lastVerbNotFound)
 {
 	LFS
 		initWordNet();
@@ -1637,16 +1649,16 @@ bool inWordNetClass(int where, wstring in, int inflectionFlags, string group, ws
 // Maps verb 'in' onto vbNetVerbToClassMap via lemma / most-common synonym / coordinate
 // terms. Increments numIrregular when an inflected form cannot be classed. Writes a
 // proposedSubstitute if a more familiar synonym was used.
-void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int& numIrregular, int inflectionFlags, sTrace& t, wstring& lastNounNotFound, wstring& lastVerbNotFound)
+void analyzeVerbNetClass(int where, lpwstring in, lpwstring& proposedSubstitute, int& numIrregular, int inflectionFlags, sTrace& t, lpwstring& lastNounNotFound, lpwstring& lastVerbNotFound)
 {
 	LFS
 		initWordNet();
 	deriveMainEntry(where, 37, in, inflectionFlags, true, false, lastNounNotFound, lastVerbNotFound);
 	SynsetPtr sp = NULL;
-	unordered_set <wstring> synonyms;
-	set <wstring> objects;
+	unordered_set <lpwstring> synonyms;
+	set <lpwstring> objects;
 	int initialFamiliarity = -1, highestFamiliarity = -1, numSense = 0, wnClass = VERB;
-	wstring synonym, cdstr, coordFamiliarity, tmp;
+	lpwstring synonym, cdstr, coordFamiliarity, tmp;
 	string inStr;
 	IndexPtr index = index_lookup(wTM(in, inStr), wnClass);
 	if (index)
@@ -1654,7 +1666,7 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 		initialFamiliarity = highestFamiliarity = index->sense_cnt;
 		numSense = index->off_cnt;
 	}
-	unordered_map <wstring, set<int> >::iterator inlvtoCi = vbNetVerbToClassMap.find(in);
+	unordered_map <lpwstring, set<int> >::iterator inlvtoCi = vbNetVerbToClassMap.find(in);
 	if (inlvtoCi != vbNetVerbToClassMap.end())
 	{
 		numVbNetClassFound++;
@@ -1672,7 +1684,7 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 				if (inlvtoCi != vbNetVerbToClassMap.end())
 				{
 					vbNetVerbToClassMap[in].insert(inlvtoCi->second.begin(), inlvtoCi->second.end());
-					//lplog(LOG_TIME,L"mapped %s (2)",in.c_str());
+					//lplog(LOG_TIME,u"mapped %s (2)",in.c_str());
 				}
 			}
 			if (!oneSenseVbNetClassFound)
@@ -1682,15 +1694,15 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 						oneSenseVbNetClassFound = true;
 						synonym = *si;
 						vbNetVerbToClassMap[in].insert(inlvtoCi->second.begin(), inlvtoCi->second.end());
-						//lplog(LOG_TIME,L"mapped %s (5)",in.c_str());
+						//lplog(LOG_TIME,u"mapped %s (5)",in.c_str());
 					}
 			if (!oneSenseVbNetClassFound)
 			{
-				addOneSenseCoords((wchar_t*)in.c_str(), objects, wnClass, numSense);
+				addOneSenseCoords((lpchar_t*)in.c_str(), objects, wnClass, numSense);
 				scanCoordObjects(in, cdstr, objects, wnClass, highestCoordFamiliarity, coordFamiliarity, proposedSubstitution, oneSenseVbNetClassFound);
 			}
 		}
-		vector <wstring> multiSenseMatchingSynonyms;
+		vector <lpwstring> multiSenseMatchingSynonyms;
 		if (numSense > 1)
 		{
 			if (synonym != in)
@@ -1699,14 +1711,14 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 				if (inlvtoCi != vbNetVerbToClassMap.end())
 				{
 					vbNetVerbToClassMap[in].insert(inlvtoCi->second.begin(), inlvtoCi->second.end());
-					//lplog(LOG_TIME,L"mapped %s (3)",in.c_str());
+					//lplog(LOG_TIME,u"mapped %s (3)",in.c_str());
 				}
 			}
 			if (!multiSenseVbNetClassFound)
 			{
 				if (synonyms.empty())
 				{
-					addOneSenseCoords((wchar_t*)in.c_str(), objects, wnClass, numSense);
+					addOneSenseCoords((lpchar_t*)in.c_str(), objects, wnClass, numSense);
 					scanCoordObjects(in, cdstr, objects, wnClass, highestCoordFamiliarity, coordFamiliarity, proposedSubstitution, multiSenseVbNetClassFound);
 				}
 				else
@@ -1715,7 +1727,7 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 						{
 							multiSenseMatchingSynonyms.push_back(*si);
 							vbNetVerbToClassMap[in].insert(inlvtoCi->second.begin(), inlvtoCi->second.end());
-							//lplog(LOG_TIME,L"mapped %s (4)",in.c_str());
+							//lplog(LOG_TIME,u"mapped %s (4)",in.c_str());
 							multiSenseVbNetClassFound = true;
 						}
 			}
@@ -1723,25 +1735,25 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 				multiSenseMatchingSynonyms.push_back(synonym);
 		}
 		proposedSubstitution = synonym != in;
-		wstring inName, outName;
+		lpwstring inName, outName;
 		if (oneSenseVbNetClassFound)
 			numOneSenseVbNetClassFound++;
 		if (multiSenseVbNetClassFound)
 			numMultiSenseVbNetClassFound++;
 		if (!oneSenseVbNetClassFound && !multiSenseVbNetClassFound)
 		{
-			wstring sFlags, multiSenseSynonym;
+			lpwstring sFlags, multiSenseSynonym;
 			inflectionFlagsToStr(inflectionFlags & VERB_INFLECTIONS_MASK, sFlags);
 			for (auto si = synonyms.begin(), siEnd = synonyms.end(); si != siEnd; si++)
-				multiSenseSynonym += L" " + *si;
+				multiSenseSynonym += u" " + *si;
 			if (t.traceSpeakerResolution)
 			{
 				if (inflectionFlags & VERB_PRESENT_FIRST_SINGULAR)
-					lplog(LOG_WORDNET, L"%d:%s vbNet class not found [mainEntry %s] %s - %s.", 1 + numVbNetClassMultiSenseNotFound++, in.c_str(),
-						(Words.gquery(in)->second.mainEntry != wNULL) ? Words.gquery(in)->second.mainEntry->first.c_str() : L"",
-						((inflectionFlags & VERB_INFLECTIONS_MASK) == VERB_PRESENT_FIRST_SINGULAR) ? L"" : sFlags.c_str(), multiSenseSynonym.c_str());
+					lplog(LOG_WORDNET, u"%d:%s vbNet class not found [mainEntry %s] %s - %s.", 1 + numVbNetClassMultiSenseNotFound++, in.c_str(),
+						(Words.gquery(in)->second.mainEntry != wNULL) ? Words.gquery(in)->second.mainEntry->first.c_str() : u"",
+						((inflectionFlags & VERB_INFLECTIONS_MASK) == VERB_PRESENT_FIRST_SINGULAR) ? u"" : sFlags.c_str(), multiSenseSynonym.c_str());
 				else
-					lplog(LOG_WORDNET, L"%d:%s irregular class not found", 1 + numIrregular++, in.c_str());
+					lplog(LOG_WORDNET, u"%d:%s irregular class not found", 1 + numIrregular++, in.c_str());
 			}
 		}
 	}
@@ -1757,12 +1769,12 @@ void analyzeVerbNetClass(int where, wstring in, wstring& proposedSubstitute, int
 int cSource::initializeNounVerbMapping(void)
 {
 	LFS
-		const wchar_t* path = L"source\\lists\\nounVerbMapping";
+		const lpchar_t* path = u"source\\lists\\nounVerbMapping";
 	initWordNet();
-	int nvfd = _wopen(path, O_RDWR | O_BINARY);
+	int nvfd = lp_wopen(path, O_RDWR | O_BINARY);
 	if (nvfd >= 0)
 	{
-		int bufferlen = filelength(nvfd), where = 0;
+		int bufferlen = lp_filelength(nvfd), where = 0;
 		void* buffer = (void*)tmalloc(bufferlen + 10);
 		::read(nvfd, buffer, bufferlen);
 		close(nvfd);
@@ -1770,8 +1782,8 @@ int cSource::initializeNounVerbMapping(void)
 		if (!copy(numMappings, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 		for (int I = 0; I < numMappings; I++)
 		{
-			wstring noun;
-			set <wstring> verbs;
+			lpwstring noun;
+			set <lpwstring> verbs;
 			if (!copy(noun, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 			if (!copy(verbs, buffer, where, bufferlen)) { tfree(bufferlen + 10, buffer); return -1; }
 			nounVerbMap[noun] = verbs;
@@ -1779,7 +1791,7 @@ int cSource::initializeNounVerbMapping(void)
 		tfree(bufferlen + 10, buffer);
 		return 0;
 	}
-	int readWikiNominalizations(MYSQL & mysql, unordered_map <wstring, set < wstring > > &agentiveNominalizations);
+	int readWikiNominalizations(MYSQL & mysql, unordered_map <lpwstring, set < lpwstring > > &agentiveNominalizations);
 	readWikiNominalizations(mysql, nounVerbMap);
 
 	char noun[1024];
@@ -1796,7 +1808,7 @@ int cSource::initializeNounVerbMapping(void)
 			senseOffsets[i] = 0;
 
 		char* cnoun = noun;
-		set <wstring> verbs;
+		set <lpwstring> verbs;
 		while ((idx = getindex(cnoun, NOUN)) != NULL)
 		{
 			cnoun = NULL;
@@ -1819,7 +1831,7 @@ int cSource::initializeNounVerbMapping(void)
 						if ((cursyn->ptrtyp[i] == DERIVATION) && (cursyn->pfrm[i] == cursyn->whichword) && cursyn->ppos[i] == VERB)
 						{
 							SynsetPtr cursyn2 = read_synset(cursyn->ppos[i], cursyn->ptroff[i], "");
-							wstring tsynw;
+							lpwstring tsynw;
 							verbs.insert(mTW(cursyn2->words[cursyn->pto[i] - 1], tsynw));
 							free_synset(cursyn2);
 						}
@@ -1831,22 +1843,22 @@ int cSource::initializeNounVerbMapping(void)
 		} /* end while (idx) */
 		if (!verbs.empty())
 		{
-			wstring wnoun;
+			lpwstring wnoun;
 			mTW(noun, wnoun);
 			nounVerbMap[wnoun] = verbs;
 		}
 	}
 	fclose(nounfp);
 	int where = 0, nounVerbMapSize = nounVerbMap.size();
-	nvfd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
+	nvfd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
 	if (nvfd < 0)
 	{
-		lplog(LOG_ERROR, L"ERROR:Unable to open %s - %S. (1)", path, _sys_errlist[errno]);
+		lplog(LOG_ERROR, u"ERROR:Unable to open %s - %S. (1)", path, strerror(errno));
 		return false;
 	}
 	char buffer[MAX_BUF];
 	if (!copy(buffer, nounVerbMapSize, where, MAX_BUF)) return false;
-	for (unordered_map <wstring, set < wstring > >::iterator nvi = nounVerbMap.begin(), nviEnd = nounVerbMap.end(); nvi != nviEnd; nvi++)
+	for (unordered_map <lpwstring, set < lpwstring > >::iterator nvi = nounVerbMap.begin(), nviEnd = nounVerbMap.end(); nvi != nviEnd; nvi++)
 	{
 		if (!copy(buffer, nvi->first, where, MAX_BUF)) return -1;
 		if (!copy(buffer, nvi->second, where, MAX_BUF)) return -1;
@@ -1858,7 +1870,7 @@ int cSource::initializeNounVerbMapping(void)
 	}
 	if (where && ::write(nvfd, buffer, where) < 0)
 	{
-		lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
+		lplog(LOG_FATAL_ERROR, u"Cannot write rdfTypes dbPediaCache - %S.", strerror(errno));
 		return -1;
 	}
 	close(nvfd);

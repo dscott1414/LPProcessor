@@ -1,5 +1,5 @@
 /*
-	Internet.cpp - WinINet HTTP GET, cache-aside web fetch, and Jericho HTML-to-text spawn
+	Internet.cpp - libcurl HTTP GET, cache-aside web fetch, and Jericho HTML-to-text spawn
 
 	Overview:
 		The only first-party HTTP client.  LPInternetOpen() creates one process-wide
@@ -29,10 +29,10 @@
 			loop after a 30s sleep instead of recursing into readPage with no depth
 			cap; a Virtuoso outage now gives up after the normal retry budget instead
 			of retrying forever / risking a stack overflow.
-		- cacheWebPath writes wchar_t as binary (UTF-16) and reads it back as
-			wchar_t*.  getWebPath in the `clean` path writes UTF-8, then
-			assigns the file bytes to a wstring as wchar_t* - encoding mismatch.
-		- getWebPath now truncates path (a MAX_LEN==2048 wchar_t buffer) at
+		- cacheWebPath writes lpchar_t as binary (UTF-16) and reads it back as
+			lpchar_t*.  getWebPath in the `clean` path writes UTF-8, then
+			assigns the file bytes to a lpwstring as lpchar_t* - encoding mismatch.
+		- getWebPath now truncates path (a MAX_LEN==2048 lpchar_t buffer) at
 			MAX_LEN-20, matching cacheWebPath; it used to truncate at MAX_PATH-20
 			(240), so two distinct long URLs whose first 240 chars matched
 			collided on the same cache file.  The #ifdef TEST_CODE testWebPath
@@ -53,17 +53,20 @@
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4996)
 
+// Batch B5: the Win32-only includes that used to head this file (windows.h and
+// friends) are gone; these are what the code below actually needs on macOS.
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <errno.h>
-#include <windows.h>
-#include "WinInet.h"
-#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
-#include <io.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include "errno.h"
-#include <direct.h>
 #include <sstream>
 #include <iostream>
 #include <vector>
@@ -77,117 +80,77 @@
 using namespace std;
 
 #include <stdio.h>
+#include <curl/curl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <thread>
+#include <chrono>
 #include "internet.h"
+#include "lpProcess.h"
+extern "C" char** environ;
+#include "utfConvert.h"
 #include "logging.h"
 #include "profile.h"
 #include "mysql.h"
 #include "mysqldb.h"
 #include "general.h"
 
-const wchar_t* getLastErrorMessage(wstring& out);
-void* cInternet::hINet;
+const lpchar_t* getLastErrorMessage(lpwstring& out);
+void* cInternet::curlHandle;
 int cInternet::bandwidthControl;
-struct _RTL_SRWLOCK cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
-wstring cInternet::redirectUrl;
+std::shared_mutex cInternet::totalInternetTimeWaitBandwidthControlSRWLock;
+lpwstring cInternet::redirectUrl;
 
 // GET 'str' into buffer (headers unused).  Returns 0 or a negative
 // INTERNET_* / GETWEBPATH_* code.
-int cInternet::readPage(const wchar_t* str, wstring& buffer)
+int cInternet::readPage(const lpchar_t* str, lpwstring& buffer)
 {
 	LFS
-		wstring headers;
+		lpwstring headers;
 	return readPage(str, buffer, headers);
 }
 
-// Query INTERNET_OPTION `option` and, if it is not already `value`, set it.
-// global==true uses NULL (process default); false uses hINet.  Always
-// returns true; failures are only logged.
-bool cInternet::InetOption(bool global, int option, const wchar_t* description, unsigned long value)
+// Batch B9: libcurl write callbacks. The first accumulates the body into a
+// std::string (readPage); the second writes it straight to an fd (readBinaryPage).
+// Both follow libcurl's contract: return the number of bytes consumed, and
+// returning anything else aborts the transfer.
+static size_t appendToStringCallback(char* data, size_t size, size_t nmemb, void* userp)
 {
-	LFS
-		HINTERNET hI = (global) ? 0 : hINet;
-	unsigned long qValue = value;
-	DWORD len = sizeof(qValue);
-	wstring inett;
-	if (!InternetQueryOption(hI, option, &qValue, &len))
-		lplog(LOG_ERROR, L"ERROR:InternetQueryOption of (%s) Failed - %s", description, getLastErrorMessage(inett));
-	if (value != qValue)
-	{
-		lplog(LOG_INFO, L"%s set to %d from %d.", description, value, qValue);
-		qValue = value;
-		if (!InternetSetOption(hI, option, &qValue, sizeof(qValue)))
-			lplog(LOG_ERROR, L"ERROR:InternetSetOption of (%s) Failed - %s", description, getLastErrorMessage(inett));
-	}
-	return true;
+	size_t total = size * nmemb;
+	static_cast<std::string*>(userp)->append(data, total);
+	return total;
 }
 
-// WinINet status callback.  The only live arm records INTERNET_STATUS_REDIRECT
-// into the process-wide redirectUrl (and optionally logs it).
-void cInternet::InternetStatusCallback(
-	HINTERNET, // hInternet
-	DWORD_PTR, // dwContext
-	DWORD dwInternetStatus,
-	LPVOID lpvStatusInformation,
-	DWORD // dwStatusInformationLength
-)
+struct sBinarySink { int fd; int* total; bool failed; };
+static size_t writeToFdCallback(char* data, size_t size, size_t nmemb, void* userp)
 {
-	switch (dwInternetStatus)
+	size_t total = size * nmemb;
+	sBinarySink* sink = static_cast<sBinarySink*>(userp);
+	if (::write(sink->fd, data, total) != (ssize_t)total)
 	{
-		//case INTERNET_STATUS_CLOSING_CONNECTION:
-		//	lplog(LOG_INFO, L"status:%s", L"Closing the connection to the server."); break;
-		//case INTERNET_STATUS_CONNECTED_TO_SERVER:
-		//	lplog(LOG_INFO, L"Successfully connected to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
-		//case INTERNET_STATUS_CONNECTING_TO_SERVER:
-		//	lplog(LOG_INFO, L"Connecting to the socket address(SOCKADDR) pointed to by lpvStatusInformation."); break;
-		//case INTERNET_STATUS_CONNECTION_CLOSED:
-		//	lplog(LOG_INFO, L"Successfully closed the connection to the server."); break;
-		//case INTERNET_STATUS_COOKIE_HISTORY:
-		//	lplog(LOG_INFO, L"Retrieving content from the cache.Contains data about past cookie events for the URL such as if cookies were accepted, rejected, downgraded, or leashed."); break;
-		//case INTERNET_STATUS_COOKIE_RECEIVED:
-		//	lplog(LOG_INFO, L"Indicates the number of cookies that were accepted, rejected, downgraded(changed from persistent to session cookies), or leashed(will be sent out only in 1st party context).The lpvStatusInformation parameter is a DWORD with the number of cookies received."); break;
-		//case INTERNET_STATUS_COOKIE_SENT:
-		//	lplog(LOG_INFO, L"Indicates the number of cookies that were either sent or suppressed, when a request is sent.The lpvStatusInformation parameter is a DWORD with the number of cookies sent or suppressed."); break;
-		//case INTERNET_STATUS_CTL_RESPONSE_RECEIVED:
-		//	lplog(LOG_INFO, L"Not implemented."); break;
-		//case INTERNET_STATUS_DETECTING_PROXY:
-		//	lplog(LOG_INFO, L"Notifies the client application that a proxy has been detected."); break;
-		//case INTERNET_STATUS_HANDLE_CLOSING:
-		//	lplog(LOG_INFO, L"This handle value has been terminated.pvStatusInformation contains the address of the handle being closed.The lpvStatusInformation parameter contains the address of the handle being closed."); break;
-		//case INTERNET_STATUS_HANDLE_CREATED:
-		//	lplog(LOG_INFO, L"Used by InternetConnect to indicate it has created the new handle.This lets the application call InternetCloseHandle from another thread, if the connect is taking too long.The lpvStatusInformation parameter contains the address of an HINTERNET handle."); break;
-		//case INTERNET_STATUS_INTERMEDIATE_RESPONSE:
-		//	lplog(LOG_INFO, L"Received an intermediate(100 level) status code message from the server."); break;
-		//case INTERNET_STATUS_NAME_RESOLVED:
-		//	lplog(LOG_INFO, L"Successfully found the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
-		//case INTERNET_STATUS_P3P_HEADER:
-		//	lplog(LOG_INFO, L"The response has a P3P header in it."); break;
-		//case INTERNET_STATUS_P3P_POLICYREF:
-		//	lplog(LOG_INFO, L"Not implemented."); break;
-		//case INTERNET_STATUS_PREFETCH:
-		//	lplog(LOG_INFO, L"Not implemented."); break;
-		//case INTERNET_STATUS_PRIVACY_IMPACTED:
-		//	lplog(LOG_INFO, L"Not implemented."); break;
-		//case INTERNET_STATUS_RECEIVING_RESPONSE:
-		//	lplog(LOG_INFO, L"Waiting for the server to respond to a request.The lpvStatusInformation parameter is NULL."); break;
-	case INTERNET_STATUS_REDIRECT:
-		if (logDetail)
-			lplog(LOG_INFO, L"Request redirected to %s.", (wchar_t*)lpvStatusInformation);
-		redirectUrl = (wchar_t*)lpvStatusInformation;
-		break;
-		//case INTERNET_STATUS_REQUEST_COMPLETE:
-		//	lplog(LOG_INFO, L"An asynchronous operation has been completed.The lpvStatusInformation parameter contains the address of an INTERNET_ASYNC_RESULT structure."); break;
-		//case INTERNET_STATUS_REQUEST_SENT:
-		//	lplog(LOG_INFO, L"Successfully sent the information request to the server.The lpvStatusInformation parameter points to a DWORD value that contains the number of bytes sent."); break;
-		//case INTERNET_STATUS_RESOLVING_NAME:
-		//	lplog(LOG_INFO, L"Looking up the IP address of the name contained in lpvStatusInformation.The lpvStatusInformation parameter points to a PCTSTR containing the host name."); break;
-		//case INTERNET_STATUS_RESPONSE_RECEIVED:
-		//	lplog(LOG_INFO, L"Successfully received a response from the server."); break;
-		//case INTERNET_STATUS_SENDING_REQUEST:
-		//	lplog(LOG_INFO, L"Sending the information request to the server.The lpvStatusInformation parameter is NULL."); break;
-		//case INTERNET_STATUS_STATE_CHANGE:
-		//	lplog(LOG_INFO, L"Moved between a secure(HTTPS) and a nonsecure(HTTP) site.The user must be informed of this change; otherwise, the user is at risk of disclosing sensitive information involuntarily.When this flag is set, the lpvStatusInformation parameter points to a status DWORD that contains additional flags."); break;
-		//default:;
+		sink->failed = true;
+		return 0; // aborts the transfer
 	}
+	*sink->total += (int)total;
+	return total;
+}
+
+// Batch B9: the per-request option set, applied to the shared easy handle before
+// every transfer. CURLOPT_TIMEOUT is the piece that replaces the entire
+// InternetReadFile_Wait worker-thread apparatus; CURLOPT_FOLLOWLOCATION plus
+// CURLINFO_EFFECTIVE_URL afterwards replaces the INTERNET_STATUS_REDIRECT
+// callback that used to populate redirectUrl.
+static void applyCommonCurlOptions(CURL* curl, const std::string& url)
+{
+	curl_easy_reset(curl);
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);   // matched the old INTERNET_OPTION_CONNECT_TIMEOUT of 3000ms
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);        // 5 minutes, matching the old watchdog's timeout
+	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);         // do not let curl install its own SIGALRM handling
+	curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");  // accept whatever encodings this libcurl supports
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "LPProcessor/1.0");
 }
 
 // Ensure hINet is open (InternetOpen "InetURL/1.0", preconfig, no cache).
@@ -195,133 +158,139 @@ void cInternet::InternetStatusCallback(
 // per-server connection caps to 100.  Every call (re)sets connect timeout
 // to 3s.  On failure, charges (now-timer) to the network profile and
 // returns false.
+// Batch B9: create (once) the process-wide libcurl easy handle. The long list of
+// InternetGetConnectedState reporting the old version did has no libcurl or macOS
+// equivalent and is not replaced -- it was informational logging about dial-up
+// modems and RAS, and every branch of it is meaningless on this platform. The
+// per-connection tuning (max connections per server/proxy, connect timeout) moved
+// into applyCommonCurlOptions above, which runs per request.
 bool cInternet::LPInternetOpen(int timer)
 {
-	if (!hINet)
+	if (!curlHandle)
 	{
-		hINet = InternetOpen(L"InetURL/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-		DWORD dwFlags;
-		InternetGetConnectedState(&dwFlags, 0); // BOOL connState=
-		if (dwFlags & INTERNET_CONNECTION_CONFIGURED)
-			lplog(LOG_INFO, L"Local system has a valid connection to the Internet, but it might or might not be currently connected.");
-		if (dwFlags & INTERNET_CONNECTION_LAN)
-			lplog(LOG_INFO, L"Local system uses a local area network to connect to the Internet.");
-		if (dwFlags & INTERNET_CONNECTION_MODEM)
-			lplog(LOG_INFO, L"Local system uses a modem to connect to the Internet.");
-		if (dwFlags & INTERNET_CONNECTION_MODEM_BUSY)
-			lplog(LOG_INFO, L"No longer used.");
-		if (dwFlags & INTERNET_CONNECTION_OFFLINE)
-			lplog(LOG_INFO, L"Local system is in offline mode.");
-		if (dwFlags & INTERNET_CONNECTION_PROXY)
-			lplog(LOG_INFO, L"Local system uses a proxy server to connect to the Internet.");
-		if (dwFlags & INTERNET_RAS_INSTALLED)
-			lplog(LOG_INFO, L"Local system has RAS installed.");
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, L"Maximum connections per 1.0 server", 100);
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_PROXY, L"Maximum connections per proxy", 100);
-		InetOption(true, INTERNET_OPTION_MAX_CONNS_PER_SERVER, L"Maximum connections per server", 100);
-		InternetSetStatusCallback(hINet, InternetStatusCallback);
+		// curl_global_init is not thread-safe and must happen once before any easy
+		// handle exists; a function-local static gives exactly that guarantee.
+		static const bool globalInitialized = []() {
+			return curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+		}();
+		if (globalInitialized)
+			curlHandle = curl_easy_init();
 	}
-	wstring ioe;
-	if (!hINet)
+	lpwstring ioe;
+	if (!curlHandle)
 	{
-		lplog(LOG_ERROR, L"ERROR:InternetOpen Failed - %s", getLastErrorMessage(ioe));
-		AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
-		cProfile::accumulationNetworkProfileTimer += (clock() - timer);
-		ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
+		lplog(LOG_ERROR, u"ERROR:curl_easy_init Failed - %s", getLastErrorMessage(ioe));
+		{
+			std::unique_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
+			cProfile::accumulationNetworkProfileTimer += (clock() - timer);
+		}
 		return false;
 	}
-	InetOption(false, INTERNET_OPTION_CONNECT_TIMEOUT, L"Connect Timeout", 3000); // in milliseconds
 	return true;
 }
 
 #define MAX_BUF 200000
 // Rate-limit, then InternetOpenUrl + InternetReadFile_Wait into buffer
 // (decoded via mTW).  Retries internetWebSearchRetryAttempts times; a SPARQL
-// failure additionally Sleep(30s)s before that retry.  Returns 0,
+// failure additionally std::this_thread::sleep_for(std::chrono::milliseconds(30s))s before that retry.  Returns 0,
 // INTERNET_OPEN_FAILED, or INTERNET_OPEN_URL_FAILED.
-int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
+int cInternet::readPage(const lpchar_t* str, lpwstring& buffer, lpwstring& headers)
 {
 	LFS
 		int timer = clock();
-	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	if (clock() - cProfile::lastNetClock < bandwidthControl)
+	// Batch B3: the rate-limit decision now reads lastNetClock under a scoped
+	// shared_lock and does the waiting outside it, rather than releasing the
+	// shared lock by hand on each of the two paths. Same behaviour, one less way
+	// to get the pairing wrong.
+	int timeWait = 0;
 	{
-		int timeWait = (bandwidthControl - (clock() - cProfile::lastNetClock));
-		ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		cProfile::totalInternetTimeWaitBandwidthControl += timeWait;
-		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		Sleep(timeWait);
+		std::shared_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
+		if (clock() - cProfile::lastNetClock < bandwidthControl)
+			timeWait = bandwidthControl - (clock() - cProfile::lastNetClock);
 	}
-	else
-		ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
+	if (timeWait > 0)
+	{
+		{
+			std::unique_lock<std::shared_mutex> bandwidthLock(totalInternetTimeWaitBandwidthControlSRWLock);
+			cProfile::totalInternetTimeWaitBandwidthControl += timeWait;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(timeWait)); // batch B9: was Win32 Sleep
+	}
 	int errors = 0;
-	AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
-	cProfile::lastNetClock = clock();
-	ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
-	char cBuffer[MAX_BUF + 4];
+	{
+		std::unique_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
+		cProfile::lastNetClock = clock();
+	}
 	if (!LPInternetOpen(timer))
 		return INTERNET_OPEN_FAILED;
-	wstring ioe;
+	lpwstring ioe;
+	CURL* curl = (CURL*)curlHandle;
+	std::string url = lp_utf16_to_utf8(lpwstring(str));
 
-	//INTERNET_OPTION_CONNECT_RETRIES
+	// Batch B9: `headers` is the caller's extra REQUEST headers (WinINet took them
+	// as a single blob of CRLF-separated lines, which is what the call sites still
+	// build); curl wants them one per slist entry, so the blob is split here.
+	std::string headerBlob = lp_utf16_to_utf8(headers);
+	struct curl_slist* headerList = nullptr;
+	for (size_t start = 0; start < headerBlob.size(); )
+	{
+		size_t end = headerBlob.find("\r\n", start);
+		if (end == std::string::npos) end = headerBlob.size();
+		std::string line = headerBlob.substr(start, end - start);
+		if (!line.empty()) headerList = curl_slist_append(headerList, line.c_str());
+		start = end + 2;
+	}
+
 	while (errors < internetWebSearchRetryAttempts)
 	{
-		LPVOID hFile;
-		if (hFile = InternetOpenUrl(hINet, str, headers.c_str(), headers.length(), 0, INTERNET_FLAG_NO_CACHE_WRITE))
+		applyCommonCurlOptions(curl, url);
+		std::string body;
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, appendToStringCallback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+		if (headerList) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerList);
+		char curlError[CURL_ERROR_SIZE] = { 0 };
+		curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlError);
+
+		CURLcode result = curl_easy_perform(curl);
+		if (result == CURLE_OK)
 		{
-			if (log_net) lplog(L"Successfully opened URL %s.", str);
-			DWORD dwRead;
-			bool timedOut = false;
-			// does InternetReadFile on a worker thread so a hung read can be timed out
-			while (InternetReadFile_Wait(hFile, cBuffer, MAX_BUF, &dwRead, timedOut))
-			{
-				if (dwRead == 0)
-					break;
-				cBuffer[dwRead] = 0;
-				wstring wb;
-				buffer += mTW(cBuffer, wb);
-			}
-			if (!timedOut) // the timeout path already closed hFile to unblock the worker
-				InternetCloseHandle(hFile);
-			if (!timedOut)
-			{
-				cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
-				return 0;
-			}
-			errors++;
-			lplog(LOG_ERROR, L"ERROR:%d:Timeout reading URL %s.", errors, str);
-			if (!InternetCheckConnection(str, FLAG_ICC_FORCE_CONNECTION, 0))
-				lplog(LOG_ERROR, L"ERROR:Cannot force URL %s - %s.\r", str, getLastErrorMessage(ioe));
-			lplog(LOG_ERROR, NULL);
+			if (log_net) lplog(u"Successfully opened URL %s.", str);
+			// Where the INTERNET_STATUS_REDIRECT callback used to write redirectUrl.
+			char* effectiveUrl = nullptr;
+			if (curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effectiveUrl) == CURLE_OK && effectiveUrl)
+				redirectUrl = lp_narrow_to_wide(std::string(effectiveUrl));
+			lpwstring wb;
+			// mTW applies the same encoding-detection ladder the WinINet path used,
+			// so a page's bytes are still interpreted exactly as before.
+			buffer += mTW(body, wb);
+			if (headerList) curl_slist_free_all(headerList);
+			cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
+			return 0;
 		}
-		else
+
+		errors++;
+		lplog(LOG_ERROR, u"ERROR:%d:Cannot read URL %s - %S (%d).\r", errors, str,
+			(curlError[0] ? curlError : curl_easy_strerror(result)), (int)result);
+		if (lp_strstr(str, u"sparql"))
 		{
-			errors++;
-			int lastError = GetLastError();
-			lplog(LOG_ERROR, L"ERROR:%d:Cannot open URL %s - %s (%d).\r", errors, str, getLastErrorMessage(ioe), lastError);
-			if (wcsstr(str, L"sparql"))
-			{
-				wprintf(L"\n\nrestart virtuoso\n");
-				Sleep(30000);
-				continue; // retry within this loop's errors<internetWebSearchRetryAttempts cap instead of recursing with no depth limit
-			}
-			if (lastError == ERROR_NO_UNICODE_TRANSLATION)
-				break;
-			if (!InternetCheckConnection(str, FLAG_ICC_FORCE_CONNECTION, 0))
-				lplog(LOG_ERROR, L"ERROR:Cannot force URL %s - %s.\r", str, getLastErrorMessage(ioe));
-			InternetCloseHandle(hINet);
-			wprintf(L"\nrestarting internet connection for URL %s...\n", str);
-			hINet = 0;
-			LPInternetOpen(timer);
-			lplog(LOG_ERROR, NULL);
-			AcquireSRWLockExclusive(&cProfile::networkTimeSRWLock);
+			lp_wprintf(u"\n\nrestart virtuoso\n");
+			std::this_thread::sleep_for(std::chrono::seconds(30));
+			continue; // retry within this loop's errors<internetWebSearchRetryAttempts cap instead of recursing with no depth limit
+		}
+		// Batch B9: a URL libcurl cannot even parse is not going to become valid on
+		// a retry, so it breaks out immediately -- the same role
+		// ERROR_NO_UNICODE_TRANSLATION played in the WinINet version.
+		if (result == CURLE_URL_MALFORMAT || result == CURLE_UNSUPPORTED_PROTOCOL)
+			break;
+		lplog(LOG_ERROR, NULL);
+		{
+			std::unique_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
 			cProfile::lastNetClock = clock();
-			ReleaseSRWLockExclusive(&cProfile::networkTimeSRWLock);
 		}
 	}
+	if (headerList) curl_slist_free_all(headerList);
 	if (errors == internetWebSearchRetryAttempts)
-		lplog(LOG_ERROR, L"ERROR:%d:Terminating because we cannot read URL %s - %s.", errors, str, getLastErrorMessage(ioe));
+		lplog(LOG_ERROR, u"ERROR:%d:Terminating because we cannot read URL %s.", errors, str);
 	cProfile::accumulateNetworkTime(str, timer, cProfile::lastNetClock);
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
@@ -329,113 +298,114 @@ int cInternet::readPage(const wchar_t* str, wstring& buffer, wstring& headers)
 // GET 'str' and write raw bytes to destfile, adding the byte count to
 // 'total'.  The `while (true)` never retries - the failure arm returns -1.
 // FATAL if the write fails.  Returns 0, INTERNET_OPEN_FAILED, or -1.
-int cInternet::readBinaryPage(wchar_t* str, int destfile, int& total)
+int cInternet::readBinaryPage(lpchar_t* str, int destfile, int& total)
 {
 	LFS
-		AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	if (clock() - cProfile::lastNetClock < bandwidthControl)
+		// Batch B3: same restructuring as readPage's copy of this block above.
+		int timeWait = 0;
 	{
-		ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-		int timeWait = (bandwidthControl - (clock() - cProfile::lastNetClock));
-		AcquireSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		cProfile::totalInternetTimeWaitBandwidthControl += timeWait;
-		ReleaseSRWLockExclusive(&totalInternetTimeWaitBandwidthControlSRWLock);
-		Sleep(timeWait);
+		std::shared_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
+		if (clock() - cProfile::lastNetClock < bandwidthControl)
+			timeWait = bandwidthControl - (clock() - cProfile::lastNetClock);
 	}
-	else
-		ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-	AcquireSRWLockShared(&cProfile::networkTimeSRWLock);
-	cProfile::lastNetClock = clock();
-	ReleaseSRWLockShared(&cProfile::networkTimeSRWLock);
-	char cBuffer[MAX_BUF + 4];
-	wstring ioe;
+	if (timeWait > 0)
+	{
+		{
+			std::unique_lock<std::shared_mutex> bandwidthLock(totalInternetTimeWaitBandwidthControlSRWLock);
+			cProfile::totalInternetTimeWaitBandwidthControl += timeWait;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(timeWait));
+	}
+	{
+		// Batch B3: EXCLUSIVE, where the original took this lock SHARED to perform a
+		// write -- a pre-existing bug (readPage's identical "stamp lastNetClock" line
+		// correctly used the exclusive form), so a faithful shared_lock port would
+		// have kept a data race on lastNetClock.
+		std::unique_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
+		cProfile::lastNetClock = clock();
+	}
+	lpwstring ioe;
 	if (!LPInternetOpen(0))
 	{
-		lplog(LOG_ERROR, L"ERROR:LPInternetOpen Failed - %s", getLastErrorMessage(ioe));
+		lplog(LOG_ERROR, u"ERROR:LPInternetOpen Failed - %s", getLastErrorMessage(ioe));
 		return INTERNET_OPEN_FAILED;
 	}
-	while (true)
+	CURL* curl = (CURL*)curlHandle;
+	applyCommonCurlOptions(curl, lp_utf16_to_utf8(lpwstring(str)));
+	// Batch B9: the body streams straight to the fd through the write callback,
+	// so there is no MAX_BUF staging buffer any more and no size limit on a page.
+	sBinarySink sink = { destfile, &total, false };
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToFdCallback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
+	char curlError[CURL_ERROR_SIZE] = { 0 };
+	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlError);
+	CURLcode result = curl_easy_perform(curl);
+	if (sink.failed)
 	{
-		HANDLE hFile;
-		if (hFile = InternetOpenUrl(hINet, str, NULL, 0, 0, INTERNET_FLAG_NO_CACHE_WRITE))
-		{
-			if (log_net) lplog(L"Successfully opened URL %s.", str);
-			DWORD dwRead;
-			while (InternetReadFile(hFile, cBuffer, MAX_BUF, &dwRead))
-			{
-				if (dwRead == 0)
-					break;
-				total += dwRead;
-				if (::write(destfile, cBuffer, dwRead) < 0)
-				{
-					lplog(LOG_FATAL_ERROR, L"Cannot write rdfTypes dbPediaCache - %S.", _sys_errlist[errno]);
-					return -1;
-				}
-			}
-			InternetCloseHandle(hFile);
-			return 0;
-		}
-		else
-		{
-			lplog(LOG_ERROR, L"ERROR:Cannot open URL %s - %s.", str, getLastErrorMessage(ioe));
-			lplog(LOG_ERROR, NULL);
-			return -1;
-		}
+		lplog(LOG_FATAL_ERROR, u"Cannot write rdfTypes dbPediaCache - %S.", strerror(errno));
+		return -1;
 	}
+	if (result != CURLE_OK)
+	{
+		lplog(LOG_ERROR, u"ERROR:Cannot open URL %s - %S.", str, (curlError[0] ? curlError : curl_easy_strerror(result)));
+		lplog(LOG_ERROR, NULL);
+		return -1;
+	}
+	if (log_net) lplog(u"Successfully opened URL %s.", str);
 	return 0;
 }
 
-// InternetCloseHandle(hINet) and null it.  Always returns true.
+// Batch B9: release the shared easy handle. Always returns true.
 bool cInternet::closeConnection(void)
 {
 	LFS
-		if (hINet) InternetCloseHandle(hINet);
-	hINet = 0;
+		if (curlHandle) curl_easy_cleanup((CURL*)curlHandle);
+	curlHandle = 0;
 	return true;
 }
 
 // Cache-aside GET: path is CACHEDIR\\cacheTypePath\\_<sanitized epath>
 // (distributed into two-letter subdirs).  On miss or forceWebReread, readPage
-// and write the wstring as UTF-16 bytes.  On hit, read those bytes back as
-// wchar_t*.  networkAccessed is set true on a fetch.  Returns 0 or a
+// and write the lpwstring as UTF-16 bytes.  On hit, read those bytes back as
+// lpchar_t*.  networkAccessed is set true on a fetch.  Returns 0 or a
 // GETPAGE / INTERNET_* code.
-int cInternet::cacheWebPath(wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, bool forceWebReread, bool& networkAccessed, wstring& diskPath)
+int cInternet::cacheWebPath(lpwstring webAddress, lpwstring& buffer, lpwstring epath, lpwstring cacheTypePath, bool forceWebReread, bool& networkAccessed, lpwstring& diskPath)
 {
 	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	if (_wmkdir(path) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
+		lpchar_t path[MAX_LEN];
+	int pathlen = lp_snprintf(path, MAX_LEN, u"%s\\%s", CACHEDIR, cacheTypePath.c_str());
+	if (lp_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
+	lp_snprintf(path + pathlen, MAX_LEN - pathlen, u"\\_%s", epath.c_str());
 	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
 	int ret, fd;
 	diskPath = path;
-	if (networkAccessed = forceWebReread || _waccess(path, 0) < 0)
+	if (networkAccessed = forceWebReread || lp_waccess(path, 0) < 0)
 	{
 		if (ret = readPage(webAddress.c_str(), buffer)) return ret;
-		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
+		if ((fd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
 		{
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot create path %s - %S.", path, sys_errlist[errno]);
+			lplog(LOG_ERROR, u"cacheWebPath:Cannot create path %s - %S.", path, sys_errlist[errno]);
 			return GETPAGE_CANNOT_CREATE;
 		}
-		_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
-		_close(fd);
+		::write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
+		::close(fd);
 		return 0;
 	}
 	else
 	{
-		if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
-			lplog(LOG_ERROR, L"cacheWebPath:Cannot read path %s - %S.", path, sys_errlist[errno]);
+		if ((fd = lp_wopen(path, O_RDWR | O_BINARY)) < 0)
+			lplog(LOG_ERROR, u"cacheWebPath:Cannot read path %s - %S.", path, sys_errlist[errno]);
 		else
 		{
-			int bufferlen = filelength(fd);
+			int bufferlen = lp_filelength(fd);
 			void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
-			if (_read(fd, tbuffer, bufferlen) < 0)
-				lplog(LOG_FATAL_ERROR, L"Error reading web path file.");
-			_close(fd);
-			buffer = (wchar_t*)tbuffer;
+			if (::read(fd, tbuffer, bufferlen) < 0)
+				lplog(LOG_FATAL_ERROR, u"Error reading web path file.");
+			::close(fd);
+			buffer = (lpchar_t*)tbuffer;
 			tfree(bufferlen + 10, tbuffer);
 		}
 	}
@@ -443,93 +413,35 @@ int cInternet::cacheWebPath(wstring webAddress, wstring& buffer, wstring epath, 
 }
 
 
-// Worker: InternetReadFile into the tIRFW pointed at by vThreadParm.
-// Returns 0 on success, 1 if InternetReadFile failed (logged).
-DWORD WINAPI cInternet::InternetReadFile_Child(void* vThreadParm)
-{
-	tIRFW* p = (tIRFW*)vThreadParm;
-	if (!InternetReadFile(p->RequestHandle, p->buffer, p->bufsize, p->dwRead))
-	{
-		wstring lem;
-		lplog(LOG_ERROR, L"InternetReadFile reports %s.", getLastErrorMessage(lem));
-		return 1;
-	}
-	return 0;
-}
-
-// Spawn InternetReadFile_Child and wait up to 5 minutes.  On timeout,
-// InternetCloseHandle unblocks the child and we then wait for it to exit before
-// returning: 'p', 'buffer' and 'dwRead' are caller stack objects the child writes
-// through, so returning while it still runs would corrupt the caller's frame.
-// timedOut is per-call; a shared flag would race between concurrent reader threads.
-bool cInternet::InternetReadFile_Wait(HINTERNET RequestHandle, char* buffer, int bufsize, DWORD* dwRead, bool& timedOut)
-{
-	tIRFW p;
-	timedOut = false;
-	p.buffer = buffer;
-	p.bufsize = bufsize;
-	p.RequestHandle = RequestHandle;
-	p.dwRead = dwRead;
-	*dwRead = 0;
-	// Create a worker thread
-	DWORD    dwThreadID;
-	HANDLE hThread = CreateThread(
-		NULL,            // Pointer to thread security attributes
-		0,               // Initial thread stack size, in bytes
-		InternetReadFile_Child,  // Pointer to thread function
-		&p,     // The argument for the new thread
-		0,               // Creation flags
-		&dwThreadID      // Pointer to returned thread identifier
-	);
-	if (hThread == NULL)
-		return false;
-	// Wait for the call to InternetConnect in worker function to complete
-	DWORD dwTimeout = 5 * 60 * 1000; // in milliseconds
-	if (WaitForSingleObject(hThread, dwTimeout) == WAIT_TIMEOUT)
-	{
-		timedOut = true;
-		// Closing the handle makes the pending InternetReadFile fail and return.
-		InternetCloseHandle(RequestHandle);
-		wprintf(L"\nRetry on document (InternetReadFile failure).\n");
-		if (WaitForSingleObject(hThread, 60 * 1000) != WAIT_OBJECT_0)
-			// The child still holds pointers into this frame; unwinding now corrupts it.
-			lplog(LOG_FATAL_ERROR, L"InternetReadFile worker did not exit after the request handle was closed.");
-		CloseHandle(hThread);
-		return false;
-	}
-	// The state of the specified object (thread) is signaled
-	DWORD   dwExitCode = 0;
-	if (!GetExitCodeThread(hThread, &dwExitCode))
-	{
-		CloseHandle(hThread);
-		return false;
-	}
-	CloseHandle(hThread);
-	return dwExitCode == 0;
-}
+// Batch B9: InternetReadFile_Child and InternetReadFile_Wait are deleted, not
+// ported. Together they were a whole worker thread plus a close-the-handle-to-
+// unblock-it dance whose only purpose was to impose a timeout on a read that
+// WinINet could not time out itself. CURLOPT_TIMEOUT does that natively (see
+// applyCommonCurlOptions), so this was the sole CreateThread in the codebase and
+// it is now simply gone.
 
 // Cache-aside GET with optional Jericho HTML-to-text (`clean`) and optional
 // population of `buffer` (`readInfoBuffer`).  Skips .pdf/.php.  Index>1
 // appends .N to the cache name.  Truncates the path at MAX_LEN-20, matching
 // cacheWebPath.  `where` is only for log prefixes.
 // Returns 0, -1, or a GETWEBPATH / GETPAGE / INTERNET_* code.
-int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
+int cInternet::getWebPath(int where, lpwstring webAddress, lpwstring& buffer, lpwstring epath, lpwstring cacheTypePath, lpwstring& filePathOut, lpwstring& headers, int index, bool clean, bool readInfoBuffer, bool forceWebReread)
 {
 	LFS
-		if (webAddress.find(L".pdf") != wstring::npos || webAddress.find(L".php") != wstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
+		if (webAddress.find(u".pdf") != lpwstring::npos || webAddress.find(u".php") != lpwstring::npos) // Nobel Prize abstract is 2 bytes / also don't bother with pdf or php files for now
 			return -1;
 	if (logTraceOpen)
-		lplog(LOG_WHERE, L"TRACEOPEN %s %s", epath.c_str(), __FUNCTIONW__);
+		lplog(LOG_WHERE, u"TRACEOPEN %s %s", epath.c_str(), LP_TEXT(__func__).c_str());
 	if (logQuestionDetail)
-		lplog(LOG_WIKIPEDIA, L"accessing page: %s", epath.c_str());
-	wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", (cacheTypePath == L"webSearchCache") ? WEBSEARCH_CACHEDIR : CACHEDIR, cacheTypePath.c_str());
-	if (_wmkdir(path) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
+		lplog(LOG_WIKIPEDIA, u"accessing page: %s", epath.c_str());
+	lpchar_t path[MAX_LEN];
+	int pathlen = lp_snprintf(path, MAX_LEN, u"%s\\%s", (cacheTypePath == u"webSearchCache") ? WEBSEARCH_CACHEDIR : CACHEDIR, cacheTypePath.c_str());
+	if (lp_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
 	if (index > 1)
-		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s.%d", epath.c_str(), index);
+		lp_snprintf(path + pathlen, MAX_LEN - pathlen, u"\\_%s.%d", epath.c_str(), index);
 	else
-		_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
+		lp_snprintf(path + pathlen, MAX_LEN - pathlen, u"\\_%s", epath.c_str());
 	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
@@ -541,269 +453,207 @@ int cInternet::getWebPath(int where, wstring webAddress, wstring& buffer, wstrin
 	spath[pathlen + 1] = spath[pathlen + 6];
 	spath[pathlen + 3] = spath[pathlen + 7];
 	spath[pathlen + 2] = 0;
-	if (mkdir(spath.c_str()) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
+	if (mkdir(spath.c_str(), 0777) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
 	spath[pathlen + 2] = '\\';
 	spath[pathlen + 4] = 0;
-	if (mkdir(spath.c_str()) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
+	if (mkdir(spath.c_str(), 0777) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
 	spath[pathlen + 4] = '\\';
-	wchar_t* wp = wcsstr(path, L"http");
+	lpchar_t* wp = lp_strstr(path, u"http");
 	if (wp && (wp - path) < 5)
-		lplog(LOG_FATAL_ERROR, L"Please remove http addresses from web path to avoid overuse of the h/t directory %s!", path);
-	if (forceWebReread || (_waccess(path, 0) < 0 && _access(spath.c_str(), 0) < 0))
+		lplog(LOG_FATAL_ERROR, u"Please remove http addresses from web path to avoid overuse of the h/t directory %s!", path);
+	if (forceWebReread || (lp_waccess(path, 0) < 0 && access(spath.c_str(), 0) < 0))
 	{
 		if (!forceWebReread)
-			lplog(LOG_WIKIPEDIA, L"getWebPath:failed to access page %s %S", path, spath.c_str());
+			lplog(LOG_WIKIPEDIA, u"getWebPath:failed to access page %s %S", path, spath.c_str());
 		int ret, fd;
 		ret = readPage(webAddress.c_str(), buffer, headers);
-		if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
+		if ((fd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) < 0)
 		{
-			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot create dbPedia path %s - %S.", where, path, sys_errlist[errno]);
+			lplog(LOG_ERROR, u"%06d:ERROR:getWebPath:Cannot create dbPedia path %s - %S.", where, path, sys_errlist[errno]);
 			return cInternet::GETPAGE_CANNOT_CREATE;
 		}
 		if (!clean)
 		{
-			_write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
-			_close(fd);
+			::write(fd, buffer.c_str(), buffer.length() * sizeof(buffer[0]));
+			::close(fd);
 			if (logRDFDetail)
-				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava wrote page %s", path);
+				lplog(LOG_WIKIPEDIA, u"getWebPath:nonJava wrote page %s", path);
 			return ret; // propagate a readPage failure instead of reporting success (matches cacheWebPath)
 		}
 		if (ret && clean)
 		{
-			_close(fd);
+			::close(fd);
 			return ret; // propagate a readPage failure instead of reporting success (matches cacheWebPath)
 		}
 		string utf8Buffer;
 		wTM(buffer, utf8Buffer);
-		_write(fd, utf8Buffer.c_str(), utf8Buffer.length() * sizeof(utf8Buffer[0]));
-		_close(fd);
+		::write(fd, utf8Buffer.c_str(), utf8Buffer.length() * sizeof(utf8Buffer[0]));
+		::close(fd);
 		string outbuf;
 		if ((exitCode = runJavaJerichoHTML(path, path, outbuf)) < 0) return -1; // changed to write file to disk twice because Java can no longer reliably scrape thesaurus.com due to cookie
 		if (outbuf.find("Could not find") != string::npos)
 		{
-			lplog(LOG_FATAL_ERROR, L"Jericho library call on %s resulted in illegal error:%s", path, outbuf.c_str());
-			_wremove(path);
+			lplog(LOG_FATAL_ERROR, u"Jericho library call on %s resulted in illegal error:%s", path, outbuf.c_str());
+			lp_wremove(path);
 		}
-		lplog(LOG_WIKIPEDIA, L"getWebPath:Java wrote page %s:%S", path, outbuf.c_str());
+		lplog(LOG_WIKIPEDIA, u"getWebPath:Java wrote page %s:%S", path, outbuf.c_str());
 		if (outbuf.find("Exception") != string::npos)
 		{
-			if ((fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
+			if ((fd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
 			{
-				_close(fd);
+				::close(fd);
 				return 0;
 			}
-			if ((fd = _open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
+			if ((fd = ::open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
 			{
-				_close(fd);
+				::close(fd);
 				return 0;
 			}
-			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot create dbPedia path %S - %S.", where, spath.c_str(), sys_errlist[errno]);
+			lplog(LOG_ERROR, u"%06d:ERROR:getWebPath:Cannot create dbPedia path %S - %S.", where, spath.c_str(), sys_errlist[errno]);
 		}
 	}
 	if (readInfoBuffer)
 	{
 		int fd;
-		if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
+		if ((fd = lp_wopen(path, O_RDWR | O_BINARY)) < 0)
 		{
-			if (exitCode && (fd = _wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
+			if (exitCode && (fd = lp_wopen(path, O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
 			{
-				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava close 0 page %s", path);
-				_close(fd);
+				lplog(LOG_WIKIPEDIA, u"getWebPath:nonJava close 0 page %s", path);
+				::close(fd);
 				return 0;
 			}
-			if (exitCode && (fd = _open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
+			if (exitCode && (fd = ::open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE)) >= 0)
 			{
-				lplog(LOG_WIKIPEDIA, L"getWebPath:nonJava close 0 page %S", spath.c_str());
-				_close(fd);
+				lplog(LOG_WIKIPEDIA, u"getWebPath:nonJava close 0 page %S", spath.c_str());
+				::close(fd);
 				return 0;
 			}
-			if ((fd = _open(spath.c_str(), O_RDWR | O_BINARY)) < 0)
+			if ((fd = ::open(spath.c_str(), O_RDWR | O_BINARY)) < 0)
 			{
-				lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.", where, path, spath.c_str(), sys_errlist[errno]);
-				fd = _open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
+				lplog(LOG_ERROR, u"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.", where, path, spath.c_str(), sys_errlist[errno]);
+				fd = ::open(spath.c_str(), O_CREAT | O_RDWR | O_BINARY, _S_IREAD | _S_IWRITE);
 				if (fd >= 0)
-					_close(fd);
+					::close(fd);
 				return GETWEBPATH_CANNOT_OPEN_PATH;
 			}
 			else
 				mTW(spath, filePathOut);
 		}
-		int bufferlen = filelength(fd);
+		int bufferlen = lp_filelength(fd);
 		void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
-		if (_read(fd, tbuffer, bufferlen) < 0)
-			lplog(LOG_FATAL_ERROR, L"Error reading webPath file.");
-		_close(fd);
-		buffer = (wchar_t*)tbuffer;
+		if (::read(fd, tbuffer, bufferlen) < 0)
+			lplog(LOG_FATAL_ERROR, u"Error reading webPath file.");
+		::close(fd);
+		buffer = (lpchar_t*)tbuffer;
 		tfree(bufferlen + 10, tbuffer);
 	}
 	return 0;
 }
 
-// Drain hPipeRead into outbuf until ReadFile fails.  ERROR_BROKEN_PIPE is
-// the expected end (child exited); anything else is logged.
-// ReadAndHandleOutput
-// Monitors handle for input. Exits when child exits or pipe breaks.
-void cInternet::ReadAndHandleOutput(HANDLE hPipeRead, string& outbuf)
+// Read everything the child writes until it closes its end of the pipe.
+// Batch B9: a POSIX fd and read(2), replacing a HANDLE and ReadFile.
+void cInternet::ReadAndHandleOutput(int pipeReadFd, string& outbuf)
 {
 	LFS
-		CHAR lpBuffer[257];
-	DWORD nBytesRead;
-
-	while (ReadFile(hPipeRead, lpBuffer, sizeof(lpBuffer) - 1, &nBytesRead, NULL) && nBytesRead > 0)
+		char buffer[4096];
+	for (;;)
 	{
-		lpBuffer[nBytesRead] = 0;
-		outbuf += lpBuffer;
+		ssize_t got = ::read(pipeReadFd, buffer, sizeof(buffer));
+		if (got > 0) { outbuf.append(buffer, (size_t)got); continue; }
+		if (got == 0) break;               // child closed the pipe
+		if (errno == EINTR) continue;      // interrupted, not finished
+		break;
 	}
-	if (GetLastError() != ERROR_BROKEN_PIPE)
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
 }
 
-// CreateProcess(commandLine) with the three std handles redirected, hidden
-// window, CREATE_NEW_CONSOLE.  Returns the process handle (not checked for
-// NULL if CreateProcess failed - pi is uninitialized on failure).
-// PrepAndLaunchRedirectedChild
-// Sets up STARTUPINFO structure, and launches redirected child.
-HANDLE cInternet::PrepAndLaunchRedirectedChild(wstring commandLine,
-	HANDLE hChildStdOut, HANDLE hChildStdIn, HANDLE hChildStdErr)
+// Run the local Java "RenderToText" helper (Jericho HTML) over webAddress,
+// writing plain text to outputPath, and collect whatever the child prints on
+// stdout/stderr into outbuf.
+//
+// Batch B9: posix_spawn with a pipe and file actions, replacing
+// PrepAndLaunchRedirectedChild's CreateProcess plus five DuplicateHandle calls
+// (which existed only to make exactly the right handles inheritable -- POSIX file
+// actions express the same thing declaratively). PrepAndLaunchRedirectedChild is
+// deleted rather than ported; nothing else called it.
+//
+// Two other things change here, both forced by the platform: the classpath
+// separator is ':' rather than ';', and its entries use '/' rather than '\\'.
+// The main directory is taken from getMainDir() (LP_MAIN_DIR) instead of the
+// hardcoded LMAINDIR the old code chdir'd to.
+int cInternet::runJavaJerichoHTML(lpwstring webAddress, lpwstring outputPath, string& outbuf)
 {
 	LFS
-		PROCESS_INFORMATION pi;
-	STARTUPINFO si;
+		char previousDirectory[MAX_PATH];
+	if (!getcwd(previousDirectory, sizeof(previousDirectory)))
+		return -1;
+	std::string mainDirectory = lp_utf16_to_utf8(getMainDir());
+	if (chdir(mainDirectory.c_str()) < 0)
+		lplog(LOG_FATAL_ERROR, u"Cannot find main directory %S.", mainDirectory.c_str());
 
-	// Set up the start up info struct.
-	ZeroMemory(&si, sizeof(STARTUPINFO));
-	si.cb = sizeof(STARTUPINFO);
-	si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-	si.hStdOutput = hChildStdOut;
-	si.hStdInput = hChildStdIn;
-	si.hStdError = hChildStdErr;
-	si.wShowWindow = SW_HIDE;
-	if (!CreateProcess(NULL, (LPWSTR)commandLine.c_str(), NULL, NULL, TRUE,
-		CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
+	std::vector<std::string> arguments = {
+		"java", "-classpath",
+		"jericho-html-3.4/classes:jericho-html-3.4/dist/jericho-html-3.4.jar:TextRenderer/bin",
+		"RenderToText",
+		lp_utf16_to_utf8(webAddress),
+		lp_utf16_to_utf8(outputPath)
+	};
 
-	// Close any unnecessary handles.
-	if (!CloseHandle(pi.hThread))
-		lplog(LOG_ERROR, L"%S:%d:%s", __FUNCTION__, __LINE__, lastErrorMsg().c_str());
-	return pi.hProcess;
-}
+	int pipeFds[2];
+	if (pipe(pipeFds) < 0)
+		lplog(LOG_FATAL_ERROR, u"pipe failed - %S line %d", strerror(errno), __LINE__);
 
-// chdir LMAINDIR, spawn
-// `java -classpath jericho-html-3.4\\... RenderToText <webAddress> <outputPath>`
-// with stdout/stderr piped into outbuf, wait INFINITE, chdir back.
-// Returns 0, or -1 if chdir-back fails (launch failure is FATAL first).
-int cInternet::runJavaJerichoHTML(wstring webAddress, wstring outputPath, string& outbuf)
-{
-	LFS
-		TCHAR NPath[MAX_PATH];
-	GetCurrentDirectory(MAX_PATH, NPath);
-	if (_wchdir(LMAINDIR) < 0)
-		lplog(LOG_FATAL_ERROR, L"Cannot find main directory.");
-	wstring baseCommandLine = L"java -classpath jericho-html-3.4\\classes;jericho-html-3.4\\dist\\jericho-html-3.4.jar;TextRenderer\\bin RenderToText ";
-	wstring commandLine = baseCommandLine + webAddress + L" " + outputPath;
+	// The child gets the write end as both stdout and stderr (what the old
+	// DuplicateHandle of hOutputWrite into hErrorWrite achieved) and must not keep
+	// the read end open, or our own read would never see end-of-file.
+	posix_spawn_file_actions_t fileActions;
+	posix_spawn_file_actions_init(&fileActions);
+	posix_spawn_file_actions_addclose(&fileActions, pipeFds[0]);
+	posix_spawn_file_actions_adddup2(&fileActions, pipeFds[1], STDOUT_FILENO);
+	posix_spawn_file_actions_adddup2(&fileActions, pipeFds[1], STDERR_FILENO);
+	posix_spawn_file_actions_addclose(&fileActions, pipeFds[1]);
 
-	HANDLE hOutputReadTmp, hOutputRead, hOutputWrite;
-	HANDLE hInputWriteTmp, hInputRead, hInputWrite;
-	HANDLE hErrorWrite;
-	SECURITY_ATTRIBUTES sa;
+	std::vector<char*> argv;
+	for (std::string& argument : arguments) argv.push_back(const_cast<char*>(argument.c_str()));
+	argv.push_back(nullptr);
 
-	// Set up the security attributes struct.
-	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-	sa.lpSecurityDescriptor = NULL;
-	sa.bInheritHandle = TRUE;
+	pid_t childPid = 0;
+	// posix_spawnp, not posix_spawn: "java" is found on PATH, as it was on Windows.
+	int spawnError = posix_spawnp(&childPid, "java", &fileActions, nullptr, argv.data(), environ);
+	posix_spawn_file_actions_destroy(&fileActions);
+	::close(pipeFds[1]); // our copy of the write end, so read() can reach EOF
 
-	// Create the child output pipe.
-	if (!CreatePipe(&hOutputReadTmp, &hOutputWrite, &sa, 0))
-		lplog(LOG_FATAL_ERROR, L"CreatePipe %d line %d", GetLastError(), __LINE__);
-
-	// Create a duplicate of the output write handle for the std error write handle. This is necessary 
-	// in case the child application closes one of its std output handles.
-	if (!DuplicateHandle(GetCurrentProcess(), hOutputWrite, GetCurrentProcess(), &hErrorWrite, 0, TRUE, DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	// Create the child input pipe.
-	if (!CreatePipe(&hInputRead, &hInputWriteTmp, &sa, 0))
-		lplog(LOG_FATAL_ERROR, L"CreatePipe %d line %d", GetLastError(), __LINE__);
-
-	// Create new output read handle and the input write handles. Set the Properties to FALSE. 
-	// Otherwise, the child inherits the properties and, as a result, non-closeable handles to the pipes
-	// are created.
-	if (!DuplicateHandle(GetCurrentProcess(), hOutputReadTmp, GetCurrentProcess(),
-		&hOutputRead, // Address of new handle.
-		0, FALSE, // Make it uninheritable.
-		DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	if (!DuplicateHandle(GetCurrentProcess(), hInputWriteTmp,
-		GetCurrentProcess(),
-		&hInputWrite, // Address of new handle.
-		0, FALSE, // Make it uninheritable.
-		DUPLICATE_SAME_ACCESS))
-		lplog(LOG_FATAL_ERROR, L"DuplicateHandle %d line %d", GetLastError(), __LINE__);
-
-	// Close inheritable copies of the handles you do not want to be inherited.
-	if (!CloseHandle(hOutputReadTmp))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (!CloseHandle(hInputWriteTmp))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-
-	HANDLE hStdIn = NULL; // Handle to parents std input.
-
-	// Get std input handle so you can close it and force the ReadFile to
-	// fail when you want the input thread to exit.
-	if ((hStdIn = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
-		lplog(LOG_FATAL_ERROR, L"GetStdHandle %d line %d", GetLastError(), __LINE__);
-
-	HANDLE hChildProcess = PrepAndLaunchRedirectedChild(commandLine, hOutputWrite, hInputRead, hErrorWrite);
-
-	if (!hChildProcess)
+	if (spawnError != 0)
 	{
-		wchar_t currentDirectory[4096];
-		GetCurrentDirectory(4096, currentDirectory);
-		lplog(LOG_FATAL_ERROR, L"Error launching %s in %s", commandLine.c_str(), currentDirectory);
+		::close(pipeFds[0]);
+		lplog(LOG_ERROR, u"Cannot run the Jericho HTML helper - %S.", strerror(spawnError));
+		if (chdir(previousDirectory) < 0) return -1;
 		return -1;
 	}
-	// Close pipe handles (do not continue to modify the parent).
-	// You need to make sure that no handles to the write end of the
-	// output pipe are maintained in this process or else the pipe will
-	// not close when the child process exits and the ReadFile will hang.
-	if (!CloseHandle(hOutputWrite))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (!CloseHandle(hInputRead))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (!CloseHandle(hErrorWrite))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
 
-	// Read the child's output.
-	ReadAndHandleOutput(hOutputRead, outbuf);
+	ReadAndHandleOutput(pipeFds[0], outbuf);
+	::close(pipeFds[0]);
 
-	// Force the read on the input to return by closing the stdin handle.
-	//if (!CloseHandle(hStdIn)) // error is very common - returns handle invalid
-		//logLastError("CloseHandle",__LINE__);
+	int exitStatus = 0;
+	while (waitpid(childPid, &exitStatus, 0) < 0 && errno == EINTR)
+		; // interrupted by a signal, not finished
 
-	if (WaitForSingleObject(hChildProcess, INFINITE) == WAIT_FAILED)
-		lplog(LOG_FATAL_ERROR, L"WaitForSingleObject %d line %d", GetLastError(), __LINE__);
-
-	if (!CloseHandle(hOutputRead))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (!CloseHandle(hInputWrite))
-		lplog(LOG_FATAL_ERROR, L"CloseHandle %d line %d", GetLastError(), __LINE__);
-	if (_wchdir(NPath) < 0)
+	if (chdir(previousDirectory) < 0)
 		return -1;
 	return 0;
 }
 
 #ifdef TEST_CODE
-int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypePath, wstring& filePathOut, wstring& headers)
+int testWebPath(int where, lpwstring webAddress, lpwstring epath, lpwstring cacheTypePath, lpwstring& filePathOut, lpwstring& headers)
 {
 	LFS
-		wchar_t path[MAX_LEN];
-	int pathlen = _snwprintf(path, MAX_LEN, L"%s\\%s", CACHEDIR, cacheTypePath.c_str());
-	if (_wmkdir(path) < 0 && errno == ENOENT)
-		lplog(LOG_FATAL_ERROR, L"Cannot create directory %s.", path);
-	_snwprintf(path + pathlen, MAX_LEN - pathlen, L"\\_%s", epath.c_str());
+		lpchar_t path[MAX_LEN];
+	int pathlen = lp_snprintf(path, MAX_LEN, u"%s\\%s", CACHEDIR, cacheTypePath.c_str());
+	if (lp_wmkdir(path) < 0 && errno == ENOENT)
+		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
+	lp_snprintf(path + pathlen, MAX_LEN - pathlen, u"\\_%s", epath.c_str());
 	path[MAX_LEN - 20] = 0; // make space for subdirectories and for file extensions
 	convertIllegalChars(path + pathlen + 1);
 	distributeToSubDirectories(path, pathlen + 1, true);
@@ -820,29 +670,29 @@ int testWebPath(int where, wstring webAddress, wstring epath, wstring cacheTypeP
 	spath[pathlen + 4] = 0;
 	mkdir(spath.c_str());
 	spath[pathlen + 4] = '\\';
-	if (_waccess(path, 0) < 0 && _access(spath.c_str(), 0) < 0)
+	if (lp_waccess(path, 0) < 0 && access(spath.c_str(), 0) < 0)
 		return 0;
-	wstring readBufferFromDisk;
+	lpwstring readBufferFromDisk;
 	if (readPage(webAddress.c_str(), readBufferFromDisk, headers) < 0) return -1;
 	int fd;
-	if ((fd = _wopen(path, O_RDWR | O_BINARY)) < 0)
+	if ((fd = lp_wopen(path, O_RDWR | O_BINARY)) < 0)
 	{
-		if ((fd = _open(spath.c_str(), O_RDWR | O_BINARY)) < 0)
+		if ((fd = ::open(spath.c_str(), O_RDWR | O_BINARY)) < 0)
 		{
-			lplog(LOG_ERROR, L"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.", where, path, spath.c_str(), sys_errlist[errno]);
+			lplog(LOG_ERROR, u"%06d:ERROR:getWebPath:Cannot read dbPedia path %s [%S] - %S.", where, path, spath.c_str(), sys_errlist[errno]);
 			return GETWEBPATH_CANNOT_OPEN_PATH;
 		}
 		else
 			mTW(spath, filePathOut);
 	}
-	int bufferlen = filelength(fd);
+	int bufferlen = lp_filelength(fd);
 	void* tbuffer = (void*)tcalloc(bufferlen + 10, 1);
-	_read(fd, tbuffer, bufferlen);
-	_close(fd);
-	wstring writeBufferToDisk = (wchar_t*)tbuffer;
+	::read(fd, tbuffer, bufferlen);
+	::close(fd);
+	lpwstring writeBufferToDisk = (lpchar_t*)tbuffer;
 	tfree(bufferlen + 10, tbuffer);
 	if (readBufferFromDisk != writeBufferToDisk)
-		lplog(L"MISMATCH!");
+		lplog(u"MISMATCH!");
 	return 0;
 }
 

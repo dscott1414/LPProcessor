@@ -1,118 +1,157 @@
 // envConfig.cpp - see envConfig.h for the overview.
-#pragma warning (disable: 4996) // getenv/_wgetenv "unsafe" - matches the rest of the tree's CRT usage.
 #include <string>
+#include <stdlib.h>
+// Batch B2: general.h's own declarations (e.g. wTM's `string &outString` param)
+// are written bare (no std:: qualifier), matching the codebase-wide convention
+// of always having "using namespace std;" active before general.h is reached
+// (word.h does this -- BEFORE its own #include "general.h" -- for every other
+// file). This file reaches general.h directly without going through word.h, and
+// was missing this -- a pre-existing gap unrelated to wchar_t/char16_t
+// (confirmed via git diff against HEAD), just not previously surfaced because
+// nothing had compiled this far yet. Must precede the general.h include below,
+// not just appear somewhere in this file, since #include is processed inline.
+using namespace std;
 #include "logging.h"
 #include "general.h"
 #include "envConfig.h"
+#include "utfConvert.h"
 
-static const std::string& cachedNarrowEnv(const char* varName, const char* fallback)
+// Batch B3: _wgetenv (MSVC's wide getenv, reading the CRT's own UTF-16 copy of the
+// environment) has no POSIX equivalent -- the environment on macOS is bytes, full
+// stop. Every read goes through narrow getenv() and, where the value is wanted
+// wide, through utfConvert.h's decoder. That decoder's UTF-8-first detection ladder
+// is exactly right for macOS environment bytes, which are UTF-8 in any modern
+// locale but are not guaranteed to be valid UTF-8 by the OS.
+//
+// Also batch B3: the caching moved OUT of these two helpers and into each
+// individual getter below. It used to live in a `static` local inside the shared
+// helper, which -- because a function-local static is one object for the whole
+// function, not one per argument value -- meant the FIRST getter to run populated
+// the single cache and every later getter sharing that helper returned its value:
+// getDBHost() would hand back the LP_DB_USER string, and getGoogleCSEContext() /
+// getBingSubscriptionKey() / getMerriamWebsterKey() would all hand back the Google
+// CSE key. The per-getter statics below keep every property envConfig.h documents
+// (read once, cached, no static-initialization-order fiasco, thread-safe
+// initialization) and are correct per variable.
+
+static string narrowEnv(const char* varName, const char* fallback)
 {
-	static std::string value = [&]() -> std::string
-	{
-		const char* env = getenv(varName);
-		return (env && *env) ? std::string(env) : std::string(fallback);
-	}();
-	return value;
+	const char* env = getenv(varName);
+	return (env && *env) ? string(env) : string(fallback);
 }
 
-static const std::string& requiredNarrowEnv(const char* varName, const wchar_t* humanDescription)
+static string requiredNarrowEnv(const char* varName, const lpchar_t* humanDescription)
 {
-	static std::string value = [&]() -> std::string
+	const char* env = getenv(varName);
+	if (!env || !*env)
 	{
-		const char* env = getenv(varName);
-		if (!env || !*env)
-		{
-			lplog(LOG_FATAL_ERROR, L"Required environment variable %S is not set (%s). "
-				L"The hardcoded default that used to live in source has been removed - "
-				L"set %S before running.", varName, humanDescription, varName);
-			return std::string(); // unreachable: LOG_FATAL_ERROR aborts.
-		}
-		return std::string(env);
-	}();
-	return value;
+		lplog(LOG_FATAL_ERROR, u"Required environment variable %S is not set (%s). "
+			u"The hardcoded default that used to live in source has been removed - "
+			u"set %S before running.", varName, humanDescription, varName);
+		return string(); // unreachable: LOG_FATAL_ERROR aborts.
+	}
+	return string(env);
+}
+
+static lpwstring widePathEnv(const char* varName, const lpchar_t* fallback)
+{
+	const char* env = getenv(varName);
+	if (env && *env)
+		return lpwstring(lp_narrow_to_wide(string(env)));
+	lplog(LOG_ERROR, u"Environment variable %S is not set; using the compile-time default %s", varName, fallback);
+	return lpwstring(fallback);
+}
+
+static lpwstring requiredWideEnv(const char* varName, const lpchar_t* humanDescription)
+{
+	const char* env = getenv(varName);
+	if (!env || !*env)
+	{
+		lplog(LOG_FATAL_ERROR, u"Required environment variable %S is not set (%s). "
+			u"The hardcoded default that used to live in source has been removed - "
+			u"set %S before running.", varName, humanDescription, varName);
+		return lpwstring(); // unreachable: LOG_FATAL_ERROR aborts.
+	}
+	return lpwstring(lp_narrow_to_wide(string(env)));
 }
 
 const std::string& getDBUser()
 {
-	return cachedNarrowEnv("LP_DB_USER", "root");
+	static const string value = narrowEnv("LP_DB_USER", "root");
+	return value;
 }
 
 const std::string& getDBPassword()
 {
-	return requiredNarrowEnv("LP_DB_PASSWORD", L"MySQL password for LP_DB_USER");
+	static const string value = requiredNarrowEnv("LP_DB_PASSWORD", u"MySQL password for LP_DB_USER");
+	return value;
 }
 
 const std::string& getDBHost()
 {
-	return cachedNarrowEnv("LP_DB_HOST", "localhost");
-}
-
-static const std::wstring& widePathEnv(const wchar_t* varName, const wchar_t* fallback)
-{
-	static std::wstring value = [&]() -> std::wstring
-	{
-		const wchar_t* env = _wgetenv(varName);
-		if (env && *env)
-			return std::wstring(env);
-		lplog(LOG_ERROR, L"Environment variable %s is not set; using the compile-time default %s", varName, fallback);
-		return std::wstring(fallback);
-	}();
+	static const string value = narrowEnv("LP_DB_HOST", "localhost");
 	return value;
 }
 
-const std::wstring& getMainDir()
+const lpwstring& getMainDir()
 {
-	return widePathEnv(L"LP_MAIN_DIR", LMAINDIR);
-}
-
-const std::wstring& getCacheDir()
-{
-	return widePathEnv(L"LP_CACHE_DIR", CACHEDIR);
-}
-
-const std::wstring& getWebSearchCacheDir()
-{
-	return widePathEnv(L"LP_WEBSEARCH_CACHE_DIR", WEBSEARCH_CACHEDIR);
-}
-
-const std::wstring& getTextDir()
-{
-	return widePathEnv(L"LP_TEXT_DIR", TEXTDIR);
-}
-
-static const std::wstring& requiredWideEnv(const wchar_t* varName, const wchar_t* humanDescription)
-{
-	static std::wstring value = [&]() -> std::wstring
-	{
-		const wchar_t* env = _wgetenv(varName);
-		if (!env || !*env)
-		{
-			lplog(LOG_FATAL_ERROR, L"Required environment variable %s is not set (%s). "
-				L"The hardcoded default that used to live in source has been removed - "
-				L"set %s before running.", varName, humanDescription, varName);
-			return std::wstring(); // unreachable: LOG_FATAL_ERROR aborts.
-		}
-		return std::wstring(env);
-	}();
+	static const lpwstring value = widePathEnv("LP_MAIN_DIR", LMAINDIR);
 	return value;
 }
 
-const std::wstring& getGoogleCSEKey()
+const lpwstring& getCacheDir()
 {
-	return requiredWideEnv(L"LP_GOOGLE_CSE_KEY", L"Google Custom Search API key");
+	static const lpwstring value = widePathEnv("LP_CACHE_DIR", CACHEDIR);
+	return value;
 }
 
-const std::wstring& getGoogleCSEContext()
+const lpwstring& getWebSearchCacheDir()
 {
-	return requiredWideEnv(L"LP_GOOGLE_CSE_CX", L"Google Custom Search engine id (cx)");
+	static const lpwstring value = widePathEnv("LP_WEBSEARCH_CACHE_DIR", WEBSEARCH_CACHEDIR);
+	return value;
 }
 
-const std::wstring& getBingSubscriptionKey()
+const lpwstring& getTextDir()
 {
-	return requiredWideEnv(L"LP_BING_KEY", L"Bing v7 Ocp-Apim-Subscription-Key");
+	static const lpwstring value = widePathEnv("LP_TEXT_DIR", TEXTDIR);
+	return value;
 }
 
-const std::wstring& getMerriamWebsterKey()
+const lpwstring& getGoogleCSEKey()
 {
-	return requiredWideEnv(L"LP_MERRIAM_WEBSTER_KEY", L"Merriam-Webster Collegiate API key");
+	static const lpwstring value = requiredWideEnv("LP_GOOGLE_CSE_KEY", u"Google Custom Search API key");
+	return value;
+}
+
+const lpwstring& getGoogleCSEContext()
+{
+	static const lpwstring value = requiredWideEnv("LP_GOOGLE_CSE_CX", u"Google Custom Search engine id (cx)");
+	return value;
+}
+
+const lpwstring& getBingSubscriptionKey()
+{
+	static const lpwstring value = requiredWideEnv("LP_BING_KEY", u"Bing v7 Ocp-Apim-Subscription-Key");
+	return value;
+}
+
+const lpwstring& getMerriamWebsterKey()
+{
+	static const lpwstring value = requiredWideEnv("LP_MERRIAM_WEBSTER_KEY", u"Merriam-Webster Collegiate API key");
+	return value;
+}
+
+const std::string& getStanfordClasspath()
+{
+	static const string value = []() -> string
+	{
+		const char* env = getenv("LP_STANFORD_CLASSPATH");
+		if (env && *env) return string(env);
+		// Not fatal, and not a logged error either: the Stanford VM is only created
+		// by the HMM tagger comparison paths, so most runs never need this at all.
+		// Separators are POSIX: ':' between classpath entries, '/' within a path.
+		return "." + string(":") + lp_utf16_to_utf8(getMainDir()) +
+			"/Stanford/workspace/StanfordParser/target/StanfordParser-0.0.1-SNAPSHOT.jar";
+	}();
+	return value;
 }
