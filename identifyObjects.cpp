@@ -78,27 +78,6 @@
 #include "bitObject.h"
 #define MAX_BUF 10240000
 
-// Eliminate a __NOUN/__MNOUN winner when an equally long __S1 has equal-or-lower
-// average cost. Returns true if this PMA slot should lose (used as a semantic
-// tie-break when a word is both verb and adjective).
-// eliminate patterns based on a little semantic help
-// this was created to help speaker resolution
-// this is very helpful when a word is both a verb and an adjective, so that the pattern is very ambiguous
-bool cSource::preferS1(int position, unsigned int J)
-{
-	LFS
-		vector <cWordMatch>::iterator im = m.begin() + position;
-	cPattern* p = patterns[im->pma[J].getPattern()];
-	// also reject if an _S1 occupies the same elements and is the same or less in cost.
-	if (patterns[im->pma[J].getPattern()]->name != u"__NOUN" && patterns[im->pma[J].getPattern()]->name != u"__MNOUN") return false;
-	int nounAvgCost = im->pma[J].getAverageCost(), element;
-	if ((element = im->pma.queryPatternWithLen(u"__S1", im->pma[J].len)) == -1 ||
-		nounAvgCost < im->pma[element & ~cMatchElement::patternFlag].getAverageCost()) return false;
-	if (debugTrace.tracePatternElimination)
-		lplog(u"position %d:pma %d:pattern %s[%s](%d,%d) is not a winner (S1 preference) nounAvgCost=%d >= S1Cost %d.", position, J,
-			p->name.c_str(), p->differentiator.c_str(), position, im->pma[J].len + position, nounAvgCost, im->pma[element & ~cMatchElement::patternFlag].getAverageCost());
-	return true;
-}
 
 // Locate the head token of a nested NOUN/VNOUN/ADJOBJECT pattern.
 // On success writes specificWhere (source position of N_AGREE / GNOUN / MNOUN /
@@ -640,33 +619,6 @@ void cSource::accumulateAdjectives(int where)
 		addDefaultGenderedAssociatedNouns(adjectiveObject);
 }
 
-// True if both objects have associated adjectives/nouns and are in the same
-// gendered-vs-neuter class family (so nym comparison is meaningful). Pronouns
-// and VERB_OBJECT_CLASS always return false.
-bool cSource::objectClassComparable(vector <cObject>::iterator o, vector <cObject>::iterator lso)
-{
-	LFS
-		int primaryObjectClass = o->objectClass, secondaryObjectClass = lso->objectClass;
-	if (primaryObjectClass == PRONOUN_OBJECT_CLASS || primaryObjectClass == REFLEXIVE_PRONOUN_OBJECT_CLASS || primaryObjectClass == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
-		primaryObjectClass == VERB_OBJECT_CLASS)
-		return false;
-	if (secondaryObjectClass == PRONOUN_OBJECT_CLASS || secondaryObjectClass == REFLEXIVE_PRONOUN_OBJECT_CLASS || secondaryObjectClass == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
-		secondaryObjectClass == VERB_OBJECT_CLASS)
-		return false;
-	if (o->associatedAdjectives.empty() && o->associatedNouns.empty())
-		return false;
-	if (lso->associatedAdjectives.empty() && lso->associatedNouns.empty())
-		return false;
-	bool isPrimaryGendered = (primaryObjectClass == NAME_OBJECT_CLASS || primaryObjectClass == GENDERED_GENERAL_OBJECT_CLASS ||
-		primaryObjectClass == BODY_OBJECT_CLASS || primaryObjectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-		primaryObjectClass == GENDERED_DEMONYM_OBJECT_CLASS || primaryObjectClass == META_GROUP_OBJECT_CLASS ||
-		primaryObjectClass == GENDERED_RELATIVE_OBJECT_CLASS);
-	bool isSecondaryGendered = (secondaryObjectClass == NAME_OBJECT_CLASS || secondaryObjectClass == GENDERED_GENERAL_OBJECT_CLASS ||
-		secondaryObjectClass == BODY_OBJECT_CLASS || secondaryObjectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS ||
-		secondaryObjectClass == GENDERED_DEMONYM_OBJECT_CLASS || secondaryObjectClass == META_GROUP_OBJECT_CLASS ||
-		secondaryObjectClass == GENDERED_RELATIVE_OBJECT_CLASS);
-	return !(isPrimaryGendered ^ isSecondaryGendered);
-}
 
 // True if o is GENDERED_DEMONYM_OBJECT_CLASS or any associatedNoun has demonymForm.
 bool cSource::hasDemonyms(vector <cObject>::iterator o)
@@ -1739,102 +1691,7 @@ int cSource::identifyObject(int tag, int where, int element, bool adjectival, in
 	return 0;
 }
 
-// Set o->suspect / verySuspect / ambiguous from winner-form usage costs and
-// the owning PMA slot's average cost. A high-cost object that preferS1()
-// would drop is logged but not unmarked.
-// suspect - for any of the Form elements at the bottom of what the Noun comes down to, if any Form is of cost 4.
-// very suspect - if all of the elements are of cost 4
-// ambiguous - if any of the elements have more than one form
-void cSource::checkObject(vector <cObject>::iterator o)
-{
-	LFS
-		bool unambiguousHighCost = false, highCost = false;
-	for (vector <cWordMatch>::iterator im = m.begin() + o->begin, imEnd = m.begin() + o->end; im != imEnd && !o->ambiguous; im++)
-	{
-		unsigned int numWinners = 0;
-		bool highCostElement = false;
-		for (unsigned int formOffset = 0; formOffset < im->word->second.formsSize(); formOffset++)
-			if (im->isWinner(formOffset) && im->costable())
-			{
-				if (im->word->second.getUsageCost(formOffset) >= 4)
-					highCostElement = true;
-				numWinners++;
-			}
-		o->ambiguous |= (numWinners > 1);
-		if (numWinners == 1) unambiguousHighCost |= highCostElement;
-		highCost |= highCostElement;
-	}
-	lpwstring tmp;
-	if (o->PMAElement < 0)
-	{
-		o->verySuspect = o->suspect = highCost;
-		return;
-	}
-	if ((unsigned)o->PMAElement >= m[o->begin].pma.count)
-	{
-		lplog(LOG_RESOLUTION, u"ERROR object %s has an illegal PMAElement of %d.", objectString(o, tmp, false).c_str(), o->PMAElement);
-		return;
-	}
-	o->verySuspect = (m[o->begin].pma[o->PMAElement].cost / m[o->begin].pma[o->PMAElement].len >= 4);
-	if (highCost && preferS1(o->begin, o->PMAElement))
-		lplog(LOG_RESOLUTION, u"%06d:suspect object %s cancelled", o->begin, objectString(o, tmp, false).c_str());
-	if (!o->ambiguous || o->verySuspect || !highCost)
-	{
-		o->suspect = highCost;
-		return;
-	}
-	if (unambiguousHighCost || m[o->begin].pma[o->PMAElement].cost < 4)
-	{
-		o->suspect = unambiguousHighCost;
-		return;
-	}
-	// ambiguousness is most difficult.  At some point, there was a high cost incurred for an element
-	//  that had two or more winners.
-	o->suspect = highCost;
-}
 
-// Log ambiguous / NAME objects (skipping narrator/audience and pronouns) and
-// a suspect/verySuspect/ambiguous count. cancelSubType and checkObject run
-// per object; gated by traceObjectResolution ^ flipTOROverride.
-void cSource::printObjects(void)
-{
-	LFS
-		lpwstring tmp;
-	vector <cObject>::iterator o = objects.begin(), oEnd = objects.end();
-	unsigned int numSuspectObjects = 0, numVerySuspectObjects = 0, numAmbiguousObjects = 0;
-	for (unsigned int object = 0; o != oEnd; o++, object++)
-	{
-		if (object <= 1) continue;
-		cancelSubType(object);
-		if (!(m[o->begin].t.traceObjectResolution ^ flipTOROverride)) continue;
-		checkObject(o);
-		if (o->suspect) numSuspectObjects++;
-		if (o->verySuspect) numVerySuspectObjects++;
-		if (o->ambiguous) numAmbiguousObjects++;
-		if (o->objectClass == PRONOUN_OBJECT_CLASS || o->objectClass == RECIPROCAL_PRONOUN_OBJECT_CLASS ||
-			o->objectClass == REFLEXIVE_PRONOUN_OBJECT_CLASS || o->eliminated) continue;
-		if (o->ambiguous || o->objectClass == NAME_OBJECT_CLASS)
-		{
-			lplog(LOG_RESOLUTION, u"%06d:%s", o->begin, objectString(o, tmp, false).c_str());
-			for (set <int>::iterator di = o->duplicates.begin(), diEnd = o->duplicates.end(); di != diEnd; di++)
-				lplog(LOG_RESOLUTION, u"  REPLACED #%d %s", *di, objectString(*di, tmp, false).c_str());
-			if (o->objectClass == NAME_OBJECT_CLASS)
-			{
-				set <int> relatedObjects;
-				accumulateRelatedObjects(object, relatedObjects);
-				set<int>::iterator s = relatedObjects.begin(), end = relatedObjects.end();
-				for (; s != end; s++)
-					if (objects[*s].objectClass == NAME_OBJECT_CLASS && *s != object && !objects[*s].eliminated)
-						lplog(LOG_RESOLUTION, u"    #%d %s", *s, objectString(*s, tmp, false).c_str());
-			}
-		}
-	}
-	if (numSuspectObjects || numVerySuspectObjects || numAmbiguousObjects)
-		lplog(LOG_RESOLUTION, u"%d suspect objects (%d%%), %d verySuspect objects (%d%%), %d ambiguous objects (%d%%), %d total objects",
-			numSuspectObjects, numSuspectObjects * 100 / objects.size(),
-			numVerySuspectObjects, numVerySuspectObjects * 100 / objects.size(),
-			numAmbiguousObjects, numAmbiguousObjects * 100 / objects.size(), objects.size());
-}
 
 // If pma is FINAL_IF_ALONE / onlyAlone and is no longer between separators,
 // collect removable winners via removeWinnerFlag and strip them. Returns

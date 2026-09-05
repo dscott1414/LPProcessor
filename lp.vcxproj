@@ -828,7 +828,6 @@
     <ClCompile Include="getDictionary.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
     <ClCompile Include="getThesaurus.cpp" />
-    <ClCompile Include="getTwitter.cpp" />
     <ClCompile Include="getWikipedia.cpp" />
     <ClCompile Include="getWordNet.cpp" />
     <ClCompile Include="questionAnsweringWebSearch.cpp">

@@ -28,8 +28,8 @@ using namespace std;
 // helper, which -- because a function-local static is one object for the whole
 // function, not one per argument value -- meant the FIRST getter to run populated
 // the single cache and every later getter sharing that helper returned its value:
-// getDBHost() would hand back the LP_DB_USER string, and getGoogleCSEContext() /
-// getBingSubscriptionKey() / getMerriamWebsterKey() would all hand back the Google
+// getGoogleCSEContext() /
+// getBingSubscriptionKey() would both hand back the Google
 // CSE key. The per-getter statics below keep every property envConfig.h documents
 // (read once, cached, no static-initialization-order fiasco, thread-safe
 // initialization) and are correct per variable.
@@ -87,11 +87,6 @@ const std::string& getDBPassword()
 	return value;
 }
 
-const std::string& getDBHost()
-{
-	static const string value = narrowEnv("LP_DB_HOST", "localhost");
-	return value;
-}
 
 const lpwstring& getMainDir()
 {
@@ -132,12 +127,6 @@ const lpwstring& getGoogleCSEContext()
 const lpwstring& getBingSubscriptionKey()
 {
 	static const lpwstring value = requiredWideEnv("LP_BING_KEY", u"Bing v7 Ocp-Apim-Subscription-Key");
-	return value;
-}
-
-const lpwstring& getMerriamWebsterKey()
-{
-	static const lpwstring value = requiredWideEnv("LP_MERRIAM_WEBSTER_KEY", u"Merriam-Webster Collegiate API key");
 	return value;
 }
 

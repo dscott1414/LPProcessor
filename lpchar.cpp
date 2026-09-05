@@ -362,10 +362,6 @@ int lp_fwprintf(FILE* stream, const lpchar_t* format, ...)
 	return result;
 }
 
-int lp_vwprintf(const lpchar_t* format, va_list args)
-{
-	return lp_vfwprintf(stdout, format, args);
-}
 
 int lp_wprintf(const lpchar_t* format, ...)
 {

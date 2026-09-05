@@ -353,8 +353,6 @@ public:
 	static bool cacheRdfTypes;  // determines whether rdfTypes are cached in memory.  fileCaching is whether they are cached on disk.
 	static unordered_map <lpwstring, cOntologyEntry> dbPediaOntologyCategoryList;
 	static bool maxFieldLengths();
-	static bool writeOntologyList();
-	static bool readOntologyList();
 	static bool setPreferred(unordered_map <lpwstring ,int > &topHierarchyClassIndexes,vector <cTreeCat *> &rdfTypes);
 	static void rdfIdentify(lpwstring object, vector <cTreeCat *> &rdfTypes, lpwstring fromWhere, bool fileCaching=true);
 	static void includeSuperClasses(unordered_map <lpwstring, int > &topHierarchyClassIndexes, vector <cTreeCat *> &rdfTypes);
@@ -363,8 +361,6 @@ public:
 	static bool inNoERDFTypesDBTable(lpwstring newPath);
 	static bool insertNoERDFTypesDBTable(lpwstring newPath);
 	static int printRDFTypes(const lpchar_t * kind, vector <cTreeCat *> &rdfTypes);
-	static int printExtendedRDFTypes(lpchar_t *kind, vector <cTreeCat *> &rdfTypes, unordered_map <lpwstring, int > &topHierarchyClassIndexes);
-	static void readOpenLibraryInternetArchiveWorksDump();
 	static int fillOntologyList(bool reInitialize);
 
 private:
@@ -378,9 +374,7 @@ private:
 	static bool forceWebReread;
 	// available for future use
 	static int lookupInFreebaseSuggest(lpwstring object,vector <cTreeCat *> &rdfTypes);
-	static int getAcronymRDFTypes(lpwstring &object,vector <cTreeCat *> &rdfTypes);
 	// Freebase
-	static lpwstring getFBDescription(lpwstring id,lpwstring name);
 	static int lookupInFreebase(lpwstring object,vector <cTreeCat *> &rdfTypes);
 
 	static int getAcronyms(lpwstring &object,vector <lpwstring> &acronyms);
@@ -404,7 +398,6 @@ private:
 	static int readYAGOOntology(const lpchar_t * filepath, int &numYAGOEntries, int &numSuperClasses);
 	static int readYAGOOntology();
 	static int readRDFTypes(lpchar_t path[4096],vector <cTreeCat *> &rdfTypes);
-	static lpwstring extractLinkedFreebaseDescription(string &properties,lpwstring &description);
 	static void cutFinalDigits(lpwstring &cat);
 	static lpwstring decodeURL(lpwstring input,lpwstring &decodedURL);
 	static bool copy(void *buf,cOntologyEntry &dbsn,int &where,int limit);

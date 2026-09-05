@@ -116,7 +116,7 @@ Bob and Bill went toward the train while I held the track lever.
 
 1. This simple requirement of understanding conversations forces a much higher standard of analysis as we must keep track of people throughout a document, tracking them through space and time as we must resolve not only who is speaking, but who is being spoken to. If someone leaves, we must understand whether the next paragraph is being spoken by the person who has just left, or the people who have been left behind. This implies a sophisticated understanding of grouping people together because rarely are there only two people in a scene. This includes people spying on other groups of people, and determining point of view (who is narrating a particular passage).
 2. The ontology is based on YAGO and other ontologies which have been blended together.
-3. Database sources include Music Brainz, Wikipedia, DBpedia (for RDF types), Freebase, VerbNet, WordNet, Merriam-Webster Dictionary, Cambridge International Dictionary, thesaurus.com, Roget's Thesaurus, and the U.S. Census (for names and nicknames). Online sources such as DBpedia and Freebase have been localized to minimize internet traffic. I am currently experimenting with Twitter feeds, NewsBank, movie scripts, sentiment analysis using Amazon, etc.
+3. Database sources include Music Brainz, Wikipedia, DBpedia (for RDF types), Freebase, VerbNet, WordNet, Cambridge International Dictionary, thesaurus.com, Roget's Thesaurus, and the U.S. Census (for names and nicknames). Online sources such as DBpedia and Freebase have been localized to minimize internet traffic. I am currently experimenting with movie scripts, sentiment analysis using Amazon, etc.
 4. Based on many academic sources such as Paice/Husk Stemmer, Lappin and Leass, Martha Palmer, Christiane Fellbaum and team, IBM/Lancaster, Inderjeet Mani, Winograd, Longman Grammar, TimeML, Chomsky, and many others.
 5. Question Answering is based on TREC data and papers. Google and BING searches are used instead of the data from NIST. Question answers are based off of syntax but also include creation of a semantic web to infer relations that are not syntactically specified. This includes extraction of data in HTML tables and subquery analysis ("What prize which originated in Spain has Krugman won?")
 6. SQL (MySQL) backend, C/C++ middle layer, Java front end. Parallel processing is used for parsing and semantic analysis.
@@ -169,7 +169,7 @@ Detailed timeline of development contained in Development Diary in OneDrive docu
   4. Read text from file
 3. **Tokenization (tokenize)**
   1. Read word by word
-  2. Words are derived originally from the collegiate Collegiate Merriam Webster dictionary (source file getDictionary.cpp) – this gets possible word classes (using the API). Contains these sections of code for deriving words:
+  2. Words are derived in getDictionary.cpp, which gets possible word classes. NOTE: no dictionary source is currently wired up — `cWord::getForms` returns "not found" for every unknown word until one is. Contains these sections of code for deriving words:
     1. HTML parsing code (reduction of HTML into lexical and definition entries)
     2. Derive completely inflected words from Webster inflection list (ex. -ed)
     3. Derive inflected words from word tense list (ex. past part. , past part & nonstandard past of)
@@ -775,11 +775,7 @@ linkQuestion {LINK}
   1. Extracts interviews from PBS or NPR. This is for future use to analyze conversation and how to construct a meaningful and related response.
 4. MusicBrainz (getMusicBrainz.cpp) – the first database in LP used for answering questions
   1. Recognizes by key words by subject, verb and object and creates queries based on artist, label or release.
-5. NewsBank (getNewsBank.cpp) – retrieves news articles from the NewsBank service
-  1. Retrieves articles randomly by retrieval number and date
-  2. Parses the article for title and translates HTML into plain text.
-6. Twitter (getTwitter.cpp) – retrieves twitter entries. Not used as input for anything yet.
-7. Wikipedia (getWikipedia.cpp) – processing the parts of a Wikipedia page:
+5. Wikipedia (getWikipedia.cpp) – processing the parts of a Wikipedia page:
 
     1. reduction to content
     2. header
@@ -948,8 +944,8 @@ Examples (taken from [https://en.wikipedia.org/wiki/Relativizer](https://en.wiki
 5. Everyone's kinda used to the age group **that** they work with. (object of preposition)
 6. It's just kinda something **that** I noticed recently.
 7. They get values and stuff like **that** from church **that** they might not get at home.
-8. All **that** she wants to do is sleep.
-9. She held onto all those jewelry boxes **that** everybody made for her when we were kids.
+6. All **that** she wants to do is sleep.
+7. She held onto all those jewelry boxes **that** everybody made for her when we were kids.
 10. **That**'s the only place **that** you can go at night.
 11. **That**'s the first compliment **that** I've got in a long time.
 12. **That** was the worst job **that** I ever had.
@@ -1221,8 +1217,8 @@ The following example demonstrates how to upload the DBpedia data sets into Virt
 5. specific\_mappingbased\_properties\_en.ttl
 6. yago\_taxonomy.ttl
 7. yago\_types.ttl
-8. instance\_types\_en.ttl
-9. instance\_types\_sdtyped\_dbo\_en.ttl
+6. instance\_types\_en.ttl
+7. instance\_types\_sdtyped\_dbo\_en.ttl
 10. instance\_types\_transitive\_en.ttl
 11. transitive\_redirects\_en.ttl
 12. redirects\_en.ttl
@@ -1392,9 +1388,6 @@ The MySQL DB name is lp. Tables that are not currently used are crossed out.
 | Multiwordrelations |
  |
  |
-| Newsbanksources |
- |
- |
 | Objectlocations |
  |
  |
@@ -1551,10 +1544,8 @@ solr-dataimporthandler-extras-4.10.2.jar
 | Parameter | Description |
 | --- | --- |
 | -tg | test gutenberg |
-| -acquireNewsBank | acquire more news from the news bank web site |
 | -acquireMovieList | acquire more transcripts of movies from a movie script site |
 | -acquireInterviewTranscript | acquire interviews from NPR |
-| -acquireTwitter | get twitters (free) |
 | -server [host] | set database server (MySQL) |
 | -log [multiprocessor suffix] | set a suffix for all log file types to distinguish them from single processor operation |
 | -mp [0 default] | how many simultaneous parsing processes should occur, does not apply to question answering |
@@ -1579,7 +1570,6 @@ solr-dataimporthandler-extras-4.10.2.jar
 | -C | will not read or write a source cache file or a WordNet cache file |
 | -Test [#start] [#end or +] | parses and does resolve for speaker, objects, pronouns etc with the following parameter as a test file (only) |
 | -Book [#start] [#end or +] | parse the gutenberg books (sourceType 2) |
-| -Newsbank [#start] [#end or +] | parse 6GB of news in the lp\NewsBank directory. getNewsbank does not work anymore. |
 | -BNC [#start] [#end or +] | British National Corpus – used for cross checking because it is already tagged |
 | -Script [#start] [#end or +] | movie scripts |
 | -WebSearch [#start] [#end or +] | used for processing bits of information collected for question answering |
@@ -1873,8 +1863,8 @@ Structure members:
 5. int numLine – which line – not used
 6. int ontologyHierarchicalRank – populated by findCategoryRank and fillRanks, used in setPreferred (set rdfType preferred for topHierarchyClassIndexes, rdfType preferredUnknownClass for all rdfTypes.
 7. int ontologyType - dbPedia\_Ontology\_Type 1, YAGO\_Ontology\_Type 2, UMBEL\_Ontology\_Type 3, OpenGIS\_Ontology\_Type 4
-8. bool descriptionFilled
-9. vector \<wstring\> superClasses
+6. bool descriptionFilled
+7. vector \<wstring\> superClasses
 
 ## Syntactic Relations
 

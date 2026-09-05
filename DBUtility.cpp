@@ -23,7 +23,7 @@
 			the Win32 API name) - wide->UTF-8 into a caller-owned growable buffer.
 		- checkFull() - flush an accumulating INSERT/IN list when it nears full.
 		- escapeStr() / encodeEscape() - SQL literal escaping.
-		- cWord::acquireLock() / releaseLock() - cross-process advisory DB lock.
+		- cWord::releaseLock() - cross-process advisory DB lock.
 		- cWord::generateFormStatistics() - log per-form word counts.
 
 	Key data structures / globals:
@@ -199,36 +199,6 @@ Returns 1 if the lock was obtained successfully,
 				0 if the attempt timed out (for example, because another client has previously locked the name), or
 				NULL if an error occurred (such as running out of memory or the thread was killed with mysqladmin kill).
 If you have a lock obtained with GET_LOCK(), it is released when you execute RELEASE_LOCK(), execute a new GET_LOCK(), or your connection terminates (either normally or abnormally).
-*/
-bool cWord::acquireLock(MYSQL& mysql, bool persistent)
-{
-	LFS
-		int startTime = clock();
-	lp_wprintf(u"Acquiring lock on database...\r");
-	while (true)
-	{
-		MYSQL_RES* result = NULL;
-		if (!myquery(&mysql, u"SELECT GET_LOCK('lp_lock',20)", result)) return false;
-		MYSQL_ROW sqlrow = mysql_fetch_row(result);
-		if (sqlrow == NULL)
-			lplog(LOG_FATAL_ERROR, u"Error acquiring lock.");
-		int lockAcquired = atoi(sqlrow[0]);
-		mysql_free_result(result);
-		if (lockAcquired == 1)
-		{
-			if ((clock() - startTime) > CLOCKS_PER_SEC && logDatabaseDetails)
-				lplog(u"Acquiring global database lock took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
-			return true;
-		}
-		else if (!persistent)
-		{
-			//lplog(u"Skipping global database lock (%d seconds).",(clock()-startTime)/CLOCKS_PER_SEC);
-			return false;
-		}
-		lp_wprintf(u"Acquiring lock on database (%05ld seconds)...\r", (clock() - startTime) / CLOCKS_PER_SEC);
-	}
-	return true;
-}
 
 /*
 Releases the lock named by the lpwstring str that was obtained with GET_LOCK().
@@ -293,17 +263,6 @@ bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qu
 	return ret;
 }
 
-unsigned long encodeEscape(MYSQL& mysql, lpwstring& to, lpwstring from)
-{
-	LFS
-		string sFrom;
-	wTM(from, sFrom);
-	// mysql_real_escape_string can write up to 2*len+1 bytes; the old fixed 1024 buffer overran.
-	vector <char> tmp(sFrom.length() * 2 + 1);
-	unsigned long len = mysql_real_escape_string(&mysql, tmp.data(), sFrom.c_str(), sFrom.length());
-	mTW(tmp.data(), to);
-	return len;
-}
 
 // Escape everything MySQL treats specially inside a quoted literal, so the result is
 // safe in both '...' and "..." contexts.  NUL is escaped as \0 rather than dropped.

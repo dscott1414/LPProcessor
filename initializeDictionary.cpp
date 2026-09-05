@@ -992,11 +992,11 @@ void cWord::createAbbreviationWordCategories()
 	predefineWords(measurement_abbreviation, u"measurement_abbreviation", u"meas_abb", u"noun");
 	// abbreviations - see abbreviations note below
 	Inflections street_address_abbreviation[] = {
-		{u"st",SINGULAR},{u"av",SINGULAR},{u"ave",SINGULAR},{u"dr",SINGULAR},{u"rd",SINGULAR},{u"pk",SINGULAR}, // streets (NewsBank)
+		{u"st",SINGULAR},{u"av",SINGULAR},{u"ave",SINGULAR},{u"dr",SINGULAR},{u"rd",SINGULAR},{u"pk",SINGULAR}, // streets
 		{NULL,0} };
 	predefineWords(street_address_abbreviation, u"street_address_abbreviation", u"sa_abb", u"noun", 0, true);
 	Inflections street_address[] = {
-		{u"street",SINGULAR},{u"avenue",SINGULAR},{u"drive",SINGULAR},{u"road",SINGULAR},{u"pike",SINGULAR}, // streets (NewsBank)
+		{u"street",SINGULAR},{u"avenue",SINGULAR},{u"drive",SINGULAR},{u"road",SINGULAR},{u"pike",SINGULAR}, // streets
 		{NULL,0} };
 	predefineWords(street_address, u"street_address", u"sa", u"noun", cSourceWordInfo::queryOnAnyAppearance, true);
 	Inflections business[] = { {u"incorporated",SINGULAR},{u"limited",SINGULAR},{u"corporation",SINGULAR},{u"company",SINGULAR},{NULL,0} };
@@ -1600,83 +1600,8 @@ int cWord::createWordCategories()
 	return 0;
 }
 
-// Case-insensitive lpwstring less-than for sorting unknown-word lists.
-bool string_compare(const lpwstring& s1, const lpwstring& s2)
-{
-	LFS
-		return s1 < s2 ? 1 : 0;
-}
 
-// Loads fileName into unknownWords (one token per line).
-void cWord::readUnknownWords(lpchar_t* fileName, vector <lpwstring>& unknownWords)
-{
-	LFS
-		int fd = lp_wopen(fileName, O_RDWR);
-	if (fd < 0)
-		lplog(LOG_FATAL_ERROR, u"FATAL:%s unknown word list does not exist.", fileName);
-	unsigned int len = lp_filelength(fd);
-	lpchar_t* buffer = (lpchar_t*)tmalloc(len);
-	::read(fd, buffer, len);
-	close(fd);
-	len /= sizeof(buffer[0]);
-	unknownWords.reserve(500000);
-	//bool sorted=true,duplicates=false;
-	unsigned int lastWord = 0;
-	while (iswspace(buffer[lastWord])) lastWord++;
-	//int wordBeforeThat=-1;
-	for (unsigned int I = lastWord; I < len; I++)
-		if (buffer[I] == 10 || buffer[I] == 13)
-		{
-			buffer[I] = 0;
-			while (buffer[I + 1] >= 0 && iswspace(buffer[I + 1])) I++;
-			//lp_towlower_str(buffer+lastWord);
-			if (lp_strlen(buffer + lastWord) < 2)
-			{
-				//wordBeforeThat=lastWord;
-				lastWord = I + 1;
-				continue;
-			}
-			//if (unknownWords[unknownWords.size()-1]!=buffer+lastWord)
-			unknownWords.push_back(buffer + lastWord);
-			//else
-			//  duplicates=true;
-			//if (sorted && unknownWords.size()>1)
-			//  sorted=unknownWords[unknownWords.size()-2]<=unknownWords[unknownWords.size()-1];
-			//wordBeforeThat=lastWord;
-			lastWord = I + 1;
-		}
-	tfree(len, buffer);
-	//if (!sorted)
-	//  sort(unknownWords.begin(),unknownWords.end(),string_compare);
-	//if (!sorted || duplicates)
-	//  writeUnknownWords(fileName,unknownWords);
-}
 
-// Writes unknownWords to fileName, sorted via string_compare.
-void cWord::writeUnknownWords(lpchar_t* fileName, vector <lpwstring>& unknownWords)
-{
-	LFS
-		if (!unknownWords.size()) return;
-	lpchar_t tmp[1024];
-	lp_wsprintf(tmp, u"%s", fileName);
-	FILE* words = lp_wfopen(tmp, (appendToUnknownWordsMode) ? "ab" : "wb");
-	if (!words)
-	{
-		lplog(LOG_FATAL_ERROR, u"FATAL:%s Cannot open unknown word list.", tmp);
-		return;
-	}
-	for (unsigned int I = 0; I < unknownWords.size(); I++)
-	{
-		if (unknownWords[I][0] >= '0' && unknownWords[I][0] <= '9') // time, date or number not considered unknown.
-			continue;
-		// if next word matches except for subtraction of last letter, remove word.
-		if (unknownWords[I] == unknownWords[I + 1].substr(0, unknownWords[I].length()))
-			continue;
-		lp_fwprintf(words, u"%s\n", unknownWords[I].c_str());
-	}
-	fclose(words);
-	if (appendToUnknownWordsMode) unknownWords.clear();
-}
 
 cWord::cWord(void)
 {
@@ -1737,38 +1662,6 @@ bool cSourceWordInfo::setCost(int form, int cost)
 	return false;
 }
 
-// Marks a hard-coded list of change-of-state verbs with the CHANGE_STATE usage flag.
-void cWord::initializeChangeStateVerbs()
-{
-	LFS
-		InflectionsRoot changeState[] = {
-			{u"start",VERB_PRESENT_FIRST_SINGULAR,u"start"},			    {u"started",VERB_PAST,u"start"},					{u"starting",VERB_PRESENT_PARTICIPLE,u"start"},					{u"starts",VERB_PRESENT_THIRD_SINGULAR,u"start"},
-			{u"begin",VERB_PRESENT_FIRST_SINGULAR,u"begin"},			    {u"began",VERB_PAST,u"begin"},						{u"beginning",VERB_PRESENT_PARTICIPLE,u"begin"},				{u"begins",VERB_PRESENT_THIRD_SINGULAR,u"begin"},
-			{u"commence",VERB_PRESENT_FIRST_SINGULAR,u"commence"},		{u"commenced",VERB_PAST,u"commence"},			{u"commencing",VERB_PRESENT_PARTICIPLE,u"commence"},		{u"commences",VERB_PRESENT_THIRD_SINGULAR,u"commence"},
-			{u"initiate",VERB_PRESENT_FIRST_SINGULAR,u"initiate"},		{u"initiated",VERB_PAST,u"initiate"},			{u"initiating",VERB_PRESENT_PARTICIPLE,u"initiate"},		{u"initiates",VERB_PRESENT_THIRD_SINGULAR,u"initiate"},
-			{u"stop",VERB_PRESENT_FIRST_SINGULAR,u"stop"},						{u"stopped",VERB_PAST,u"stop"},						{u"stopping",VERB_PRESENT_PARTICIPLE,u"stop"},					{u"stops",VERB_PRESENT_THIRD_SINGULAR,u"stop"},
-			{u"halt",VERB_PRESENT_FIRST_SINGULAR,u"halt"},						{u"halted",VERB_PAST,u"halt"},						{u"halting",VERB_PRESENT_PARTICIPLE,u"halt"},						{u"halts",VERB_PRESENT_THIRD_SINGULAR,u"halt"},
-			{u"conclude",VERB_PRESENT_FIRST_SINGULAR,u"conclude"},		{u"concluded",VERB_PAST,u"conclude"},			{u"concluding",VERB_PRESENT_PARTICIPLE,u"conclude"},		{u"concludes",VERB_PRESENT_THIRD_SINGULAR,u"conclude"},
-			{u"discontinue",VERB_PRESENT_FIRST_SINGULAR,u"discontinue"},{u"discontinued",VERB_PAST,u"discontinue"},{u"discontinuing",VERB_PRESENT_PARTICIPLE,u"discontinue"},  {u"discontinues",VERB_PRESENT_THIRD_SINGULAR,u"discontinue"},
-			{u"close",VERB_PRESENT_FIRST_SINGULAR,u"close"},					{u"closed",VERB_PAST,u"close"},						{u"closing",VERB_PRESENT_PARTICIPLE,u"close"},					{u"closes",VERB_PRESENT_THIRD_SINGULAR,u"close"},
-			{u"cease",VERB_PRESENT_FIRST_SINGULAR,u"cease"},					{u"ceased",VERB_PAST,u"cease"},						{u"ceasing",VERB_PRESENT_PARTICIPLE,u"cease"},					{u"ceases",VERB_PRESENT_THIRD_SINGULAR,u"cease"},
-			{u"quit",VERB_PRESENT_FIRST_SINGULAR,u"quit"},						{u"quit",VERB_PAST,u"quit"},							{u"quitting",VERB_PRESENT_PARTICIPLE,u"quit"},					{u"quits",VERB_PRESENT_THIRD_SINGULAR,u"quit"},
-			{u"interrupt",VERB_PRESENT_FIRST_SINGULAR,u"interrupt"},	{u"interrupted",VERB_PAST,u"interrupt"},	{u"interrupting",VERB_PRESENT_PARTICIPLE,u"interrupt"},	{u"interrupts",VERB_PRESENT_THIRD_SINGULAR,u"interrupt"},
-			{u"suspend",VERB_PRESENT_FIRST_SINGULAR,u"suspend"},			{u"suspended",VERB_PAST,u"suspend"},			{u"suspending",VERB_PRESENT_PARTICIPLE,u"suspend"},			{u"suspends",VERB_PRESENT_THIRD_SINGULAR,u"suspend"},
-			{u"pause",VERB_PRESENT_FIRST_SINGULAR,u"pause"},					{u"paused",VERB_PAST,u"pause"},						{u"pausing",VERB_PRESENT_PARTICIPLE,u"pause"},					{u"pauses",VERB_PRESENT_THIRD_SINGULAR,u"pause"},
-			{u"finish",VERB_PRESENT_FIRST_SINGULAR,u"finish"},				{u"finished",VERB_PAST,u"finish"},				{u"finishing",VERB_PRESENT_PARTICIPLE,u"finish"},				{u"finishes",VERB_PRESENT_THIRD_SINGULAR,u"finish"},
-			{u"end",VERB_PRESENT_FIRST_SINGULAR,u"end"},							{u"ended",VERB_PAST,u"end"},							{u"ending",VERB_PRESENT_PARTICIPLE,u"end"},							{u"ends",VERB_PRESENT_THIRD_SINGULAR,u"end"},
-			{u"terminate",VERB_PRESENT_FIRST_SINGULAR,u"terminate"},	{u"terminated",VERB_PAST,u"terminate"},		{u"terminating",VERB_PRESENT_PARTICIPLE,u"terminate"},	{u"terminates",VERB_PRESENT_THIRD_SINGULAR,u"terminate"},
-			{u"complete",VERB_PRESENT_FIRST_SINGULAR,u"complete"},		{u"completed",VERB_PAST,u"complete"},			{u"completing",VERB_PRESENT_PARTICIPLE,u"complete"},		{u"completes",VERB_PRESENT_THIRD_SINGULAR,u"complete"},
-			{u"conclude",VERB_PRESENT_FIRST_SINGULAR,u"conclude"},		{u"concluded",VERB_PAST,u"conclude"},			{u"concluding",VERB_PRESENT_PARTICIPLE,u"conclude"},		{u"concludes",VERB_PRESENT_THIRD_SINGULAR,u"conclude"},
-			{u"resume",VERB_PRESENT_FIRST_SINGULAR,u"resume"},				{u"resumed",VERB_PAST,u"resume"},					{u"resuming",VERB_PRESENT_PARTICIPLE,u"resume"},				{u"resumes",VERB_PRESENT_THIRD_SINGULAR,u"resume"},
-			{u"continue",VERB_PRESENT_FIRST_SINGULAR,u"continue"},		{u"continued",VERB_PAST,u"continue"},			{u"continuing",VERB_PRESENT_PARTICIPLE,u"continue"},		{u"continues",VERB_PRESENT_THIRD_SINGULAR,u"continue"},
-			{u"recommence",VERB_PRESENT_FIRST_SINGULAR,u"recommence"},{u"recommenced",VERB_PAST,u"recommence"},	{u"recommencing",VERB_PRESENT_PARTICIPLE,u"recommence"},{u"recommences",VERB_PRESENT_THIRD_SINGULAR,u"recommence"},
-			{u"renew",VERB_PRESENT_FIRST_SINGULAR,u"renew"},					{u"renewed",VERB_PAST,u"renew"},					{u"renewing",VERB_PRESENT_PARTICIPLE,u"renew"},					{u"renews",VERB_PRESENT_THIRD_SINGULAR,u"renew"},
-			{u"restart",VERB_PRESENT_FIRST_SINGULAR,u"restart"},			{u"restarted",VERB_PAST,u"restart"},			{u"restarting",VERB_PRESENT_PARTICIPLE,u"restart"},			{u"restarts",VERB_PRESENT_THIRD_SINGULAR,u"restart"},
-			{NULL,0} };
-	predefineWords(changeState, u"changeState", u"changeState", u"verb", 0);
-}
 
 // Resolves global verbForm / beForm / haveForm / … indexes after forms have been created.
 void cWord::findPredefinedVerb()

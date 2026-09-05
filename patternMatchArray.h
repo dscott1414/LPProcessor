@@ -12,13 +12,13 @@
 	Pipeline position:
 		Stage 4.  Written by cPattern::fillPattern() via push_back_unique(); read by
 		the winnow in source.cpp (eliminateLoserPatterns*) and by every later query
-		(queryPattern, findAgent, queryTagSet, ...).
+		(queryPattern, ...).
 
 	Key entry points:
 		- push_back_unique() - insert or find (pattern,len); sets reduced/pushed
 		- find() / lower_bound() - bsearch / hand-rolled lower_bound
 		- consolidateWinners() - compact to winner entries and translate PEMA links
-		- queryPattern* / queryPatternDiff* / queryTagSet / findAgent - lookups used
+		- queryPattern* / queryPatternDiff* - lookups used
 		  by relations, objects, speakers, QA
 
 	Key data structures / globals:
@@ -108,7 +108,6 @@ public:
 	cPatternMatchArray(const cPatternMatchArray &rhs);
 
 	tPatternMatch *content;
-	void minimize(void);
 	bool write(IOHANDLE file);
 	bool read(char *buffer,int &where,unsigned int limit);
 	bool write(void *buffer,int &where,unsigned int limit);
@@ -119,7 +118,6 @@ public:
 	const tPatternMatch &operator[](unsigned int _P0) const;
 	//bool push_back(tPatternMatch &pm);
 	int push_back_unique(int pass,short cost,unsigned short p,short end,bool &reduced,bool &pushed);
-	int getNextPosition(int w);
 	int erase(unsigned int at);
 	int erase(void);
 	tPatternMatch *find(unsigned int p,short end);
@@ -130,7 +128,6 @@ public:
 	int queryPatternDiff(lpwstring pattern,lpwstring differentiator,int &maxLen);
 	int queryPatternDiffLessThenLength(lpwstring pattern, lpwstring differentiator, int &maxLen);
 	int queryPatternDiff(lpwstring pattern,lpwstring differentiator);
-	int findAgent(int &element,int maximumMaxEnd,bool allowPronouns);
 	int queryPattern(lpwstring pattern);
 	int queryPattern(lpwstring pattern,int &len);
 	int queryAllPattern(lpwstring pattern,int startAt);
@@ -140,7 +137,6 @@ public:
 	int queryPatternWithLen(int pattern,int len);
 	int queryMaximumLowestCostPattern(lpwstring pattern,int &len);
 	int queryQuestionFlagPattern();
-	int queryTagSet(unsigned int &element,int desiredTagSetNum,int &maxLen);
 	// Longest PMA slot whose pattern carries `tag`, or -1 if none does.
 	int queryTag(int tag)
 	{

@@ -3032,26 +3032,6 @@ void cProximityMap::cProximityEntry::printDirectRelations(cQuestionAnswering& qa
 		}
 }
 
-// semanticMatch against the question subject, then (if subQueries is non-empty)
-// matchSubQueries. Returns the subquery confidence when subqueries exist,
-// otherwise the subject semantic-match value.
-int cQuestionAnswering::semanticMatchSingle(cSource* questionSource, lpwstring derivation, cSyntacticRelationGroup* parentSRG, cSource* childSource, int whereChild, int childObject, int& semanticMismatch, bool& subQueryNoMatch,
-	vector <cSyntacticRelationGroup>& subQueries, int numConsideredParentAnswer, bool useParallelQuery)
-{
-	LFS
-		int semMatchValue = 1;
-	bool synonym = false;
-	semMatchValue = questionSource->checkParticularPartSemanticMatch(LOG_WHERE, parentSRG->whereSubject, childSource, whereChild, childObject, synonym, semanticMismatch, fileCaching);
-	if (subQueries.empty())
-		return semMatchValue;
-	int subQueryConfidenceMatch = matchSubQueries(questionSource, derivation, childSource, semanticMismatch, subQueryNoMatch, subQueries, whereChild, -1, numConsideredParentAnswer, semMatchValue, useParallelQuery);
-	lpwstring tmpstr1, tmpstr2;
-	int numWords = 0;
-	lplog(LOG_WHERE, u"%d:subquery comparison between whereQuestionTypeObject=%d:%s and whereChildCandidateAnswer=%d:%s yields semanticMismatch=%d subQueryNoMatch=%s confidence=%d (3)", numConsideredParentAnswer - 1,
-		parentSRG->whereQuestionTypeObject, questionSource->whereString(parentSRG->whereQuestionTypeObject, tmpstr1, false).c_str(), whereChild, childSource->whereString(whereChild, tmpstr2, false, 6, u" ", numWords).c_str(),
-		semanticMismatch, (subQueryNoMatch) ? u"true" : u"false", subQueryConfidenceMatch);
-	return subQueryConfidenceMatch;
-}
 
 // do cas1 and cas2 give the same answer?
 // Compares the child slot that corresponds to the WH-span (subject / object /

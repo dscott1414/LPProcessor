@@ -7,7 +7,7 @@
 		when the extension is non-empty), and fputs the message encoded as UTF-8.
 		FILE*s stay open for logCache seconds (or forever if logCache is large).
 		lplog() formats into a LOG_BUFFER_SIZE lpchar_t stack buffer, appends a
-		newline, and calls logstring.  lplogNR skips the newline.
+		newline, and calls logstring.
 
 	Pipeline position:
 		Used from the first initializeDatabaseHandle through QA.  Every other
@@ -16,7 +16,6 @@
 	Key entry points:
 		- logstring() - write / flush / FATAL-exit.
 		- lplog() x3 - format (or flush-all when format==NULL).
-		- lplogNR() - format without a trailing newline.
 
 	Key data structures / globals:
 		- last*Clock - TLS, last time that level's FILE* was opened.
@@ -379,27 +378,3 @@ int lplog(int logLevel, const lpchar_t* format, ...)
 	return 0;
 }
 
-// Like lplog(logLevel,...) but does not append a newline ("NR" = no return-
-// character, not "no return").  The FATAL block after logstring is unreachable
-// because logstring() already called fatalExit().
-int lplogNR(int logLevel, const lpchar_t* format, ...)
-{
-	LFS
-		if (format == NULL) return logstring(LOG_MASK & ~LOG_FATAL_ERROR, NULL);
-	// construct var string
-	lpchar_t buf[LOG_BUFFER_SIZE];
-	va_list marker;
-	va_start(marker, format);
-	if (lp_vsnprintf(buf, LOG_BUFFER_SIZE - 3, format, marker) < 0)
-		buf[LOG_BUFFER_SIZE - 2] = 0;
-	va_end(marker);
-	if (logLevel & LOG_FATAL_ERROR) logLevel |= LOG_ERROR;
-	logstring(logLevel, buf);
-	if (logLevel & LOG_FATAL_ERROR)
-	{
-		logstring(LOG_MASK, NULL);
-		lp_wprintf(u"%s", buf); // buf is runtime data, never a format string
-		fatalExit();
-	}
-	return 0;
-}

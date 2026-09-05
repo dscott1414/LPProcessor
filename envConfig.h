@@ -10,12 +10,12 @@
 		defaults.
 
 	Key entry points:
-		- getDBUser() / getDBPassword() / getDBHost() - MySQL credentials.
+		- getDBUser() / getDBPassword() - MySQL credentials.
 		- getMainDir() / getCacheDir() / getWebSearchCacheDir() / getTextDir() -
 			filesystem roots; fall back to the general.h macros with a logged
 			error if the environment variable is not set.
 		- getGoogleCSEKey() / getGoogleCSEContext() / getBingSubscriptionKey() /
-			getMerriamWebsterKey() - third-party API credentials.
+			third-party API credentials.
 
 	Notes / gotchas:
 		- Each getter reads its environment variable once and caches the result
@@ -28,7 +28,7 @@
 			the historical compile-time default and log a (non-fatal) error, since
 			paths already have a working default for the author's own machine.
 		- Rotating the actual leaked credentials on the real services (MySQL,
-			Google Cloud Console, Azure/Bing, dictionaryapi.com) is not something
+			Google Cloud Console, Azure/Bing) is not something
 			this module can do - only removing the hardcoded literals from source.
 */
 #pragma once
@@ -41,7 +41,6 @@
 
 const std::string& getDBUser();
 const std::string& getDBPassword();
-const std::string& getDBHost();
 
 const lpwstring& getMainDir();
 const lpwstring& getCacheDir();
@@ -51,7 +50,6 @@ const lpwstring& getTextDir();
 const lpwstring& getGoogleCSEKey();
 const lpwstring& getGoogleCSEContext();
 const lpwstring& getBingSubscriptionKey();
-const lpwstring& getMerriamWebsterKey();
 
 // Batch B11: the Java classpath used to create the JNI VM for the Stanford parser
 // (hmm.cpp). Was a hardcoded Windows path,

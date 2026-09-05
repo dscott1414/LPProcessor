@@ -143,26 +143,6 @@ bool comparesr(const cSyntacticRelationGroup& s1, const cSyntacticRelationGroup&
 		return s1.where < s2.where;
 }
 
-// Span of an SRG in m: min/max of the where* slots that are >= 0.
-// begin is seeded at 1e8 so an all-negative SRG leaves begin huge and end -1.
-void cSource::getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr, int& begin, int& end)
-{
-	LFS
-		begin = 100000000;
-	end = -1;
-	if (csr->whereControllingEntity >= 0) begin = min(begin, csr->whereControllingEntity);
-	end = max(end, csr->whereControllingEntity);
-	if (csr->whereSubject >= 0) begin = min(begin, csr->whereSubject);
-	end = max(end, csr->whereSubject);
-	if (csr->whereVerb >= 0) begin = min(begin, csr->whereVerb);
-	end = max(end, csr->whereVerb);
-	if (csr->wherePrep >= 0) begin = min(begin, csr->wherePrep);
-	end = max(end, csr->wherePrep);
-	if (csr->whereObject >= 0) begin = min(begin, csr->whereObject);
-	end = max(end, csr->whereObject);
-	if (csr->wherePrepObject >= 0) begin = min(begin, csr->wherePrepObject);
-	end = max(end, csr->wherePrepObject);
-}
 
 // First SRG at source position `where`, or end() if none. Relies on the
 // vector staying sorted by comparesr.
@@ -3055,36 +3035,6 @@ lpwstring cSource::srToText(int& spr, lpwstring& description)
 	return description;
 }
 
-// Drop a guessed place subtype when the object only appears as a
-// NON_MOVEMENT prep-object, or is a short non-physical NP with usedAsLocation < 5.
-void cSource::cancelSubType(int object)
-{
-	LFS
-		lpwstring tmpstr, tmpstr2;
-	vector <cObject>::iterator o = objects.begin() + object;
-	for (vector <cObject::cLocation>::iterator li = o->locations.begin(), liEnd = o->locations.end(); li != liEnd && o->getSubType() >= 0; li++)
-	{
-		vector <cWordMatch>::iterator im = m.begin() + li->at;
-		if (im->objectRole & NON_MOVEMENT_PREP_OBJECT_ROLE)
-		{
-			if (o->originalLocation == li->at && o->getSubType() == UNKNOWN_PLACE_SUBTYPE)
-				o->resetSubType();
-			if (o->objectClass == NAME_OBJECT_CLASS && o->name.hon != wNULL)
-				o->resetSubType();
-			if (o->objectClass != NAME_OBJECT_CLASS && o->objectClass != NON_GENDERED_NAME_OBJECT_CLASS && debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, u"%06d:question place %s is [%s]?", li->at, objectString(object, tmpstr, false).c_str(), (o->getSubType() <= UNKNOWN_PLACE_SUBTYPE) ? OCSubTypeStrings[o->getSubType()] : itos(o->getSubType(), tmpstr2).c_str());
-		}
-		if (o->getSubType() == UNKNOWN_PLACE_SUBTYPE && !(im->objectRole & MOVEMENT_PREP_OBJECT_ROLE) &&
-			o->usedAsLocation < 5 &&
-			((im->endObjectPosition - im->beginObjectPosition == 2 && m[im->beginObjectPosition].queryWinnerForm(determinerForm) >= 0) ||
-				im->endObjectPosition - im->beginObjectPosition == 1) && (im->flags & cSourceWordInfo::notPhysicalObjectByWN))
-		{
-			if (debugTrace.traceSpeakerResolution)
-				lplog(LOG_RESOLUTION, u"%06d:%d:%s is NOT PLACE?", *li, o->usedAsLocation, objectString(object, tmpstr, false).c_str());
-			o->resetSubType();
-		}
-	}
-}
 
 // VerbNet classes for the lemma at whereVerb, preferring verb+particle
 // (?get_out?). Sets verb to that lemma. end() if unknown.
@@ -3189,17 +3139,6 @@ bool cSource::isSelfMoveVerb(int where, bool& exitOnly)
 	return moveOrExit;
 }
 
-// True if any VerbNet class of `where` is a control / causation class.
-bool cSource::isControlVerb(int where)
-{
-	LFS
-		lpwstring verb;
-	unordered_map <lpwstring, set <int> >::iterator lvtoCi = getVerbClasses(where, verb);
-	if (lvtoCi != vbNetVerbToClassMap.end())
-		for (set <int>::iterator vbi = lvtoCi->second.begin(), vbiEnd = lvtoCi->second.end(); vbi != vbiEnd; vbi++)
-			if (vbNetClasses[*vbi].control) return true;
-	return false;
-}
 
 // True if whereVerb?s VerbNet set contains verbClass (index into vbNetClasses).
 bool cSource::isVerbClass(int where, int verbClass)
@@ -3858,65 +3797,6 @@ void cSource::analyzeWordSenses(void)
 	lp_wprintf(u"PROGRESS: 100%% words analyzed with %d seconds elapsed \n", clocksec());
 }
 
-// Dump vbNetClasses frequencies (highest first) when traceSpeakerResolution.
-void cSource::printVerbFrequency()
-{
-	LFS
-		int totalNumVerbs = 0;
-	vector <cWordMatch>::iterator im = m.begin(), imend = m.end();
-	for (int I = 0; im != imend; im++, I++)
-	{
-		if ((im->flags & cWordMatch::flagTempVNReAnalysis) &&
-			((im->relSubject < 0 && im->getRelObject() < 0 && im->queryWinnerForm(verbForm) < 0 && im->queryWinnerForm(thinkForm) < 0) || im->queryWinnerForm(verbverbForm) >= 0))
-		{
-			// eliminate helper verbs
-			addVCFrequency(I, 1, im, true, debugTrace, lastNounNotFound, lastVerbNotFound);
-			verbsMappedToVerbNet--;
-			im->flags &= ~cWordMatch::flagVAnalysis;
-		}
-		else if (im->hasWinnerVerbForm() && im->queryWinnerForm(nounForm) < 0 && // don't count confused words (in reference to verbNet mapping)
-			!((im->relSubject < 0 && im->getRelObject() < 0 && im->queryWinnerForm(verbForm) < 0 && im->queryWinnerForm(thinkForm) < 0) || im->queryWinnerForm(verbverbForm) >= 0))
-		{
-			totalNumVerbs++;
-			if (im->word->first == u"ishas" || im->word->first == u"wouldhad")
-			{
-				verbsMappedToVerbNet++;
-				im->flags |= cWordMatch::flagVAnalysis;
-			}
-			// words that are not covered by verbNet
-			//if (!(im->flags&cWordMatch::flagVAnalysis))
-			//	lplog(LOG_TIME,u"XXR %06d %s",I,im->getMainEntry()->first.c_str());
-		}
-	}
-	if (debugTrace.traceSpeakerResolution)
-	{
-		int numVerbNetVerbsFound = 0, totalFrequency = 0;
-		unordered_map <int, int> fVBClassMap;
-		for (int I = 0; I < (signed)vbNetClasses.size(); I++)
-			if (vbNetClasses[I].totalFrequency)
-				fVBClassMap[vbNetClasses[I].totalFrequency] = I;
-		for (unordered_map <int, int>::iterator mI = fVBClassMap.begin(); mI != fVBClassMap.end(); mI++)
-		{
-			if (vbNetClasses[mI->second].incorporatedVerbClass())
-				numVerbNetVerbsFound += mI->first;
-			totalFrequency += mI->first;
-			lpwstring words, tmpstr;
-			unordered_map <int, lpwstring> fVBClassMembersMap;
-			for (unordered_map<lpwstring, int>::iterator vi = vbNetClasses[mI->second].frequencyByMember.begin(), viEnd = vbNetClasses[mI->second].frequencyByMember.end(); vi != viEnd; vi++)
-				fVBClassMembersMap[vi->second] = vi->first;
-			for (unordered_map <int, lpwstring>::iterator mcI = fVBClassMembersMap.begin(); mcI != fVBClassMembersMap.end(); mcI++)
-				words = mcI->second + u":" + itos(mcI->first, tmpstr) + u" " + words;
-			lpwstring vcs;
-			vbNetClasses[mI->second].incorporatedVerbClassString(vcs);
-			lplog(LOG_RESOLUTION, u"%06d:%s%s[%s] (%s)", mI->first, (!vbNetClasses[mI->second].incorporatedVerbClass()) ? u"!" : u"", vbNetClasses[mI->second].name().c_str(), vcs.c_str(), words.c_str());
-		}
-		if (totalFrequency && totalNumVerbs)
-		{
-			lplog(LOG_RESOLUTION, u"%% number of verbs in VerbNet=%d/%d %03d%%.", verbsMappedToVerbNet, totalNumVerbs, verbsMappedToVerbNet * 100 / totalNumVerbs);
-			lplog(LOG_RESOLUTION, u"%% VerbNet covered under higher categories=%d/%d %03d%%.", numVerbNetVerbsFound, totalFrequency, numVerbNetVerbsFound * 100 / totalFrequency);
-		}
-	}
-}
 
 // True if this unquoted past-tense EXIT should age speakers (gendered /
 // MOVING subject, not a think-complement, not ?all? / most body parts).

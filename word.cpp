@@ -440,85 +440,8 @@ cSourceWordInfo::cSourceWordInfo(char* buffer, int& where, int limit, lpwstring&
 	//preferVerbPresentParticiple();
 }
 
-// "map To DB": converts an eUsagePatterns slot (TRANSFER_COUNT..LAST_USAGE_PATTERN) into the
-// pseudo form number used to store that statistic as a row in the wordForms table.
-// Real form numbers stay below patternFormNumOffset (32750), so the two share one column.
-int mTD(int p)
-{
-	return p + cSourceWordInfo::patternFormNumOffset - cSourceWordInfo::TRANSFER_COUNT;
-}
 
-// copies the same logic as transferDBUsagePatternsToUsagePattern
-// instead of transferring some flat array read from the database into an internal usagePatterns,
-// this transforms the counts in a map parameter.
-// transferDBUsagePatternsToUsagePattern(128, UPDB, 0, iCount);
-// transferDBUsagePatternsToUsagePattern(64, UPDB, SINGULAR_NOUN_HAS_DETERMINER, 2);
-// transferDBUsagePatternsToUsagePattern(64, UPDB, VERB_HAS_0_OBJECTS, 3);
-// usagePatterns[LOWER_CASE_USAGE_PATTERN] = max(127, UPDB[LOWER_CASE_USAGE_PATTERN]);
-// usagePatterns[PROPER_NOUN_USAGE_PATTERN] = max(127, UPDB[PROPER_NOUN_USAGE_PATTERN]);
-void cSourceWordInfo::computeDBUsagePatternsToUsagePattern(unordered_map <int, int>& dbUsagePatterns)
-{
-	LFS
-		int highest = -1, highestPatternCount = 128;
-	for (auto const& [pattern, dbCount] : dbUsagePatterns)
-		if (pattern < patternFormNumOffset)
-			highest = max(highest, (signed)dbCount);
-	if (highest >= highestPatternCount)
-		// 600 8 0 -> highest=600   128  1 0
-		for (auto& dbup : dbUsagePatterns)
-			if (dbup.first < patternFormNumOffset)
-				dbup.second = (highestPatternCount * ((unsigned int)dbup.second) / highest);
 
-	highestPatternCount = 64;
-	if (dbUsagePatterns.find(mTD(SINGULAR_NOUN_HAS_DETERMINER)) != dbUsagePatterns.end())
-	{
-		highest = max(dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)], dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)]);
-		if (highest >= highestPatternCount)
-		{
-			dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)] = (highestPatternCount * ((unsigned int)dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_DETERMINER)]) / highest);
-			dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)] = (highestPatternCount * ((unsigned int)dbUsagePatterns[mTD(SINGULAR_NOUN_HAS_NO_DETERMINER)]) / highest);
-		}
-	}
-	if (dbUsagePatterns.find(mTD(VERB_HAS_0_OBJECTS)) != dbUsagePatterns.end())
-	{
-		highest = max(dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)], dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)]);
-		highest = max(highest, dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)]);
-		if (highest >= highestPatternCount)
-		{
-			dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)] = (highestPatternCount * ((unsigned int)dbUsagePatterns[mTD(VERB_HAS_0_OBJECTS)]) / highest);
-			dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)] = (highestPatternCount * ((unsigned int)dbUsagePatterns[mTD(VERB_HAS_1_OBJECTS)]) / highest);
-			dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)] = (highestPatternCount * ((unsigned int)dbUsagePatterns[mTD(VERB_HAS_2_OBJECTS)]) / highest);
-		}
-	}
-	// these two fields are set to 0 for each word (because the values should be kept for each source), so we must copy that logic here.
-	//if (dbUsagePatterns.find(mTD(LOWER_CASE_USAGE_PATTERN)) != dbUsagePatterns.end() && dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] > 127)
-	//	dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] = 127;
-	//if (dbUsagePatterns.find(mTD(PROPER_NOUN_USAGE_PATTERN)) != dbUsagePatterns.end() && dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] > 127)
-	//	dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] = 127;
-	if (dbUsagePatterns.find(mTD(LOWER_CASE_USAGE_PATTERN)) != dbUsagePatterns.end())
-		dbUsagePatterns[mTD(LOWER_CASE_USAGE_PATTERN)] = 0;
-	if (dbUsagePatterns.find(mTD(PROPER_NOUN_USAGE_PATTERN)) != dbUsagePatterns.end())
-		dbUsagePatterns[mTD(PROPER_NOUN_USAGE_PATTERN)] = 0;
-	// this is never transferred in transferFormsAndUsage - should be on a per source level
-	if (dbUsagePatterns.find(mTD(TRANSFER_COUNT)) != dbUsagePatterns.end())
-		dbUsagePatterns[mTD(TRANSFER_COUNT)] = 0;
-}
-
-lpwstring cSourceWordInfo::patternString(int p)
-{
-	switch (p)
-	{
-	case TRANSFER_COUNT: return u"transfer count";
-	case SINGULAR_NOUN_HAS_DETERMINER: return u"has determiner";
-	case SINGULAR_NOUN_HAS_NO_DETERMINER: return u"no determiner";
-	case VERB_HAS_0_OBJECTS: return u"0objects";
-	case VERB_HAS_1_OBJECTS: return u"1object";
-	case VERB_HAS_2_OBJECTS: return u"2objects";
-	case LOWER_CASE_USAGE_PATTERN: return u"lower case";
-	case PROPER_NOUN_USAGE_PATTERN: return u"proper noun";
-	default: return u"UNKNOWN";
-	};
-}
 
 bool cSourceWordInfo::write(void* buffer, int& where, int limit)
 {
@@ -651,16 +574,6 @@ void cSourceWordInfo::setTopLevel(void)
 			}
 }
 
-void cSourceWordInfo::removeIllegalForms(void)
-{
-	LFS
-		for (unsigned int* f = formsArray + formsOffset, *fend = formsArray + formsOffset + count; f != fend; f++)
-			if (((int)*f) < 0 || *f >= Forms.size())
-			{
-				remove(*f);
-				break;
-			}
-}
 
 void cSourceWordInfo::setIgnore(void)
 {
@@ -747,35 +660,7 @@ int cSourceWordInfo::lowestSeparatorCost()
 	return 1000 * lowestCost;
 }
 
-bool cSourceWordInfo::isLowestCost(int form)
-{
-	LFS
-		int lowestCost = 10000, formCost = -1;
-	for (unsigned int* f = formsArray + formsOffset, *fend = formsArray + formsOffset + count, I = 0; f != fend; f++, I++)
-	{
-		if (usageCosts[I] < lowestCost)
-			lowestCost = usageCosts[I];
-		if (*f == form)
-			formCost = usageCosts[I];
-	}
-	return lowestCost != 10000 && formCost != -1 && formCost == lowestCost;
-}
 
-bool cSourceWordInfo::isRareWord(void)
-{
-	LFS
-		bool containsUndefined = false, containsCombination = false;
-	for (unsigned int* f = formsArray + formsOffset, *fend = formsArray + formsOffset + count; f != fend; f++)
-	{
-		if (*f == UNDEFINED_FORM_NUM) containsUndefined = true;
-		else if (*f == COMBINATION_FORM_NUM) containsCombination = true;
-		else if (*f != nounForm && *f != adjectiveForm && *f != verbForm && *f != adverbForm)
-			return false;
-	}
-	return ((containsUndefined || containsCombination) &&
-		usagePatterns[TRANSFER_COUNT] <= 1 &&
-		(inflectionFlags & (MALE_GENDER | FEMALE_GENDER | NEUTER_GENDER)) == 0);
-}
 
 bool cSourceWordInfo::remove(lpchar_t* formName)
 {
@@ -1271,33 +1156,6 @@ void cSourceWordInfo::logFormUsageCosts(lpwstring w)
 	::lplog(u"%s (%s)", w.c_str(), formStr.c_str());
 }
 
-tIWMM cWord::addCopy(lpwstring sWord, tIWMM iWord, bool& added)
-{
-	LFS
-		tIWMM iWordCopy;
-	int start = 0;
-	added = false;
-	if ((iWordCopy = query(sWord)) == WMM.end())
-	{
-		pair < tIWMM, bool > pr;
-		pr = WMM.insert(tWFIMap(sWord, cSourceWordInfo(iWord->second.forms()[0], iWord->second.inflectionFlags, iWord->second.flags, iWord->second.timeFlags, iWord->second.derivationRules, iWord->second.mainEntry, iWord->second.sourceId)));
-		added = pr.second;
-		iWordCopy = pr.first;
-		start = 1; // already inserted the first form
-	}
-	for (unsigned int f = start; f < iWord->second.formsSize(); f++)
-		if (iWordCopy->second.query(iWord->second.forms()[f]) < 0)
-			iWordCopy->second.addForm(iWord->second.forms()[f], sWord);
-	// derivation rules of variant may not apply to copy
-	//iWordCopy->second.derivationRules=iWord->second.derivationRules;
-	// flags like queryOnLowerCase should not be propagated to copy, which is already being queried
-	//iWordCopy->second.flags=iWord->second.flags;
-	iWordCopy->second.timeFlags |= iWord->second.timeFlags;
-	iWordCopy->second.inflectionFlags |= iWord->second.inflectionFlags;
-	if (iWordCopy->second.mainEntry == wNULL)
-		iWordCopy->second.mainEntry = iWord->second.mainEntry;
-	return iWordCopy;
-}
 
 tIWMM cWord::query(lpwstring sWord, int form, int inflection, int& offset)
 {
@@ -1416,31 +1274,7 @@ void cWord::resetCapitalizationAndProperNounUsageStatistics(sTrace debugTrace)
 	}
 }
 
-bool cWord::removeInflectionFlag(lpwstring sWord, int flag)
-{
-	LFS
-		tIWMM iWMM;
-	if ((iWMM = WMM.find(sWord)) != WMM.end() && (iWMM->second.inflectionFlags & flag) == flag)
-	{
-		iWMM->second.inflectionFlags &= ~flag;
-		changedWords = true;
-		return true;
-	}
-	return false;
-}
 
-bool cWord::addInflectionFlag(lpwstring sWord, int flag)
-{
-	LFS
-		tIWMM iWMM;
-	if ((iWMM = WMM.find(sWord)) != WMM.end() && (iWMM->second.inflectionFlags & flag) != flag)
-	{
-		iWMM->second.inflectionFlags |= flag;
-		changedWords = true;
-		return true;
-	}
-	return false;
-}
 
 tIWMM cWord::addNewOrModify(MYSQL* mysql, lpwstring sWord, int flags, int form, int inflection, int derivationRules, lpwstring sME, int sourceId, bool& added, bool markUndefined)
 {

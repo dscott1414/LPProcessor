@@ -97,8 +97,6 @@ public:
 	void merge(cName &n, sTrace &t);
 	bool like(cName &n,sTrace &t); // names are compatible - could be the same
 	bool confidentMatch(cName &n,bool sexConfidentMatch,sTrace &t); // names match in multiple ways, almost certainly the same
-	void insertSubSQL(lpchar_t *buffer,int sourceId,int index,int maxbuf,tIWMM hp,int &buflen,enum cName::nameType ht);
-	int insertSQL(lpchar_t *buffer,int sourceId,int index,int maxbuf);
 	bool neuterName(bool startsWithDeterminer,bool ownedByName,int len);
 	bool matchHonorifics(lpwstring sHon);
 	// Batch B5: isNull() is defined in resolveObjects.cpp and called from

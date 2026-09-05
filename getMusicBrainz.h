@@ -75,8 +75,5 @@ typedef struct
 // Query WS/2 for releases matching byWhatType:what; appends into mbTypes. Returns 0.
 int getReleases(lpwstring byWhatType,lpwstring what,vector <mbInfoReleaseType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for recordings matching byWhatType:what; appends into mbTypes. Returns 0.
-int getRecordings(lpwstring byWhatType,lpwstring what,vector <mbInfoRecordingType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for artists matching byWhatType:what; appends into mbTypes. Returns 0.
-int getArtists(lpwstring byWhatType,lpwstring what,vector <mbInfoArtistType> &mbTypes, bool filterNameDuplicates = false);
 // Query WS/2 for labels matching byWhatType:what; appends into mbTypes. Returns 0.
-int getLabels(lpwstring byWhatType,lpwstring what,vector <mbInfoLabelType> &mbTypes, bool filterNameDuplicates = false);

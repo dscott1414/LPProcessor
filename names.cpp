@@ -810,37 +810,7 @@ bool cName::confidentMatch(cName& n, bool sexConfidentMatch, sTrace& t)
 		(match(n.any, first, false) || match(n.any, last, false) || match(any, n.first, false) || match(any, n.last, false));
 }
 
-// Append “(sourceId,index,wordIndex,ht),” if hp is a real lexicon word.
-// lp_snprintf into buffer+buflen, clamping the remaining capacity to 0 so
-// maxbuf-buflen can never underflow into a huge unsigned size.
-void cName::insertSubSQL(lpchar_t* buffer, int sourceId, int index, int maxbuf, tIWMM hp, int& buflen, enum cName::nameType ht)
-{
-	LFS
-		if (hp != wNULL && hp->second.index >= 0)
-		{
-			int remaining = maxbuf - buflen;
-			if (remaining < 0) remaining = 0;
-			int written = lp_snprintf(buffer + buflen, remaining, u"(%d,%d,%d,%d),", sourceId, index, hp->second.index, ht);
-			if (written > 0) buflen += written;
-		}
-}
 
-// VALUES list of all non-null parts for a name-parts table. Returns buflen.
-int cName::insertSQL(lpchar_t* buffer, int sourceId, int index, int maxbuf)
-{
-	LFS
-		int buflen = 0;
-	insertSubSQL(buffer, sourceId, index, maxbuf, hon, buflen, HON);
-	insertSubSQL(buffer, sourceId, index, maxbuf, hon2, buflen, HON2);
-	insertSubSQL(buffer, sourceId, index, maxbuf, hon3, buflen, HON3);
-	insertSubSQL(buffer, sourceId, index, maxbuf, first, buflen, FIRST);
-	insertSubSQL(buffer, sourceId, index, maxbuf, middle, buflen, MIDDLE);
-	insertSubSQL(buffer, sourceId, index, maxbuf, middle2, buflen, MIDDLE2);
-	insertSubSQL(buffer, sourceId, index, maxbuf, last, buflen, LAST);
-	insertSubSQL(buffer, sourceId, index, maxbuf, suffix, buflen, SUFFIX);
-	insertSubSQL(buffer, sourceId, index, maxbuf, any, buflen, ANY);
-	return buflen;
-}
 
 // Fill name + sex/plural/business from a _NAME tag-set (HON/FIRST/MIDDLE/
 // LAST/ANY/SUFFIX/BUS). Single-letter ANY is rejected unless followed by “.”
@@ -2599,7 +2569,7 @@ struct {
 			{u"ave",u"avenue"},
 			{u"dr",u"drive"},
 			{u"rd",u"road"},
-			{u"pk",u"pike"}, // streets (NewsBank)
+			{u"pk",u"pike"}, // streets
 		// business_abbreviation
 			{u"inc",u"incorporated"},
 			{u"ltd",u"limited"},

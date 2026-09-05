@@ -33,9 +33,16 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_compile_options(-Wall -Wextra)
+add_compile_options(-Wall -Wextra -Wno-parentheses)
 # Matches the existing MSVC philosophy (EnableAllWarnings, TreatWarningAsError=false):
 # surface warnings, do not block the build on them.
+#
+# -Wno-parentheses: this codebase uses `if (error = !copy(...))` deliberately and
+# pervasively — assignment-as-condition is the established idiom in the serialize
+# and deserialize paths, not a mistyped `==`. Left on, it produced thousands of
+# lines of warnings that buried everything else, which is the opposite of what
+# -Wall is for. Turning it off is what makes the remaining warnings readable
+# enough to be worth triaging.
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -222,7 +229,6 @@ set(LPCORE_SOURCES
   getDictionary.cpp
   getMusicBrainz.cpp
   getThesaurus.cpp
-  getTwitter.cpp
   getWikipedia.cpp
   getWordNet.cpp
   getWordNetMaps.cpp

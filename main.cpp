@@ -25,11 +25,10 @@
 	README.md "Command Line" is stale in places - see the notes below):
 		Mode selectors (must appear before any switch, and are matched case-insensitively
 		as a substring of the internal table
-		"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest",
+		"1-test 2-book 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest",
 		the leading digit being the cSource::sourceTypeEnum value):
 			-Test   [name|#begin] [#end|+|~start]  tests\<name>.txt, or a numeric range of TEST_SOURCE_TYPE rows
 			-Book   [#begin] [#end|+]              Project Gutenberg novels (GUTENBERG_SOURCE_TYPE)
-			-Newsbank [#begin] [#end|+]            NewsBank articles
 			-BNC    [#begin] [#end|+]              British National Corpus (pre-tagged; processing itself now lives in getBNC.cpp)
 			-Script [#begin] [#end|+]              movie scripts
 			-WebSearch [#begin] [#end|+]           web search fragments collected for question answering
@@ -62,10 +61,10 @@
 			-MCSW                    keep a copy of the previous cache file before overwriting it
 			-SWNR / -SWNW            read / write the WordNet map cache file
 			-specialExtension <ext>  extra suffix for the source/word cache files (also used as the child -log suffix)
-		Documented in README.md but NOT implemented here: -tg, -acquireNewsBank,
-		-acquireMovieList, -acquireInterviewTranscript, -acquireTwitter,
-		-flipTMSOverride, -flipTUMSOverride, -sourceRead, -sourceWrite, -C.  The
-		corresponding code is either commented out below or lives in "unused source\".
+		Documented in README.md but NOT implemented here: -tg, -acquireMovieList,
+		-acquireInterviewTranscript, -flipTMSOverride, -flipTUMSOverride,
+		-sourceRead, -sourceWrite, -C.  The corresponding code is either commented
+		out below or lives in "unused source\".
 
 	Key entry points:
 		- main() - widens argv, then lpMain(): initialize, parse arguments, validateCacheDir(), build cSource, then either startProcesses() or loop over sources
@@ -1347,7 +1346,7 @@ void processCommandArguments(int argc, lpchar_t* argv[],
 	{
 		lpwstring arg = argv[I];
 		std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
-		if ((where = lp_strstr(u"1-test 2-book 3-newsbank 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
+		if ((where = lp_strstr(u"1-test 2-book 4-bnc 5-script 6-websearch 7-wikipedia 8-interactive :-parserequest", arg.c_str())))
 		{
 			sourceType = (enum cSource::sourceTypeEnum)(where[-1] - '0');
 			sourceArgs = I;
@@ -1396,7 +1395,6 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 			case cSource::WIKIPEDIA_SOURCE_TYPE:
 			case cSource::INTERACTIVE_SOURCE_TYPE:
 			case cSource::WEB_SEARCH_SOURCE_TYPE:
-			case cSource::NEWS_BANK_SOURCE_TYPE:
 			case cSource::REQUEST_TYPE:
 				if ((ret = source.tokenize(title, etext, source.sourcePath, encoding, start, repeatStart, unknownCount)) < 0)
 				{
@@ -1411,7 +1409,6 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 				// source.beginClock = clock();
 				// bncc bnc;
 				// bnc.process(source, source.sourceId, source.sourcePath);
-				// source.adjustWords();
 				// unknownCount = bnc.unknownCount;
 				break;
 			}
@@ -1469,14 +1466,12 @@ void processSource(cSource &source, bool forceSourceReread, bool sourceWordNetRe
 	}
 	if (source.m.size())
 	{
-		//source.printVerbFrequency();
 		source.identifySpeakerGroups();
 		vector <int> secondaryQuotesResolutions;
 		source.resolveSpeakers(secondaryQuotesResolutions);
 		source.resolveFirstSecondPersonPronouns(secondaryQuotesResolutions);
 	}
 	vector <cSyntacticRelationGroup>::iterator srg = source.syntacticRelationGroups.begin();
-	//source.printObjects(); // only necessary if printing objects
 	//source.resolveWordRelations(); // this resolves word relations to add to words - these will be erased unless future plans to update word relations dynamically.
 	if (sourceWrite && !source.write(source.sourcePath, true, false, specialExtension))
 		lplog(LOG_FATAL_ERROR, u"buffer overrun");
@@ -1613,9 +1608,7 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 // TEST Ontology:
 	//cOntology::fillOntologyList(true);
 	//cOntology::maxFieldLengths();
-	//cOntology::writeOntologyList();
 	//cOntology ontology;
-	//ontology.readOpenLibraryInternetArchiveWorksDump();
 // Test MusicBrainz
 	vector <mbInfoRecordingType> mbRecordingsTypes;
 	vector <mbInfoReleaseType> mbReleasesTypes;
@@ -1626,10 +1619,8 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 	getRecordings(u"artist",u"Jay-Z",mbRecordingsTypes);
 // TEST thesaurus
 	// build thesaurus
-	//source.createThesaurusTables();
 	//extern vector <sDefinition> thesaurus;
 	//for (int I = 0; I < thesaurus.size(); I++)
-	//	source.writeThesaurusEntry(thesaurus[I]);
 	// synonym testing
 	//vector <set <lpwstring> > synonyms;
 	//source.getWordNetSynonymsOnly(u"car", synonyms, 1);

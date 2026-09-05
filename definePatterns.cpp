@@ -224,7 +224,7 @@ void createMetaNameEquivalencePatterns(void);
 // 176: some is also a pronoun
 // Register the noun-phrase family: _NOUN_OBJ, __N1, __NOUN[2/3/4/WILL/MTHAN/R*],
 // __PNOUN, __APPNOUN, coordinated / possessive / company-suffix variants.
-// Differentiator "2" is the common-noun shape findAgent() looks for; "C" is
+// Differentiator "2" is the common-noun shape; "C" is
 // pronominal; "R"/"R2"/... are relative-clause-containing nouns that set
 // _EXPLICIT_SUBJECT_VERB_AGREEMENT.  Returns 0.
 int createNouns(void)

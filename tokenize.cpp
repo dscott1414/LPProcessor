@@ -26,7 +26,7 @@
 		- readSourceBuffer() - open the file, guess/confirm the code page, find the start
 		- parseBuffer() - the main readWord() loop that fills m and sentenceStarts
 		- doQuotesOwnershipAndContractions() - the post-tokenization sentence-by-sentence pass
-		- adjustWord() / adjustWords() - contraction and slang rewriting (inserts/deletes tokens)
+		- adjustWord() - contraction and slang rewriting (inserts/deletes tokens)
 		- checkProperNoun() - proper-noun flag decisions using global + local capitalization stats
 
 	Key data structures / globals:
@@ -88,7 +88,7 @@
 // Some rules only overwrite m[q] (word, forms, flags) in place; others insert a new token.
 // Returns true only when the size of m changed (i.e. a token was inserted), which is the
 // signal to the caller that it must renumber sentenceStarts, rebuild
-// metaCommandsEmbeddedInSource and bump its own sentence end - see adjustWords() and
+// metaCommandsEmbeddedInSource and bump its own sentence end - see
 // doQuotesOwnershipAndContractions().  Returns false for the pure in-place rewrites.
 // Side effects: mutates m (words, forms, flags, size); may add words to the lexicon through
 // Words.gquery.
@@ -1018,50 +1018,6 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 	return quotationExceptions;
 }
 
-void cSource::adjustWords(void)
-{
-	LFS
-		// rearrange quotes, also figure out plural ownership and more on would/had is/has
-		for (unsigned int s = 0; s + 1 < sentenceStarts.size(); s++)
-		{
-			unsigned int begin = sentenceStarts[s];
-			unsigned int end = sentenceStarts[s + 1];
-			while (end && m[end - 1].word == Words.sectionWord)
-				end--; // cut off end of paragraphs
-			if (begin >= end)
-			{
-				sentenceStarts.erase(s--);
-				continue;
-			}
-			unsigned int sectionEnd;
-			if (isSectionHeader(begin, end, sectionEnd))
-			{
-				sentenceStarts.insert(s + 1, sectionEnd);
-				continue;
-			}
-			bool endOfParagraph = false;
-			while (end && m[end - 1].word == Words.sectionWord)
-			{
-				end--; // cut off end of paragraphs
-				endOfParagraph = true;
-			}
-			if (!end)
-				continue;
-			for (unsigned int q = begin; q < end; q++)
-			{
-				if (adjustWord(q))
-				{
-					for (unsigned int s2 = s + 1; s2 < sentenceStarts.size(); s2++)
-						sentenceStarts[s2]++;
-					unordered_map <unsigned int, lpwstring> newMetaCommandsEmbeddedInSource;
-					for (auto const& [where, comment] : metaCommandsEmbeddedInSource)
-						newMetaCommandsEmbeddedInSource[(where > q) ? where + 1 : where] = comment;
-					metaCommandsEmbeddedInSource = newMetaCommandsEmbeddedInSource;
-					end++;
-				}
-			}
-		}
-}
 
 #define ENCODING_STRING u"Character set encoding:"
 // 0 -not set

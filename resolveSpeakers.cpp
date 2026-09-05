@@ -670,40 +670,7 @@ bool cSource::isExternalBodyPart(int where,bool &singular,bool pluralAllowed)
   return false;
 }
 
-// Write a UTF-16LE file (BOM + CRLF lines) of the set.  Returns false if
-// fopen fails.  Only referenced from the commented-out isPsychologicalFeature.
-bool writeStringVector(lpchar_t *path,set <lpwstring> &v)
-{ LFS
-	FILE *fp=lp_wfopen(path,"wb"); // binary mode reads unicode
-	if (!fp) return false;
-	fputwc(0xFEFF,fp);
-	for (set <lpwstring>::iterator vi=v.begin(),viEnd=v.end(); vi!=viEnd; vi++)
-	{
-		lp_fputws(vi->c_str(),fp);
-		lp_fputws(u"\r\n",fp);
-	}
-	fclose(fp);
-	return true;
-}
 
-// Read a UTF-16LE word list into v, stripping BOM and CR/LF.  Returns false
-// if fopen fails.
-bool readStringVector(lpchar_t *path,set <lpwstring> &v)
-{ LFS
-	FILE *fp=lp_wfopen(path,"rb"); // binary mode reads unicode
-	if (!fp) return false;
-	lpchar_t buf[1024];
-	while (lp_fgetws(buf,sizeof(buf)/sizeof(*buf),fp))
-	{
-		if (buf[0]==0xFEFF) // detect BOM
-			memcpy(buf,buf+1,(lp_strlen(buf+1)+1)*sizeof(buf[0]));
-		if (buf[lp_strlen(buf)-1]=='\n') buf[lp_strlen(buf)-1]=0;
-		if (buf[lp_strlen(buf)-1]=='\r') buf[lp_strlen(buf)-1]=0; // in binary mode, cr/lf is not translated
-		v.insert(buf);
-	}
-	fclose(fp);
-	return true;
-}
 
 // all abstract entities that are psychological attributes
 // u"communication" includes such things as screaming, etc.
@@ -4980,100 +4947,8 @@ int cSource::preferWordOrder(int wordOrderSensitiveModifier,vector <int> &locati
 	return -1;
 }
 
-// if subject and object are pronouns and one is single and the other is plural, 
-//   override computed saliences and substitute speakerGroup info
-// True if the sentence containing 'where' has both singular and plural
-// gendered mentions - chooseBest then keeps mixed-plurality matches.
-bool cSource::mixedPluralityInSameSentence(int where)
-{ LFS
-	int object=m[where].getObject();
-	if (object<0) return false;
-	int objectClass=objects[object].objectClass;
-  if (objectClass!=PRONOUN_OBJECT_CLASS &&
-      objectClass!=REFLEXIVE_PRONOUN_OBJECT_CLASS &&
-      objectClass!=RECIPROCAL_PRONOUN_OBJECT_CLASS)
-		return false;
-	int whereOtherObject;
-	if ((whereOtherObject=m[where].getRelObject())<0 && (whereOtherObject=m[where].relSubject)<0)
-		return false;
-	int otherObject=m[whereOtherObject].getObject();
-	if (otherObject<0)
-		return false;
-	int otherObjectClass=objects[otherObject].objectClass;
-	if (otherObjectClass!=PRONOUN_OBJECT_CLASS &&
-			otherObjectClass!=REFLEXIVE_PRONOUN_OBJECT_CLASS &&
-			otherObjectClass!=RECIPROCAL_PRONOUN_OBJECT_CLASS)
-	{
-		int otherObjectMaxEnd=m[whereOtherObject].pma.findMaxLen()+whereOtherObject;
-		bool successfullyFoundLocalPrepObject=false;
-		// attempt to search out any objects of prepositions within the immediate noun phrase
-		for (int I=whereOtherObject; I<otherObjectMaxEnd && !isEOS(I) && !(m[I].objectRole&SUBJECT_ROLE) && m[I].word!=Words.sectionWord && !successfullyFoundLocalPrepObject; I++)
-			successfullyFoundLocalPrepObject=(m[I].objectRole&PREP_OBJECT_ROLE)!=0 && (otherObject=m[I].getObject())>=0 && 
-				  ((otherObjectClass=objects[otherObject].objectClass)==PRONOUN_OBJECT_CLASS || otherObjectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS || otherObjectClass==RECIPROCAL_PRONOUN_OBJECT_CLASS);
-		if (!successfullyFoundLocalPrepObject)
-			return false;
-	}
-	return objects[object].plural ^ objects[otherObject].plural;
-}
 
 #define MIXED_PLURALITY_SALIENCE_BOOST 2000
-// if there are subgroups for the current speakerGroup
-// and there are both plural and singular pronouns used in this sentence
-// then if this is a singular pronoun increase localObjects matching the singular division of the speakerGroup salience by 1000 
-// if this is a plural pronoun increase localObjects matching the plural division of the speakerGroup salience by 1000 
-// When mixed plurality is in play, boost subgroup members of the current
-// speaker group so "they" prefers the known pair over a looser set.
-void cSource::mixedPluralityUsageSubGroupEnhancement(int where)
-{ LFS
-	if (currentSpeakerGroup<speakerGroups.size() && speakerGroups[currentSpeakerGroup].groupedSpeakers.size())
-	{
-		int I;
-		// back up to beginning of sentence
-		for (I=where; I>=0 && !isEOS(I); I--);
-		if (I==0) return;
-		int beginSentence=I;
-		for (I=where; I<(signed)m.size() && !isEOS(I); I++);
-		if (I==m.size()) return;
-		int endSentence=I;
-		int singularPronounSeen=0,pluralPronounSeen=0;
-		for (I=beginSentence; I<endSentence; I++)
-		{
-			int o=m[I].getObject();
-			if (o== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE || o== cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE ||
-				  (o>=0 && (objects[o].male || objects[o].female) && !objects[o].plural && 
-					 (objects[o].objectClass==PRONOUN_OBJECT_CLASS || objects[o].objectClass==REFLEXIVE_PRONOUN_OBJECT_CLASS || 
-					  objects[o].objectClass==RECIPROCAL_PRONOUN_OBJECT_CLASS)))
-				singularPronounSeen++;
-			else if (o== cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL || (o>=0 && objects[o].plural))
-				pluralPronounSeen++;
-		}
-		if (singularPronounSeen==0 || pluralPronounSeen==0)
-			return;
-		int o=m[where].getObject();
-		singularPronounSeen=pluralPronounSeen=0;
-		if (o== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE || o== cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE || (o>=0 && (objects[o].male || objects[o].female) && !objects[o].plural))
-			singularPronounSeen++;
-		else if (o== cObject::eOBJECTS::OBJECT_UNKNOWN_PLURAL || (o>=0 && objects[o].plural))
-			pluralPronounSeen++;
-		if (!((singularPronounSeen==0) ^ (pluralPronounSeen==0)))
-			return;
-	  vector <cSpeakerGroup>::iterator csg=speakerGroups.begin()+currentSpeakerGroup;
-		// boost all objects in currentSpeakerGroup not belonging to subgroup
-		bool previousSpeakerGroup=csg->groupedSpeakers.size()>0;
-		bool promoteNewSpeakers=((singularPronounSeen && previousSpeakerGroup) || (pluralPronounSeen && !previousSpeakerGroup));
-		vector <cLocalFocus>::iterator lsi=localObjects.begin(),lsiEnd=localObjects.end();
-		lpwstring tmpstr;
-		for (; lsi!=lsiEnd; lsi++)
-		{
-			if (csg->speakers.find(lsi->om.object)!=csg->speakers.end())
-			{
-				bool promote=(csg->groupedSpeakers.find(lsi->om.object)!=csg->groupedSpeakers.end()) ^ promoteNewSpeakers;
-				lsi->om.salienceFactor+=(promote) ? MIXED_PLURALITY_SALIENCE_BOOST : -MIXED_PLURALITY_SALIENCE_BOOST;
-				itos(u"SINGPLUR[+",(promote) ? MIXED_PLURALITY_SALIENCE_BOOST : -MIXED_PLURALITY_SALIENCE_BOOST,lsi->res,u"]");
-			}
-		}
-	}
-}
 
 // Apply a cataphoric restriction: the subject at subjectCataRestriction
 // cannot be reused as the antecedent of the mention at 'where'.
@@ -5412,25 +5287,6 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
 	return speakerObjectPosition;
 }
 
-// Resolve a cataphoric speaker immediately after a quote ("... said X")
-// via resolveObject, substituting a gendered body object first.  No-op if
-// already matched or not an object.
-void cSource::addCataSpeaker(int where,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool definitelySpeaker)
-{ LFS
-  int element,speakerObjectPosition=-1,speakerObject;
-  // skip past verb
-  vector <cWordMatch>::iterator im=m.begin()+where+2;
-  if ((element=im->pma.queryPattern(u"_VERBPAST",speakerObjectPosition))!=-1)
-    speakerObjectPosition+=where+1;
-  else
-    speakerObjectPosition=where+2;
-	speakerObjectPosition=m[speakerObjectPosition].principalWherePosition;
-  if (m[speakerObjectPosition].objectMatches.size() || (speakerObject=m[speakerObjectPosition].getObject())<0)
-    return;
-  substituteGenderedBodyObject(where,speakerObject);
-  // we don't care about adjectival objects
-  resolveObject(speakerObjectPosition,definitelySpeaker,false,false,lastBeginS1,lastRelativePhrase,lastQ2,lastVerb,true,false,false);
-}
 
 // Copy objectMatches (or getObject) from fromPosition into objectsToSet,
 // record speakerLocations, and OR 'flag' onto m[where].  Also stamps
@@ -6133,15 +5989,6 @@ void cSource::resolvePreviousSpeakersByAlternationBackwards(int where,int curren
 	unresolvedSpeakers.push_back((definitelySpeaker) ? -where:where);
 }
 
-// True if the previous quote's endQuote is immediately before beginQuote
-// (no intervening narration) - required for safe alternation.
-bool cSource::quotationsImmediatelyBefore(int beginQuote)
-{ LFS
-  if (!beginQuote) return false;
-  vector <cWordMatch>::iterator im;
-  for (im=m.begin()+beginQuote-1; im!=m.begin() && im->word==Words.sectionWord; im--);
-  return im!=m.begin() && im->queryForm(quoteForm)>=0;
-}
 
 // Log the words in [begin,end) plus any already-assigned speaker/audience
 // (trace helper).
@@ -8182,27 +8029,6 @@ bool cSource::hasAgentObjectOwner(int where,int &ownerWhere)
 					 (m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE || m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_FEMALE || m[ownerWhere].getObject()== cObject::eOBJECTS::OBJECT_UNKNOWN_MALE_OR_FEMALE));
 }
 
-// Mark infinitive-phrase tags in tagSet as location-tense (or not) so
-// accumulateLocation does not treat "to go to London" as a current-scene
-// enter.
-void cSource::checkInfinitivePhraseForLocation(vector <cTagLocation> &tagSet,bool locationTense)
-{ LFS
-	int nextTag=-1;
-	int iverbTag=findTag(tagSet,u"IVERB",nextTag);
-	if (iverbTag<0) return;
-	tIWMM subjectWord=wNULL;
-	int subjectTag=findOneTag(tagSet,u"SUBJECT",-1),subjectObject=-1,whereSubjectObject=-1;
-	if (!resolveTag(tagSet,subjectTag,subjectObject,whereSubjectObject,subjectWord)) return;
-	// find verb of IVERB to associate with verb
-	vector < vector <cTagLocation> > iTagSets;
-	if (startCollectTagsFromTag(debugTrace.traceRelations,iverbTagSet,tagSet[iverbTag],iTagSets,-1,true, false, u"check infinitive phrase for location")>0)
-	for (unsigned int K=0; K<iTagSets.size(); K++)
-	{
-		if (debugTrace.traceRelations)
-			::printTagSet(LOG_RESOLUTION,u"IVERB",K,iTagSets[K]);
-		accumulateLocation(tagSet[iverbTag].sourcePosition,iTagSets[K],subjectObject,locationTense);
-	}
-}
 
 // Build the preposition-to-move-type map used by accumulateLocation
 // (enter / exit / at / through).  Called once per resolveSpeakers scan.

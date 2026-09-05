@@ -140,15 +140,6 @@ lpwstring itos(int i, const lpchar_t* format, lpwstring& tmp)
 	return tmp = temp;
 }
 
-// Render a double into tmp with the fixed format u"%4.2g" (2 significant digits).
-// Used for costs/confidences in logs, so precision is deliberately low.
-lpwstring dtos(double fl, lpwstring& tmp)
-{
-	LFS
-		lpchar_t ctmp[1024];
-	lp_snprintf(ctmp, 1024, u"%4.2g", fl);
-	return tmp = ctmp;
-}
 
 // ---------------------------------------------------------------------------
 // Batch B7: wTM / mTW / mTWCodePage are now thin wrappers over utfConvert.h's
@@ -844,28 +835,7 @@ bool copy(cName& a, void* buf, int& where, int limit)
 	return true;
 }
 
-// Function to lookup an error message from an error code.
-// Batch B5: strerror(errno) replaces GetLastError + FormatMessageA. strerror
-// returns a pointer to a static (or thread-local) buffer that the caller must not
-// free -- unlike the FormatMessage version, which allocated a buffer that every
-// call site here leaked, since none of them ever called LocalFree.
-const char* LastErrorStr(void)
-{
-	LFS
-		return strerror(errno);
-}
 
-// Batch B7: the body is gone. It called MSVC's _heapchk/_CrtCheckMemory, debug-CRT
-// heap validators with no macOS equivalent -- the platform's answer to the same
-// question is a different tool entirely (MallocStackLogging, AddressSanitizer, or
-// `leaks`), not an in-process API. The function is kept as a no-op rather than
-// deleted because it is declared in general.h and calling it is harmless; a
-// maintainer wanting heap checking here should build with -fsanitize=address.
-void checkHeap(lpchar_t* desc)
-{
-	LFS
-		(void)desc;
-}
 
 void escapeSingleQuote(lpwstring& lobject)
 {

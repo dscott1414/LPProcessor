@@ -271,42 +271,7 @@ bool isDuplicateByName(mbInfoArtistType& t1, mbInfoArtistType& t2)
 		return (t1.artistId == t2.artistId);
 }
 
-// Fetches /artist/?query=byWhatType:what. Parse errors ignored.
-// not currently used
-int getArtists(lpwstring byWhatType, lpwstring what, vector <mbInfoArtistType>& mbs, bool filterNameDuplicates)
-{
-	LFS
-		lpwstring buffer;
-	getMusicBrainzPage(u"artist", byWhatType.c_str(), what, buffer); // int retCode=
-	tinyxml2::XMLDocument doc;
-	string cbuffer;
-	wTM(buffer, cbuffer);
-	doc.Parse(cbuffer.c_str()); // int errorCode=
-	tinyxml2::XMLHandle docHandle(&doc);
-	for (tinyxml2::XMLHandle node = docHandle.FirstChildElement("metadata").FirstChildElement("artist-list").FirstChildElement("artist"); node.ToNode() != NULL; node = node.NextSiblingElement("artist"))
-	{
-		lpwstring t;
-		mbInfoArtistType mb;
-		if (node.ToElement()->FindAttribute("type"))
-			mb.artistType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
-		if (node.ToElement()->FindAttribute("id"))
-			mb.artistId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		if (node.FirstChildElement("name").ToElement())
-			mb.artistName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
-		for (tinyxml2::XMLHandle anode = node.FirstChildElement("alias-list").FirstChildElement("alias"); anode.ToNode() != NULL; anode = anode.NextSiblingElement("alias"))
-			mb.aliases.push_back(mTWNull(anode.ToElement()->GetText(), t));
-		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
-			mbs.push_back(mb);
-	}
-	return 0;
-}
 
-// Stub: release-group lookup was never implemented. Always returns 0.
-int getReleaseGroup(lpwstring releaseGroup)
-{
-	LFS
-		return 0;
-}
 
 // Adjacent-recording dedup key: titles are equal.
 bool isDuplicateByName(mbInfoRecordingType& t1, mbInfoRecordingType& t2)
@@ -338,39 +303,6 @@ bool isDuplicateByName(mbInfoRecordingType& t1, mbInfoRecordingType& t2)
 		</recording-list>
 </metadata>
 */
-// Fetches /recording/?query=byWhatType:what. Reads each <recording>'s own nested
-// <release-list> (not the top-level metadata one, which does not hold per-recording releases).
-// not currently used
-int getRecordings(lpwstring byWhatType, lpwstring what, vector <mbInfoRecordingType>& mbs, bool filterNameDuplicates)
-{
-	LFS
-		lpwstring buffer;
-	getMusicBrainzPage(u"recording", byWhatType.c_str(), what, buffer); // int retCode=
-	tinyxml2::XMLDocument doc;
-	string cbuffer;
-	wTM(buffer, cbuffer);
-	doc.Parse(cbuffer.c_str()); // int errorCode=
-	tinyxml2::XMLHandle docHandle(&doc);
-	for (tinyxml2::XMLHandle node = docHandle.FirstChildElement("metadata").FirstChildElement("recording-list").FirstChildElement("recording"); node.ToNode() != NULL; node = node.NextSiblingElement("recording"))
-	{
-		mbInfoRecordingType mb;
-		lpwstring t;
-		if (node.ToElement()->FindAttribute("id"))
-			mb.recordingId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		if (node.FirstChildElement("title").ToElement())
-			mb.title = mTWNull(node.FirstChildElement("title").ToElement()->GetText(), t);
-		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement() &&
-			node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id"))
-			mb.artistId = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").ToElement()->FindAttribute("id")->Value(), t);
-		if (node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement())
-			mb.artistName = mTWNull(node.FirstChildElement("artist-credit").FirstChildElement("name-credit").FirstChildElement("artist").FirstChildElement("name").ToElement()->GetText(), t);
-		tinyxml2::XMLHandle recordingReleaseList = node.FirstChildElement("release-list");
-		absorbReleases(recordingReleaseList, mb.releases, filterNameDuplicates);
-		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
-			mbs.push_back(mb);
-	}
-	return 0;
-}
 
 // Adjacent-label dedup key: labelName strings are equal.
 bool isDuplicateByName(mbInfoLabelType& t1, mbInfoLabelType& t2)
@@ -393,42 +325,7 @@ bool isDuplicateByName(mbInfoLabelType& t1, mbInfoLabelType& t2)
 	 </compactLabel-list>
 </metadata>
 */
-// Fetches /label/?query=byWhatType:what. Parse errors ignored.
-// not curently used
-int getLabels(lpwstring byWhatType, lpwstring what, vector <mbInfoLabelType>& mbs, bool filterNameDuplicates)
-{
-	LFS
-		lpwstring buffer;
-	getMusicBrainzPage(u"label", byWhatType.c_str(), what, buffer); // int retCode=
-	tinyxml2::XMLDocument doc;
-	string cbuffer;
-	wTM(buffer, cbuffer);
-	doc.Parse(cbuffer.c_str()); // int errorCode=
-	tinyxml2::XMLHandle docHandle(&doc);
-	for (tinyxml2::XMLHandle node = docHandle.FirstChildElement("metadata").FirstChildElement("label-list").FirstChildElement("label"); node.ToNode() != NULL; node = node.NextSiblingElement("label"))
-	{
-		mbInfoLabelType mb;
-		lpwstring t;
-		if (node.ToElement()->FindAttribute("type"))
-			mb.labelType = mTWNull(node.ToElement()->FindAttribute("type")->Value(), t);
-		if (node.ToElement()->FindAttribute("id"))
-			mb.labelId = mTWNull(node.ToElement()->FindAttribute("id")->Value(), t);
-		if (node.FirstChildElement("name").ToElement())
-			mb.labelName = mTWNull(node.FirstChildElement("name").ToElement()->GetText(), t);
-		for (tinyxml2::XMLHandle anode = node.FirstChildElement("alias-list").FirstChildElement("alias"); anode.ToNode() != NULL; anode = anode.NextSiblingElement("alias"))
-			mb.aliases.push_back(mTWNull(anode.ToElement()->GetText(), t));
-		if (mbs.empty() || !filterNameDuplicates || !isDuplicateByName(mbs[mbs.size() - 1], mb))
-			mbs.push_back(mb);
-	}
-	return 0;
-}
 
-// Stub: work lookup was never implemented. Always returns 0.
-int getWork(lpwstring work)
-{
-	LFS
-		return 0;
-}
 
 // Logs every field of one release hit at LOG_WHERE.
 void printMBInfo(mbInfoReleaseType& mbi)

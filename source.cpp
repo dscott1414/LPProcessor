@@ -1696,30 +1696,6 @@ bool cSource::analyzeEnd(const lpwstring path, int begin, int end, bool& multipl
 	return false;
 }
 
-// if date of dictionary or date of cache is before date of source, return true
-// if date of dictionary > date of cache return true
-bool cSource::parseNecessary(lpchar_t* path)
-{
-	LFS
-#ifdef ALWAYS_PARSE
-		return true;
-#endif
-	storageLocation = path;
-	struct stat buffer;
-	lpwstring locationCache = storageLocation + u".cache";
-	int result = lp_wstat(locationCache.c_str(), &buffer);
-	if (result < 0) return true;
-	time_t cacheLastModified = buffer.st_mtime;
-	result = lp_wstat(u"WordCacheFile", &buffer);
-	if (result < 0) return true;
-	time_t dictionaryLastModified = buffer.st_mtime;
-	result = lp_wstat(storageLocation.c_str(), &buffer);
-	if (result < 0) return true;
-	time_t sourceLastModified = buffer.st_mtime;
-	return (//sourceLastModified>dictionaryLastModified ||
-		sourceLastModified > cacheLastModified ||
-		dictionaryLastModified > cacheLastModified);
-}
 
 // 
 // >= two blank lines before begin and >= two blank lines after end.
@@ -2301,15 +2277,6 @@ bool cSource::FlushFile(int fd, void* buffer, int& where)
 	return true;
 }
 
-bool cSource::writeCheck(lpwstring path)
-{
-	LFS
-		path += u".SourceCache";
-	// Batch B5: access(F_OK). The "long path limitation" the old comment worked
-	// around is a Windows MAX_PATH problem that does not exist on macOS, so the
-	// straightforward call is also the correct one now.
-	return access(lp_utf16_to_utf8(path).c_str(), F_OK) == 0;
-}
 
 bool cSource::writePatternUsage(lpwstring path, bool zeroOutPatternUsage)
 {
@@ -3035,33 +3002,7 @@ bool cSource::findStart(lpwstring& buffer, lpwstring& start, int& repeatStart, l
 	return true;
 }
 
-bool readWikiPage(lpwstring webAddress, lpwstring& buffer)
-{
-	LFS
-		int ret;
-	if (ret = cInternet::readPage(webAddress.c_str(), buffer)) return false;
-	if (buffer.find(u"Sorry, but the page or book you tried to access is unavailable") != lpwstring::npos ||
-		buffer.find(u"<title>403 Forbidden</title>") != lpwstring::npos ||
-		buffer.find(u"<h1>404 Not Found</h1>") != lpwstring::npos ||
-		buffer.empty())
-	{
-		buffer.clear();
-		return false;
-	}
-	return true;
-}
 
-void unescapeStr(lpwstring& str)
-{
-	LFS
-		lpwstring ess;
-	for (unsigned int I = 0; I < str.length(); I++)
-	{
-		if (str[I] == '\\' && (str[I + 1] == '\'' || str[I + 1] == '\\')) I++;
-		ess += str[I];
-	}
-	str = ess;
-}
 
 bool cSource::readSource(lpwstring& path, bool checkOnly, bool& parsedOnly, bool printProgress, lpwstring specialExtension)
 {

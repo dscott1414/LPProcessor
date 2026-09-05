@@ -50,7 +50,6 @@
 		  (escapeSingleQuote) before concatenation; still not a bound parameter, so this
 		  is defense against accidental quotes in scraped text, not a hardened query.
 		- decodeURL guards I+1/I+2 after '%' before reading them.
-		- readOntologyList loops over every SQL row (mysql_fetch_row in a while).
 */
 // Batch B5: the Win32-only includes that used to head this file (windows.h and
 // friends) are gone; these are what the code below actually needs on macOS.
@@ -868,22 +867,6 @@ int cOntology::fillRanks(int ontologyType)
 //                                                             <http://umbel.org/umbel/rc/Artist> ,
 //                                                             <http://umbel.org/umbel/rc/Entertainer> ;
 
-// Trim trailing CR/LF/space; if the last char is . ; or , stash it in ch and drop it.
-void stripEndOfLine(lpchar_t* s, lpchar_t& ch)
-{
-	LFS
-		while (*s && (s[lp_strlen(s) - 1] == '\n' || s[lp_strlen(s) - 1] == '\r' || iswspace(s[lp_strlen(s) - 1])))
-			s[lp_strlen(s) - 1] = 0;
-	if (s[lp_strlen(s) - 1] == u'.' || s[lp_strlen(s) - 1] == ';' || s[lp_strlen(s) - 1] == u',')
-	{
-		ch = s[lp_strlen(s) - 1];
-		s[lp_strlen(s) - 1] = 0;
-		while (*s && iswspace(s[lp_strlen(s) - 1]))
-			s[lp_strlen(s) - 1] = 0;
-	}
-	else
-		ch = 0;
-}
 
 /*
 labelWithSpace   <http://umbel.org/umbel/rc/WeatherAttributes_Weather_Topic> rdf:type owl:Class ;
@@ -943,38 +926,6 @@ lpwstring cOntology::stripUmbel(lpwstring umbelClass, lpwstring& compactLabel, l
 	return labelWithSpace;
 }
 
-// lp_fgetws-alike over a pread buffer.  Treats fileBuffer as lpchar_t but ::read's
-// count is MAX_BUF bytes.  Unused by the current YAGO reader (which has its own loop).
-lpchar_t* bufferedGetws(lpchar_t* s, int maxLen, int fd, lpchar_t* fileBuffer, int64_t& bufferLength, int64_t& bufferOffset, int64_t& fileOffset, int64_t totalFileLength)
-{
-	LFS
-		int64_t I, totalOffset = fileOffset + bufferOffset;
-	for (I = totalOffset; I < totalFileLength; I++)
-	{
-		if (I - fileOffset >= bufferLength - maxLen)
-		{
-			cProfile::counterEnd("bufferedGetws");
-			fileOffset += bufferLength;
-			bufferLength = ::read(fd, fileBuffer, MAX_BUF);
-			cProfile::counterEnd("bufferedGetwsRead");
-			if (bufferLength <= 0)
-				return NULL;
-			bufferOffset = 0;
-			totalOffset = fileOffset + bufferOffset;
-		}
-		if (I - totalOffset >= maxLen)
-			break;
-		s[I - totalOffset] = fileBuffer[I - fileOffset];
-		if (s[I - totalOffset] == u'\n')
-		{
-			I++; // skip
-			break;
-		}
-	}
-	s[I - (fileOffset + bufferOffset)] = 0;
-	bufferOffset = I - fileOffset;
-	return s;
-}
 
 // In-place lower-case ic, insert a space before a new capital/digit run, and
 // drop a trailing digit run.  Mutates the caller's buffer.
@@ -1380,12 +1331,6 @@ bool copy(unordered_map <lpwstring, cOntologyEntry>::iterator& hint, void* buf, 
 	return false;
 }
 
-// Sort key: lower ontologyHierarchicalRank first.
-bool rdfCompare(const unordered_map <lpwstring, cOntologyEntry>::iterator& lhs, const unordered_map <lpwstring, cOntologyEntry>::iterator& rhs)
-{
-	LFS
-		return (lhs)->second.ontologyHierarchicalRank < (rhs)->second.ontologyHierarchicalRank;
-}
 
 const lpchar_t* lpOntologySuperClasses[] = { u"provincesandterritoriesofcanada",u"country",u"island",u"mountain",u"geoclasspark",u"river",u"stream",u"city",u"statesoftheunitedstates",NULL };
 
@@ -1539,55 +1484,7 @@ bool cOntology::maxFieldLengths()
 	return true;
 }
 
-// Dump every category into MySQL `ontology` (writeDbOntologyEntry is declared here,
-// defined elsewhere).  Takes a WRITE lock.
-bool cOntology::writeOntologyList()
-{
-	if (!myquery(&mysql, u"LOCK TABLES ontology WRITE"))
-		return false;
-	for (auto dbp : dbPediaOntologyCategoryList)
-		writeDbOntologyEntry(mysql, dbp.first, dbp.second);
-	if (!myquery(&mysql, u"UNLOCK TABLES"))
-		return false;
-	return true;
-}
 
-// Load `ontology` into the map.  Loops over every row with mysql_fetch_row.
-// Superclasses are '|' split.
-bool cOntology::readOntologyList()
-{
-	if (!myquery(&mysql, u"LOCK TABLES ontology READ"))
-		return false;
-	MYSQL_RES* result = NULL;
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select onkey,compactLabel,commentDescription,numLine,ontologyHierarchicalRank,ontologyType,superClasses from ontology");
-	MYSQL_ROW sqlrow = NULL;
-	if (myquery(&mysql, qt, result))
-	{
-		while ((sqlrow = mysql_fetch_row(result)))
-		{
-			cOntologyEntry ontologyEntry;
-			lpwstring onkey, superClassesToSplit;
-			mTW(sqlrow[0], onkey);
-			mTW(sqlrow[1], ontologyEntry.compactLabel);
-			mTW(sqlrow[2], ontologyEntry.commentDescription);
-			ontologyEntry.numLine = atoi(sqlrow[3]);
-			ontologyEntry.ontologyHierarchicalRank = atoi(sqlrow[4]);
-			ontologyEntry.ontologyType = atoi(sqlrow[5]);
-			mTW(sqlrow[6], superClassesToSplit);
-			// Batch B2: std::wistringstream/std::getline has no reliable char16_t
-			// support (no standard ctype<char16_t> locale facet); splitString()
-			// (utilities.cpp) already does this exact pipe-split without a stream.
-			for (const lpwstring& superClassToken : splitString(superClassesToSplit, u'|'))
-				ontologyEntry.superClasses.insert(superClassToken);
-			dbPediaOntologyCategoryList[onkey] = ontologyEntry;
-		}
-	}
-	mysql_free_result(result);
-	if (!myquery(&mysql, u"UNLOCK TABLES"))
-		return false;
-	return true;
-}
 
 // Classify uri by ontology prefix, look up / fetch a missing YAGO or UMBEL super,
 // push a cTreeCat, return the hierarchical rank or -1.  Confidence is qtype[0]-'0'
@@ -1849,145 +1746,12 @@ int cOntology::getAcronyms(lpwstring& object, vector <lpwstring>& acronyms)
 	return 0;
 }
 
-// Expand object via getAcronyms and rdfIdentify each expansion (fromWhere u"b").
-int cOntology::getAcronymRDFTypes(lpwstring& object, vector <cTreeCat*>& rdfTypes)
-{
-	LFS
-		vector <lpwstring> acronyms;
-	if (cOntology::getAcronyms(object, acronyms) < 0)
-		return -1;
-	for (unsigned int I = 0; I < acronyms.size(); I++)
-		cOntology::rdfIdentify(acronyms[I], rdfTypes, u"b");
-	return 0;
-}
 
 /*********************************************************
 freebase begin
 ***********************************************************/
-// Walk {L}id markers in a Freebase properties blob, SELECT that id, and return
-// the {D} description text.  The extracted id is escaped (escapeSingleQuote)
-// before being concatenated into SQL.
-lpwstring cOntology::extractLinkedFreebaseDescription(string& properties, lpwstring& wDescription)
-{
-	int linkDescription = -1;
-	while ((linkDescription = properties.find("{L}", linkDescription + 1)) != string::npos)
-	{
-		int nextLink = properties.find("{", linkDescription + 1);
-		lpwstring wproperties;
-		mTW(properties, wproperties);
-		lpwstring linkedId = (nextLink < 0) ? wproperties.substr(linkDescription + 3) : wproperties.substr(linkDescription + 3, nextLink - linkDescription - 3);
-		escapeSingleQuote(linkedId);
-		lpwstring q = u"select properties from freebaseProperties where id='" + linkedId + u"'";
-		MYSQL_RES* result = NULL;
-		MYSQL_ROW sqlrow;
-		if (!myquery(&mysql, (lpchar_t*)q.c_str(), result)) return u"";
-		if ((sqlrow = mysql_fetch_row(result)) == NULL) return u"";
-		string description = (sqlrow[0] == NULL) ? "" : sqlrow[0];
-		mysql_free_result(result);
-		size_t whereDescription = description.find("{D}");
-		if (whereDescription != string::npos)
-			return mTW(description.substr(whereDescription + 3), wDescription);
-	}
-	int whereDescription = properties.find("{D}");
-	if (whereDescription != string::npos)
-		return mTW(properties.substr(whereDescription + 3), wDescription);
-	return u"";
-}
 
-// In-place replace-all (used to escape ' as \\' for Freebase SQL).
-void replaceAll(lpwstring& str, const lpwstring& from, const lpwstring& to) {
-	if (from.empty())
-		return;
-	size_t start_pos = 0;
-	while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-		str.replace(start_pos, from.length(), to);
-		start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
-	}
-}
 
-// prefer an entry where key=id or labelWithSpace, if it exists
-// Look up freebaseProperties by id or name (both quotes escaped).  Falls back
-// through k= and id+k= queries.  Returns the {D} description or empty.
-lpwstring cOntology::getFBDescription(lpwstring id, lpwstring name)
-{
-	LFS
-		initializeDatabaseHandle(mysql, u"localhost", alreadyConnected);
-	lpwstring q = u"select properties from freebaseProperties where ", q2 = q, q3 = q;
-	if (name.empty())
-	{
-		escapeSingleQuote(id);
-		q += u"id='" + id + u"'";
-		q2 += u"k='" + id + u"'";
-		q3 = q + u"and k='" + id + u"'";
-	}
-	else
-	{
-		// escape single quotes
-		replaceAll(name, u"'", u"\\'");
-		q += u"name='" + name + u"'";
-		q2 += u"k='" + name.substr(0, 64) + u"'";
-		q3 = q + u"and k='" + name.substr(0, 64) + u"'";
-	}
-	bool q2tried = false, q3tried = false;
-	MYSQL_RES* result = NULL;
-	MYSQL_ROW sqlrow;
-	if (!myquery(&mysql, (lpchar_t*)q.c_str(), result)) return u"";
-	if ((sqlrow = mysql_fetch_row(result)) == NULL)
-	{
-		mysql_free_result(result);
-		q2tried = true;
-		if (!myquery(&mysql, (lpchar_t*)q2.c_str(), result)) return u"";
-		if ((sqlrow = mysql_fetch_row(result)) == NULL)
-		{
-			mysql_free_result(result);
-			return u"";
-		}
-	}
-	else if (mysql_num_rows(result) > 1)
-	{
-		q3tried = true;
-		MYSQL_RES* resultWithKey = NULL;
-		MYSQL_ROW sqlrowWithKey;
-		if (myquery(&mysql, (lpchar_t*)q3.c_str(), resultWithKey))
-		{
-			if ((sqlrowWithKey = mysql_fetch_row(resultWithKey)) != NULL)
-			{
-				mysql_free_result(result);
-				sqlrow = sqlrowWithKey;
-				result = resultWithKey;
-			}
-			else
-				mysql_free_result(resultWithKey);
-		}
-	}
-	string properties = (sqlrow[0] == NULL) ? "" : sqlrow[0];
-	mysql_free_result(result);
-	lpwstring description;
-	extractLinkedFreebaseDescription(properties, description);
-	if (description.length())
-		return description;
-	if (!q2tried && myquery(&mysql, (lpchar_t*)q2.c_str(), result))
-	{
-		if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		{
-			string tempProperties = (sqlrow[0] == NULL) ? "" : sqlrow[0];
-			mysql_free_result(result);
-			return extractLinkedFreebaseDescription(tempProperties, description);
-		}
-		mysql_free_result(result);
-	}
-	if (!q3tried && myquery(&mysql, (lpchar_t*)q3.c_str(), result))
-	{
-		if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		{
-			string tempProperties = (sqlrow[0] == NULL) ? "" : sqlrow[0];
-			mysql_free_result(result);
-			return extractLinkedFreebaseDescription(tempProperties, description);
-		}
-		mysql_free_result(result);
-	}
-	return u"";
-}
 
 // properties labelWithSpace type
 // Normalize object (spaces, lower, escape ') and SELECT freebaseProperties
@@ -2417,17 +2181,6 @@ int cOntology::printRDFTypes(const lpchar_t* kind, vector <cTreeCat*>& rdfTypes)
 	return 0;
 }
 
-// Dump rdfTypes plus the topHierarchyClassIndexes map.
-int cOntology::printExtendedRDFTypes(lpchar_t* kind, vector <cTreeCat*>& rdfTypes, unordered_map <lpwstring, int >& topHierarchyClassIndexes)
-{
-	lplog(LOG_WIKIPEDIA, u"BEGIN %s:%d %d", kind, rdfTypes.size(), topHierarchyClassIndexes.size());
-	for (int I = 0; I < rdfTypes.size(); I++)
-		rdfTypes[I]->lplogTC(LOG_WIKIPEDIA, u"");
-	for (unordered_map <lpwstring, int >::iterator idi = topHierarchyClassIndexes.begin(), idiEnd = topHierarchyClassIndexes.end(); idi != idiEnd; idi++)
-		lplog(LOG_WIKIPEDIA, u"topHierarchyClassIndexes:%s %d", idi->first.c_str(), idi->second);
-	lplog(LOG_WIKIPEDIA, u"END %s:%d %d", kind, rdfTypes.size(), topHierarchyClassIndexes.size());
-	return 0;
-}
 
 // Resolve object: in-memory rdfTypeMap, else .rdfTypes file, else SPARQL+acronyms.
 // Mutates rdfTypeNumMap under an exclusive SRWLOCK (both the miss-path insert and
@@ -2554,15 +2307,6 @@ const lpchar_t* knownClasses[] = { u"person", u"place", u"gml/_feature", u"locat
 	u"disease",u"provincesandterritoriesofcanada",u"country",u"island",u"mountain",u"geoclasspark",u"river",u"stream",u"city",u"statesoftheunitedstates",NULL };
 const lpchar_t* knownMapToClasses[] = { u"person", u"place", u"place", u"place",u"business",u"business",u"creativeWork",u"plant",u"animal",
 	u"disease",u"provincesandterritoriesofcanada",u"country",u"island",u"mountain",u"geoclasspark",u"river",u"river",u"city",u"statesoftheunitedstates",NULL };
-// True if c is one of the knownClasses[] top labels (person, place, ...).
-bool knownClass(lpwstring c)
-{
-	LFS
-		for (int k = 0; knownClasses[k]; k++)
-			if (c == knownClasses[k])
-				return true;
-	return false;
-}
 set <lpwstring> knownClassesSet;
 
 // only return true if all entries have either no super classes or are a known class (above)
@@ -2699,15 +2443,6 @@ bool detectNonEuropean(lpwstring word)
 	return false;
 }
 
-// -\'a-zãâäáàæçêéèêëîíïñôóòöõûüù
-// True if any character is not letter / ASCII '-' / em-dash / apostrophe.
-bool detectNonEnglish(lpwstring word)
-{
-	for (lpchar_t c : word)
-		if (c != '-' && c != u'—' && c != '\'' && !iswalpha(c)) // deliberately not using isDash because we want to constrain to common well known dash types
-			return true;
-	return false;
-}
 
 // Public typer: fillOntologyList, then skip (only log) overly long/short or
 // non-European names when logOntologyDetail is set; otherwise getRDFTypesMaster.
@@ -2818,108 +2553,8 @@ void cOntology::printIdentities(lpchar_t* objects[])
 			printIdentity(objects[I]);
 }
 
-// Hex digit to 0..15, or -1.
-int hextonum(lpchar_t h)
-{
-	if (iswdigit(h))
-		return h - '0';
-	if (iswlower(h))
-		return 10 + (h - 'a');
-	if (iswupper(h))
-		return 10 + (h - 'A');
-	return -1;
-}
 
-// In-place \\uXXXX unescape.  Uses a 100000-wchar stack temp and lp_strcpy with
-// no dest-size check (buffer must be at least as large as the source).
-void convertCodePoints(lpchar_t* buffer)
-{
-	if (!lp_strstr(buffer, u"\\u"))
-		return;
-	lpchar_t buffer2[100000];
-	int c2 = 0;
-	for (int c = 0; buffer[c]; c++)
-	{
-		if (buffer[c] != u'\\' || buffer[c + 1] != u'u' || !iswxdigit(buffer[c + 2]) || !iswxdigit(buffer[c + 3]) || !iswxdigit(buffer[c + 4]) || !iswxdigit(buffer[c + 5]))
-		{
-			buffer2[c2++] = buffer[c];
-			continue;
-		}
-		buffer2[c2++] = (hextonum(buffer[c + 2]) << 12) + (hextonum(buffer[c + 3]) << 8) + (hextonum(buffer[c + 4]) << 4) + (hextonum(buffer[c + 5]));
-		c += 5;
-	}
-	buffer2[c2] = 0;
-	lp_strcpy(buffer, buffer2);
-}
 
-// this just reads the titles of books and feeds them into the books table.
-// Stream M:\\ol_dump_works_2020-06-30.txt and INSERT IGNORE titles into
-// openLibraryInternetArchiveBooksDump.  Titles are concatenated into SQL
-// unescaped (M: is a trusted local dump, not user input).  A failed batch
-// insert breaks out of the read loop so the WRITE lock and file handle are
-// still released below, rather than leaking them.
-void cOntology::readOpenLibraryInternetArchiveWorksDump()
-{
-	initializeDatabaseHandle(mysql, u"localhost", alreadyConnected);
-	if (!myquery(&mysql, u"LOCK TABLES openLibraryInternetArchiveBooksDump WRITE"))
-		return;
-	FILE* fp = lp_wfopen(u"M:\\ol_dump_works_2020-06-30.txt", "rtS,ccs=UNICODE");
-	if (fp)
-	{
-		int64_t numBytesTotal = lp_filelength(fileno(fp)), numBytesRead = 0; // batch B10
-		lpchar_t buffer[100000];
-		int startTime = clock(), numValuesToInsert = 0;
-		lpwstring qt = u"INSERT IGNORE INTO openLibraryInternetArchiveBooksDump(title) VALUES";
-		for (int printCounter = 0; lp_fgetws(buffer, 99000, fp); printCounter++)
-		{
-			convertCodePoints(buffer);
-			lpwstring buf = buffer;
-			const lpchar_t* searchTitle = u"\"title\": \"";
-			int whereTitle = buf.find(searchTitle);
-			if (whereTitle != lpwstring::npos)
-			{
-				whereTitle += lp_strlen(searchTitle);
-				// find next non-escaped double quote
-				int nextDoubleQuote = buf.find(u"\"", whereTitle);
-				while (nextDoubleQuote != lpwstring::npos)
-				{
-					int ne = nextDoubleQuote - 1;
-					while (ne > 0 && buf[ne] == u'\\') ne--;
-					// if ne-nextDoubleQuote is odd (number of slashes is even), then break
-					if (((ne - nextDoubleQuote) & 1) == 1)
-						break;
-					nextDoubleQuote = buf.find(u"\"", nextDoubleQuote + 1);
-				}
-				// insert into MYSQL
-				if (nextDoubleQuote != lpwstring::npos && nextDoubleQuote - whereTitle < 950 && nextDoubleQuote - whereTitle>1)
-				{
-					numValuesToInsert++;
-					qt += u"(\"" + buf.substr(whereTitle, nextDoubleQuote - whereTitle) + u"\"),";
-					if (numValuesToInsert > 200)
-					{
-						qt[qt.length() - 1] = 0;
-						if (!myquery(&mysql, (lpchar_t*)qt.c_str(), false))
-							break;
-						qt = u"INSERT IGNORE INTO openLibraryInternetArchiveBooksDump(title) VALUES";
-						numValuesToInsert = 0;
-					}
-				}
-			}
-			int64_t numUnicodeCharsRead = buf.length();
-			numBytesRead += numUnicodeCharsRead << 1;
-			if ((printCounter & 127) == 0)
-			{
-				int seconds = (clock() - startTime) / CLOCKS_PER_SEC;
-				int estimateSeconds = seconds * numBytesTotal / numBytesRead;
-				printf("%I64d out of %I64d read (%06.3f%%) %03d:%02d:%02d out of %03d:%02d:%02d\r", numBytesRead, numBytesTotal, (float)(numBytesRead * 100.0 / numBytesTotal), seconds / 3600, (seconds % 3600) / 60, seconds % 60, estimateSeconds / 3600, (estimateSeconds % 3600) / 60, estimateSeconds % 60);
-
-			}
-		}
-		myquery(&mysql, u"UNLOCK TABLES");
-		fclose(fp);
-	}
-
-}
 
 #ifdef TEST_CODE
 // TEST_CODE: load _rdfTypes and "_rdfTypes - original" and log per-type counts.

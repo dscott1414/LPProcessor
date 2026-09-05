@@ -132,7 +132,6 @@ int lp_snprintf(lpchar_t* buffer, size_t bufferCount, const lpchar_t* format, ..
 // preclude that.
 int lp_vfwprintf(FILE* stream, const lpchar_t* format, va_list args);
 int lp_fwprintf(FILE* stream, const lpchar_t* format, ...);
-int lp_vwprintf(const lpchar_t* format, va_list args);
 int lp_wprintf(const lpchar_t* format, ...);
 
 // ---------------------------------------------------------------------------------

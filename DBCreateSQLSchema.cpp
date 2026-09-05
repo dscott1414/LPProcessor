@@ -6,7 +6,7 @@
 		`lp`), then CREATE the forms/sources/words/wordForms/wordFrequency/
 		noRDFTypes tables and the object/relation family.  The other functions
 		are CREATE TABLE helpers for thesaurus/groups/locations/time, plus
-		INSERT generators that seed `sources` from the BNC index, NewsBank day
+		INSERT generators that seed `sources` from the BNC index, day
 		numbers, the tests\\ directory, and QA parse-request paths.
 
 	Pipeline position:
@@ -17,9 +17,8 @@
 	Key entry points:
 		- createDatabase() - full install.
 		- createObjectTables / createRelationTables / createTimeRelationTables.
-		- generateBNCSources / generateNewsBankSources / generateTestSources.
+		- generateBNCSources / generateTestSources.
 		- generateParseRequestSources / deleteGeneratedParseRequests.
-		- writeThesaurusEntry / createThesaurusTables.
 		- insertWordRelationTypes.
 
 	Dependencies:
@@ -30,21 +29,8 @@
 	Notes / gotchas:
 		- createDatabase connects with the same getDBUser()/getDBPassword() call
 			initializeDatabaseHandle() uses.
-		- Several CREATE TABLE strings were syntactically invalid (trailing
-			commas; FK column names that did not match the column; duplicate
-			index names; FKs to tables that were created later, or never
-			created at all).  createTimeRelationTables, createObjectTables, and
-			createRelationTables have all been fixed; see the comments on each.
-			createGroupTables's two remaining defects (no index on the column
-			its children FK to, and an FK naming a groups.id column that does
-			not exist) are now fixed as well; createLocationTables and
-			createThesaurusTables were re-checked and are valid as they stand.
-			All three are still uncalled from anywhere in the tree (author
-			note: "these do not exist within the database").
 		- generateBNCSources allocates actualLen+sizeof(lpchar_t) bytes and
 			NUL-terminates at buffer[actualLen/sizeof(lpchar_t)] - in range.
-		- writeThesaurusEntry builds the statement in a lpwstring (no fixed-size
-			stack buffer), escaping each list entry before appending it.
 */
 // Batch B5: the Win32-only includes that used to head this file (windows.h and
 // friends) are gone; these are what the code below actually needs on macOS.
@@ -77,21 +63,6 @@ bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qu
 //maxPrimarySynonymAccumulatedSize = 86
 //maxConceptSize = 35
 
-// CREATE TABLE thesaurus (mainEntry, wordType bitmap, synonym/antonym/concept
-// blobs).  Returns -1 if the CREATE fails (table-already-exists is FATAL
-// unless the caller used allowFailure).
-int cSource::createThesaurusTables()
-{
-	if (!myquery(&mysql, u"CREATE TABLE thesaurus ("
-		u"mainEntry CHAR(32) CHARACTER SET utf8mb4 NOT NULL, INDEX me_ind (mainEntry), "
-		u"wordType SMALLINT UNSIGNED NOT NULL,"
-		u"primarySynonyms CHAR(100) CHARACTER SET utf8mb4 NOT NULL, "
-		u"accumulatedSynonyms TEXT(1000) CHARACTER SET utf8mb4 NOT NULL, "
-		u"accumulatedAntonyms CHAR(120) CHARACTER SET utf8mb4 NOT NULL, "
-		u"concepts CHAR(40) CHARACTER SET utf8mb4 NOT NULL)"))
-		return -1;
-	return 0;
-}
 
 /*
 typedef struct {
@@ -115,93 +86,8 @@ static void appendEscapedList(lpwstring& qt, const vector <string>& values)
 	}
 }
 
-// INSERT one thesaurus row.  wordType is packed as bits from the wt[]
-// tokens found in d.wordType (pron/conj/interj suppress n; adv suppresses v).
-// Returns myquery's result.
-int cSource::writeThesaurusEntry(sDefinition& d)
-{
-	const char* wt[] = { "adj", "adv", "prep", "pron", "conj", "det", "interj", "n", "v", NULL };
-	int w, wtTotal = 0;
-	for (int I = 0; wt[I]; I++)
-		if ((w = d.wordType.find(wt[I])) != string::npos)
-			wtTotal += 1 << I;
-	if (wtTotal & ((1 << 3) | (1 << 4) | (1 << 6)))
-		wtTotal &= ~(1 << 7);
-	if (wtTotal & (1 << 1))
-		wtTotal &= ~(1 << 8);
-	// Built in a lpwstring: the synonym/antonym lists are unbounded and used to be
-	// wcscat'd into a 4096 lpchar_t stack buffer.
-	lpwstring qt, mainEntry, tmp;
-	mTW(d.mainEntry, mainEntry);
-	qt = u"INSERT INTO thesaurus VALUES (\"" + escaped(mainEntry) + u"\"," + itos(wtTotal, tmp) + u",\"";
-	appendEscapedList(qt, d.primarySynonyms);
-	qt += u"\",\"";
-	appendEscapedList(qt, d.accumulatedSynonyms);
-	qt += u"\",\"";
-	appendEscapedList(qt, d.accumulatedAntonyms);
-	qt += u"\",\"";
-	for (unsigned int I = 0; I < d.concepts.size(); I++)
-		qt += itos(d.concepts[I], tmp) + u";";
-	qt += u"\")";
-	return myquery(&mysql, qt.c_str());
-}
 
-// CREATE groups / groupMapTo / subGroups.  Still unused (author note: "these do
-// not exist within the database"), but no longer broken-if-run: two defects that
-// would have made this fail on the first call are fixed.
-//   1. `groups` declared groupId with no index on it, so both child tables'
-//      FOREIGN KEY (...) REFERENCES groups(groupId) would be rejected -- InnoDB
-//      requires the referenced column to be the first column of an index on the
-//      parent.  A non-unique index is the right kind here: a group has one row
-//      per fromWord, so groupId is deliberately NOT unique in this table.
-//   2. subGroups' second FK referenced groups(id); `groups` has no `id` column at
-//      all.  It now references groups(groupId), which is what it meant.
-// Reasoned from the schema, not executed -- there is no MySQL server in this
-// environment to run it against, and nothing calls this function.
-int cSource::createGroupTables(void)
-{
-	LFS
-		if (!myquery(&mysql, u"CREATE TABLE groups (groupId int(11) unsigned NOT NULL, INDEX g_ind (groupId), "
-			u"typeId SMALLINT UNSIGNED NOT NULL, INDEX t_ind(typeId), "
-			u"fromWordId INT UNSIGNED NOT NULL, INDEX fw_ind (fromWordId), FOREIGN KEY (fromWordId) REFERENCES words(id), "
-			u"ts TIMESTAMP)")) return -1;
-	if (!myquery(&mysql, u"CREATE TABLE groupMapTo (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
-		u"toWordId INT UNSIGNED NOT NULL, INDEX tw_ind (toWordId), FOREIGN KEY (toWordId) REFERENCES words(id), "
-		u"ts TIMESTAMP)")) return -1;
-	if (!myquery(&mysql, u"CREATE TABLE subGroups (groupId INT UNSIGNED NOT NULL, INDEX g_ind (groupId), FOREIGN KEY (groupId) REFERENCES groups(groupId), "
-		u"subgroupId INT UNSIGNED NOT NULL, INDEX sg_ind (subgroupId), FOREIGN KEY (subgroupId) REFERENCES groups(groupId), "
-		u"UNIQUE INDEX gsg_ind (groupId,subgroupId))")) return -1;
-	return 0;
-}
 
-// CREATE locations / locationObjectAssociation.  Unused (author note).
-// thse are not used and do not exist within the database
-int cSource::createLocationTables(void)
-{
-	LFS
-		/*
-			locations table:
-			location id (auto-generated)
-			sourceId smallint
-			where int
-			generic location id (key to locations table) - park/room/building etc
-		*/
-		if (!myquery(&mysql, u"CREATE TABLE locations ("
-			u"id int(11) unsigned NOT NULL auto_increment unique, sourceId smallint NOT NULL, w int NOT NULL, "
-			u"genericLocation INT UNSIGNED, FOREIGN KEY (genericLocation) REFERENCES locations(id))")) return -1;
-	/*
-		locationObjectAssociation table:
-		location id (key to locations table)
-		word (representing noun), physically present at said location
-		specific location where (sourceId + where)
-	*/
-	if (!myquery(&mysql, u"CREATE TABLE locationObjectAssociation ("
-		u"locationId INT UNSIGNED NOT NULL, FOREIGN KEY (locationId) REFERENCES locations(id), "
-		u"wordId INT UNSIGNED NOT NULL, INDEX w_ind (wordId), FOREIGN KEY (wordId) REFERENCES words(id), "
-		u"sourceId smallint NOT NULL, "
-		u"w int NOT NULL)")) return -1;
-	return 0;
-}
 
 // CREATE objects / objectLocations / objectWordMap.  objects has no `id`
 // column (rows are keyed by (sourceId,objectNum) - see cSource::flushObjects,
@@ -240,37 +126,6 @@ int cSource::createObjectTables(void)
 	return 0;
 }
 
-// CREATE timeGroups / timeGroupMembers / timeRelationTypes / timeGroupRelations
-// (in that order - timeGroupMembers and timeGroupRelations FK timeGroups(id),
-// so timeGroups must exist first: InnoDB rejects a FOREIGN KEY to a table
-// that has not been created yet).  Never called anywhere in the tree today,
-// but kept buildable rather than left broken.
-// Fixed: timeGroupMembers indexed/FKed `relationId`, but the column is
-// wordRelationId; timeGroupRelations had a trailing comma before `)`.
-int cSource::createTimeRelationTables(void)
-{
-	LFS
-		// timeGroups:
-		if (!myquery(&mysql, u"CREATE TABLE timeGroups (id int(11) unsigned NOT NULL auto_increment unique, "
-			u"speakerId INT UNSIGNED NOT NULL, INDEX si_ind (speakerId), FOREIGN KEY (speakerId) REFERENCES objects(id), "
-			u"sourceId INT UNSIGNED NOT NULL, INDEX s_ind (sourceId), FOREIGN KEY (sourceId) REFERENCES sources(id))")) return -1;
-	// timeGroupMembers: timeGroupId foreign key to timeGroups, objectId, wordRelationId
-	if (!myquery(&mysql, u"CREATE TABLE timeGroupMembers ("
-		u"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-		u"objectId INT UNSIGNED NOT NULL, INDEX oi_ind (objectId), FOREIGN KEY (objectId) REFERENCES objects(id), "
-		u"wordRelationId INT UNSIGNED NOT NULL, INDEX r_ind (wordRelationId), FOREIGN KEY (wordRelationId) REFERENCES wordRelations(id))")) return -1;
-	// timeRelationTypes: {BEFORE|AFTER|ON_OR_BEFORE|ON_OR_AFTER|LESS_THAN|MORE_THAN|
-	//                    EQUAL_OR_LESS|EQUAL_OR_MORE|START|MID|END|APPROX}
-	if (!myquery(&mysql, u"CREATE TABLE timeRelationTypes (id int(11) unsigned NOT NULL auto_increment unique, "
-		u"type VARCHAR(256) CHARACTER SET utf8mb4 NOT NULL)")) return -1;
-	// timeGroupRelations:
-	if (!myquery(&mysql, u"CREATE TABLE timeGroupRelations (id int(11) unsigned NOT NULL auto_increment unique, "
-		u"timeRelationTypeId INT UNSIGNED NOT NULL, INDEX tri_ind (timeRelationTypeId), FOREIGN KEY (timeRelationTypeId) REFERENCES timeRelationTypes(id), "
-		u"timeGroupId INT UNSIGNED NOT NULL, INDEX tgi_ind (timeGroupId), FOREIGN KEY (timeGroupId) REFERENCES timeGroups(id), "
-		u"timeGroup2Id INT UNSIGNED NOT NULL, INDEX tgi2_ind (timeGroup2Id), FOREIGN KEY (timeGroup2Id) REFERENCES timeGroups(id)"
-		u")")) return -1;
-	return 0;
-}
 
 // Larry loves Mary.
 // Larry object:
@@ -509,28 +364,6 @@ int generateBNCSources(MYSQL& mysql, lpwstring indexFile) // note this is slight
 	return returnCode;
 }
 
-// INSERT one NEWS_BANK_SOURCE_TYPE row per day from Unix day 2557..7056
-// (1977-01-01-ish through ~1989) with path newsbank\\<year>\\<daynum>.txt.
-int generateNewsBankSources(MYSQL& mysql)
-{
-	LFS
-		int startTime = clock();
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lp_strcpy(qt, u"INSERT INTO sources (sourceType, path, start, repeatStart) VALUES ");
-	size_t len = lp_strlen(qt);
-	for (unsigned int I = 2557; I < 7057; I++)
-	{
-		time_t timer = I * 24 * 3600;
-		struct tm* day = gmtime(&timer);
-		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%d, \"newsbank\\%d\\%I64d.txt\", \"\", 0),", cSource::NEWS_BANK_SOURCE_TYPE, day->tm_year + 1900, timer / (24 * 3600));
-		if (!checkFull(&mysql, qt, len, false, NULL)) return -1;
-	}
-	if (!checkFull(&mysql, qt, len, true, NULL)) return -1;
-	if (logDatabaseDetails)
-		lplog(u"Inserting NewsBank sources took %d seconds.", (clock() - startTime) / CLOCKS_PER_SEC);
-	return 0;
-}
-
 // INSERT the canned tests\\<name>.txt sources (agreement, date-time-number,
 // Nameres, ...) as TEST_SOURCE_TYPE with start ~~BEGIN.
 int generateTestSources(MYSQL& mysql)
@@ -597,7 +430,7 @@ int cSource::insertWordRelationTypes(void)
 // return 0.  Otherwise, if the error was ER_BAD_DB_ERROR, reconnect without
 // a schema (same getDBUser()/getDBPassword() credentials), CREATE DATABASE lp,
 // then CREATE the core tables and seed sources from bookSources.sql + BNC/
-// NewsBank/tests. Returns 0 or -1; most CREATE failures are FATAL first.
+// tests. Returns 0 or -1; most CREATE failures are FATAL first.
 int cSource::createDatabase(const lpchar_t* server)
 {
 	LFS
@@ -666,7 +499,6 @@ int cSource::createDatabase(const lpchar_t* server)
 		return -1;
 	}
 	generateBNCSources(mysql, lpwstring(LMAINDIR) + u"\\BNC-world\\doc\\Source\\bncIndex.xml");
-	generateNewsBankSources(mysql);
 	generateTestSources(mysql);
 	// create wordRelations types table (for convenience)
 	if (!myquery(&mysql, u"CREATE TABLE wordRelationType (id int(11) unsigned NOT NULL unique, type CHAR(32) CHARACTER SET utf8mb4 UNIQUE NOT NULL)"))

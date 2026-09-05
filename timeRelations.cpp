@@ -2669,17 +2669,6 @@ int whichHoliday(lpwstring w)
 	return -1;
 }
 
-// Inverse of whichHoliday. Out of range -> u"illegal".
-lpwstring holidayString(int holiday)
-{
-	LFS
-		if (holiday < (sizeof(holidayDays)/sizeof((holidayDays)[0])))
-			return holidayDays[holiday].name;
-	holiday -= (sizeof(holidayDays)/sizeof((holidayDays)[0]));
-	if (holiday < (sizeof(holidayMonths)/sizeof((holidayMonths)[0])))
-		return holidayMonths[holiday].name;
-	return u"illegal";
-}
 
 // handleExtendedParseWords for every compiled holiday name (multi-word).
 void cWord::extendedParseHolidays()

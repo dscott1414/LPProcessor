@@ -2619,16 +2619,6 @@ int cSource::evaluateVerbObjects(cPatternMatchArray::tPatternMatch* parentpm, cP
 		return 0;
 	}
 	int verbTagIndex, nextObjectTag = -1, nextPassiveTag = -1;
-	if ((infinitive) ? !getIVerb(tagSet, verbTagIndex) : !getVerb(tagSet, verbTagIndex))
-	{
-		// Why should she *despair* ? - despair IS a verb, but _MQ1[4](0,4) also has __ALLOBJECTS_1 with just _COND, because ALLVERB cannot be used because of the question structure 
-		if (infinitive || !patterns[pm->getPattern()]->questionFlag || (verbTagIndex = findOneTag(tagSet, u"V_AGREE")) < 0)
-		{
-			if (debugTrace.traceVerbObjects)
-				lplog(u"          %d:verb not found %s- skipping.", position, (infinitive) ? u"from infinitive " : u"");
-			return 0;
-		}
-	}
 	const lpchar_t* passiveTags[] = { u"vD",u"vrD",u"vAD",u"vBD",u"vCD",u"vABD",u"vACD",u"vBCD",u"vABCD", nullptr };
 	bool passive = false;
 	for (int pt = 0; passiveTags[pt]; pt++)

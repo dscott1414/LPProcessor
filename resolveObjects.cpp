@@ -2157,7 +2157,6 @@ void cSource::discouragePOV(int where, bool inQuote, bool definitelySpeaker)
 void cSource::excludeSpeakers(int where, bool inPrimaryQuote, bool inSecondaryQuote)
 {
 	LFS
-		//mixedPluralityUsageSubGroupEnhancement(where);
 		// if inQuote and !HAIL, diminish match of any objects in currentSpeakerGroup
 		// is there anyone else they could be talking about?
 		if (inPrimaryQuote && speakerGroupsEstablished)

@@ -14,7 +14,7 @@
 		batch/on-demand acquisition.
 
 	Key entry points:
-		- initWordNet / addToWordNet / checkexist / wordCheck
+		- initWordNet / addToWordNet / checkexist
 		- getSynonyms / getWordNetSynonymsOnly / getAntonyms / getFamiliarity
 		- getHyperNyms / hasHyperNym / getAllOrderedHyperNyms
 		- analyzeNounClass / analyzeVerbNetClass / deriveMainEntry
@@ -101,7 +101,6 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <
 	if (recur || !ignoreTopLevel)
 	{
 		unordered_set <lpwstring> sense;
-		//if (recur && synset_ptr -> wcount && t.traceSpeakerResolution) lplogNR(LOG_WORDNET,u"  =>");
 		for (int I = 0; I < synset_ptr->wcount; I++)
 		{
 			if (!strcmp(word, synset_ptr->words[I])) continue;
@@ -113,8 +112,7 @@ int extractWordsFromSynset(char* word, SynsetPtr synset_ptr, int recur, vector <
 			lpwstring w;
 			sense.insert(mTW(synword, w));
 			//if (t.traceSpeakerResolution)
-				//lplogNR(LOG_WORDNET,u"%S%c",synset_ptr -> words[I],(I==synset_ptr -> wcount-1)? u' ':u',');
-		}
+			}
 		words.push_back(sense);
 		if (!recur && synset_ptr->wcount && t.traceSpeakerResolution) lplog(LOG_WORDNET, u"");
 	}
@@ -176,159 +174,8 @@ bool checkexist(char* word)
 		return checkexist(word, NOUN) || checkexist(word, VERB) || checkexist(word, ADJ) || checkexist(word, ADV);
 }
 
-// Audit: counts Words entries missing from WordNet. Always ends in LOG_FATAL_ERROR with totals.
-// checks to see that all words in WordNet are defined in
-int cWord::wordCheck(void)
-{
-	LFS
-		initWordNet();
-	//SynsetPtr sp=findtheinfo_ds("entity", NOUN, HYPOPTR, ALLSENSES);
-	//if (sp)
-	//  printSynsetStruct(0,"entity",-1,-2,sp,false);
-	//lp_wprintf(u"offsets=%d.",offsets.size());
-	tIWMM w = begin(), wEnd = end();
-	int combinations = 0, unknown = 0, notInWordNet = 0, derivations = 0, numWords = 0, word = 0;
-	for (; w != wEnd; w++) numWords++;
-	for (w = begin(); w != wEnd; w++)
-	{
-		word++;
-		if ((word & 15) == 15) lp_wprintf(u"%07d out of %07d\r", word, numWords);
-		//SynsetPtr sp=findtheinfo_ds((char *)w->first.c_str(), NOUN, HYPERPTR, ALLSENSES);
-		//if (sp)
-		//  printSynsetStruct(0,(char *)w->first.c_str(),0,2,sp,true);
-		lplog(u"Word %s has no mainEntry!", w->first.c_str());
-		if (w->second.mainEntry == wNULL &&
-			(w->second.query(nounForm) >= 0 ||
-				w->second.query(verbForm) >= 0 ||
-				w->second.query(adjectiveForm) >= 0 ||
-				w->second.query(adverbForm) >= 0))
-			lplog(u"Word %s has no mainEntry!", w->first.c_str());
-		if (w->first[1] && w->first[0] >= 'a' && w->first[0] <= 'z')
-		{
-			if (w->second.isUnknown())
-				unknown++;
-			else if (!w->second.isRareWord() && !(w->second.flags & cSourceWordInfo::queryOnLowerCase) && !checkexist((char*)w->first.c_str()))
-			{
-				cSourceWordInfo* fi = &w->second;
-				if (fi->query(COMBINATION_FORM_NUM) < 0)
-				{
-					if (fi->mainEntry != wNULL)
-						derivations++;
-					else
-					{
-						notInWordNet++;
-						//lp_wprintf(u"\nWord %s was not found in WordNet - (%d) ",w->first.c_str(),fi->usagePatterns[cSourceWordInfo::TRANSFER_COUNT]);
-						//for (unsigned int f=0; f<fi->count; f++)
-						//  lp_wprintf(u"%s ",fi->Form(f)->name.c_str());
-					}
-				}
-				else
-					combinations++;
-			}
-		}
-	}
-	lplog(LOG_FATAL_ERROR, u"combinations=%d unknown=%d derivations=%d notInWordNet=%d.", combinations, unknown, derivations, notInWordNet);
-	return 0;
-}
 
-// Stub: inits WordNet and returns 0. Category-bit tagging was never filled in.
-// set categories of words based on WordNet to be used with time and place
-int setWordNetCategoryBits(void)
-{
-	LFS
-		initWordNet();
-	return 0;
-}
 
-// Thesaurus.com gives better results than WordNet (checked for professor and columnist)
-// thesaurus changed - its new entries are:
-// http://thesaurus.com/browse/columnist?posFilter=noun
-// the old entries (which we parse) are:
-// http://thesaurus.com/t2opt/out?desturl=browse/columnist&posFilter=noun
-// also better than www.synonyms.net: http://www.synonyms.net/synonym/columnist or 
-// Big Huge Thesaurus: http://words.bighugelabs.com/api/2/<api-key>/'word'/json
-// Fetches the old thesaurus.com t2opt page for word/POS and scrapes the Synonyms: comma list
-// into synonyms. Spaces become '+'. Stops at ads / www. prefixes.
-void scrapeOldThesaurus(lpwstring word, unordered_set <lpwstring>& synonyms, int synonymType, bool forceWebReread)
-{
-	LFS
-		lpwstring webAddress = u"http://thesaurus.com/t2opt/out?desturl=browse/" + word + u"&posFilter=", epath = word + u".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
-	switch (synonymType)
-	{
-	case NOUN: webAddress += u"noun"; break;
-	case ADJ: webAddress += u"adjective";  break; // may not work! 
-	case VERB: webAddress += u"verb"; break;
-	case ADV: webAddress += u"adverb"; break; // may not work!
-	default: break;
-	}
-	int space, lastNewLine = 1000;
-	while ((space = webAddress.find(' ')) != lpwstring::npos)
-		webAddress[space] = '+';
-	while ((space = epath.find(' ')) != lpwstring::npos)
-		epath[space] = '+';
-	cInternet::getWebPath(-1, webAddress, buffer, epath, u"webSearchCache", filePathOut, headers, synonymType + 1, true, true, forceWebReread);
-	size_t beginPos = buffer.find(u"Main Entry:", 0);
-	if (beginPos == lpwstring::npos)
-		return;
-	beginPos += lp_strlen(u"Main Entry:");
-	size_t endPos = 1000000, tmpPos;
-	const lpchar_t* endStr[] = { u"Main Entry:",u"Roget's 21st Century Thesaurus",u"Adjective Finder",u"Synonym Collection",u"Search another word",u"Antonyms:", u"* = informal/non-formal usage",NULL };
-	for (int I = 0; endStr[I] != NULL; I++)
-		if ((tmpPos = buffer.find(endStr[I], beginPos)) != lpwstring::npos && tmpPos < endPos)
-			endPos = tmpPos;
-	if (endPos == lpwstring::npos)
-		return;
-	match = buffer.substr(beginPos, endPos - beginPos);
-	bool noMainEntryMatch = (match.find(word) == lpwstring::npos), addressEncountered = false;
-	size_t pos = match.find(u"Synonyms:");
-	if (pos != lpwstring::npos)
-	{
-		lpwstring s;
-		for (pos += lp_strlen(u"Synonyms:"); pos < (signed)match.length(); pos++)
-			if (iswalpha(match[pos]) || match[pos] == u'\'')
-				s += match[pos];
-			else if (match[pos] == u' ')
-			{
-				if (!s.empty()) s += match[pos];
-			}
-			else if (match[pos] == u',')
-			{
-				while (s.length() > 0 && iswspace(s[s.length() - 1]))
-					s.erase(s.length() - 1);
-				transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
-				if (s.length() > 0)
-				{
-					if (s.length() >= WORDBUF)
-						lplog(LOG_WHERE | LOG_ERROR, u"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
-					else
-						synonyms.insert(s);
-				}
-				s.clear();
-			}
-			else if (match[pos - 1] != u',' && match[pos] == 13 && match[pos + 1] == 10 &&
-				(iswupper(match[pos + 2]) || iswdigit(match[pos + 2]) || !iswalpha(match[pos + 2]))) // Ads start with unpredictable strings, but always capitalized, after a newline.
-			{
-				break;
-			}
-			else if (match[pos] == 13 && match[pos + 1] == 10)
-				lastNewLine = s.length();
-			else if (addressEncountered = match[pos] == u'.' && pos > 3 && match[pos - 1] == u'w' && match[pos - 2] == u'w' && match[pos - 3] == u'w')
-				break;
-		transform(s.begin(), s.end(), s.begin(), (int(*)(int)) tolower);
-		if (s.length() > 0)
-		{
-			if ((s.length() >= 64 || addressEncountered) && lastNewLine < (signed)s.length())
-				s = s.substr(0, lastNewLine);
-			if (s.length() >= 64)
-				lplog(LOG_WHERE | LOG_ERROR, u"Synonym of %s (%s) is too long \n%s.", word.c_str(), s.c_str(), match.c_str());
-			else
-				synonyms.insert(s);
-		}
-	}
-	extern int logSynonymDetail;
-	if (noMainEntryMatch && synonyms.find(word) == synonyms.end() && logSynonymDetail > 0)
-		lplog(LOG_WHERE, u"%s itself not found in synonyms [%s].", word.c_str(), setString(synonyms, buffer, u"|").c_str());
-}
 
 // Scrapes the current thesaurus.com/browse page into sDefinition rows (wordType, primary
 // synonym, accumulated synonyms/antonyms with complexity|length). LOG_FATAL_ERROR if the
@@ -626,15 +473,6 @@ void cSource::getSynonyms(lpwstring word, vector <unordered_set <lpwstring> >& s
 	internalSynonymMap[synonymType][word] = synonyms;
 }
 
-// WordNet SIMPTR only (no thesaurus DB/scrape, no synonymMap). Fills synonyms per sense.
-void cSource::getWordNetSynonymsOnly(lpwstring word, vector <unordered_set <lpwstring> >& synonyms, int synonymType)
-{
-	LFS
-		initWordNet();
-	string sWord;
-	SynsetPtr sp = findtheinfo_ds(wTM(word, sWord), synonymType, SIMPTR, ALLSENSES);
-	extractWordsFromSynset(wTM(word, sWord), sp, 0, synonyms, false, debugTrace);
-}
 
 
 // WordNet ANTPTR on ADJ for word; ignoreTopLevel so the queried adjective itself is omitted.
@@ -1235,48 +1073,6 @@ lpwstring getMostCommonSynonym(lpwstring in, lpwstring& out, bool isNoun, bool i
 	return getMostCommonSynonym(in, out, isNoun, isVerb, isAdjective, isAdverb, sp, index, synonyms, initialFamiliarity, highestFamiliarity, t);
 }
 
-// Returns the most familiar hypernym of 'in' (a "kind of" label) and its sense_cnt.
-lpwstring getIsKindOf(lpwstring in, int& highestFamiliarity)
-{
-	LFS
-		initWordNet();
-	lpwstring out = in;
-	string inStr;
-	IndexPtr idx = index_lookup(wTM(in, inStr), NOUN);
-	if (!idx || idx->off_cnt > 1) return u"";
-	//int initialFamiliarity=highestFamiliarity=idx->sense_cnt;
-	for (int sense = 0; sense < idx->off_cnt; sense++)
-	{
-		SynsetPtr synptr = read_synset(NOUN, idx->offset[sense], idx->wd);
-		for (int w = 0; w < synptr->wcount; w++)
-		{
-			IndexPtr index = index_lookup(synptr->words[w], NOUN);
-			if (index && index->sense_cnt > highestFamiliarity)
-			{
-				mTW(synptr->words[w], out);
-				highestFamiliarity = index->sense_cnt;
-			}
-		}
-		for (int i = 0; i < synptr->ptrcount; i++)
-		{
-			if ((synptr->ptrtyp[i] == HYPERPTR || synptr->ptrtyp[i] == INSTANCE) &&
-				((synptr->pfrm[i] == 0) || (synptr->pfrm[i] == synptr->whichword)))
-			{
-				SynsetPtr cursyn = read_synset(NOUN, synptr->ptroff[i], "");
-				for (int w = 0; w < cursyn->wcount; w++)
-				{
-					IndexPtr index = index_lookup(cursyn->words[w], NOUN);
-					if (index && index->sense_cnt > highestFamiliarity)
-					{
-						mTW(cursyn->words[w], out);
-						highestFamiliarity = index->sense_cnt;
-					}
-				}
-			}
-		}
-	}
-	return out;
-}
 
 // If 'in' ends with 'ending', replace that suffix with 'replace' and OR inflectionFlags
 // with the matching VERB_* bit. Returns true if a strip happened.

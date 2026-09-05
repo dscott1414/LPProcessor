@@ -583,13 +583,6 @@ cSourceWordInfo::cRMap::tIcRMap cSourceWordInfo::addRelation(int where, int rela
 	return p;
 }
 
-// Pack three small ints into one hash: num1 + (num2<<14) + (num3<<28).
-// num3 must fit in the top 4 bits of a 32-bit int.
-int cSource::makeRelationHash(int num1, int num2, int num3)
-{
-	LFS
-		return num1 + (num2 << 14) + (num3 << 28); // num3 must be small
-}
 
 /*
 	int where
@@ -600,38 +593,8 @@ int cSource::makeRelationHash(int num1, int num2, int num3)
 	int finalRelation (default value -1)
 
 */
-// Stub: intended to pre-score word-pair relations per sentence before
-// resolveRelations fills delayedWordRelations.  Body is comments only.
-void cSource::createProbableRelationsList()
-{
-	LFS
-		// for each sentence
-		//   create a map tIWMM->where for each word in sentence
-		//   for each word in sentence
-		//     for each syntactic relation relating the word to another word in the sentence
-		//       fill in above structure.
-		// resolveRelations will fill in finalRelation which is an index into delayedWordRelations.
-}
 
-// 
-// Stub: intended to log hit/miss counts for the probable-relations list.
-// Body is comments only.
-void cSource::reportProbableRelationsAccuracy()
-{
-	LFS
-		// for each sentence
-		//   (1) count how many relations were proper and add up their count.
-		//   (2) add up count of relations that were missed.
-		//   log per sentence
-		// log sum (1), sum (2), average (1), average (2), low (1), high (1), low (2), high (2)
-}
 
-// True if innerTag's [sourcePosition, sourcePosition+len) sits inside outerTag's span.
-bool cSource::inTag(cTagLocation& innerTag, cTagLocation& outerTag)
-{
-	LFS
-		return innerTag.sourcePosition >= outerTag.sourcePosition && (innerTag.sourcePosition + innerTag.len <= outerTag.sourcePosition + outerTag.len);
-}
 
 // is innerTag in outerTag?
 // If the verb form is both present-1st and past (beat/put), rewrite sense
@@ -744,45 +707,6 @@ void cSource::trackVerbTenses(int where, vector <cTagLocation>& tagSet, bool inQ
 	}
 }
 
-// Walk MOBJECT tags and push each resolved principalWherePosition, skipping
-// comma-preceded determiner-less spans (likely RE_OBJECT appositives).
-void cSource::getCompoundPositions(int where, vector <cTagLocation>& multipleObjectTagSet, vector < int >& objectPositions)
-{
-	LFS
-		objectPositions.clear();
-	tIWMM w;
-	for (int oTag = findOneTag(multipleObjectTagSet, u"MOBJECT", -1); oTag >= 0; oTag = findOneTag(multipleObjectTagSet, u"MOBJECT", oTag))
-	{
-		int o, wo = -1, wob = -1, traceSource = -1;
-		if (resolveTag(multipleObjectTagSet, oTag, o, wo, w) && multipleObjectTagSet[oTag].PEMAOffset < 0 &&
-			(wo = m[wob = multipleObjectTagSet[oTag].sourcePosition].principalWherePosition) >= 0 &&
-			(objectPositions.empty() || wo > objectPositions[objectPositions.size() - 1]) &&
-			o != -1)
-		{
-			vector < vector <cTagLocation> > ndTagSets;
-			ndTagSets.clear();
-			// and medical man written all over him
-			//   source: a hospital nurse ( not Whittington's one[tuppence,nurse] ) on one side of me[julius] , and a little black - bearded man[mr] with gold glasses , and medical man[mr] written all[all] over him
-			// examine if this position is actually an RE_OBJECT by testing for the lack of a determiner
-			// this phrase must be preceded by a comma (because otherwise it cannot be an RE_OBJECT)
-			if (wob <= 1 || (m[wob - 1].word->first != u"," && m[wob - 2].word->first != u",") ||
-				startCollectTagsFromTag(true, nounDeterminerTagSet, multipleObjectTagSet[oTag], ndTagSets, -1, true, true, u"compound position - noun determiner") <= 0 ||
-				findOneTag(ndTagSets[0], u"DET", -1) >= 0 ||
-				!evaluateNounDeterminer(ndTagSets[0], true, traceSource, wob, wob + multipleObjectTagSet[oTag].len, -1))
-			{
-				objectPositions.push_back(wo);
-				//if (objects[o].neuter)
-				//	allGendered=false;
-				//if (objects[o].male || objects[o].female)
-				//	allNeuter=false;
-			}
-			else if (debugTrace.traceRole)
-				lplog(LOG_ROLE, u"%d:compound chain rejected %d-%d position (missing determiner, possible RE_OBJECT).", where, wob, wob + multipleObjectTagSet[oTag].len);
-		}
-		else if (wo >= 0 && debugTrace.traceRole)
-			lplog(LOG_ROLE, u"%d:compound chain rejected %d-%d position (missing object pwp=%d, o=%d).", where, wob, wob + multipleObjectTagSet[oTag].len, wo, o);
-	}
-}
 
 // Write relSubject / relObject / relVerb / relNextObject and objectRole
 // bits (POV, NONPAST, IS_OBJECT, pleonastic, FOCUS_EVALUATED) for
@@ -3338,66 +3262,3 @@ void cSource::syntacticRelations()
 	setPrepVerbRelations(futureBoundPrepositions);
 }
 
-// Debug dump (traceTestSyntacticRelations): per sentence print each token's
-// relSubject/relVerb/relObject/relPrep/... and any SRG whose `where` falls
-// in the sentence.  end may equal m.size() (one past the last token); the
-// quote-close adjustment below guards that before reading m[end].
-void cSource::testSyntacticRelations()
-{
-	tIWMM primaryQuoteCloseWord = Words.gquery(u"�");
-	tIWMM secondaryQuoteCloseWord = Words.gquery(u"�");
-	vector <cSyntacticRelationGroup>::iterator srg = syntacticRelationGroups.begin();
-	for (unsigned int s = 0; s < sentenceStarts.size(); s++)
-	{
-		unsigned int begin = sentenceStarts[s];
-		if (m[begin].word == primaryQuoteCloseWord || m[begin].word == secondaryQuoteCloseWord)
-			begin++;
-		unsigned int end = (s + 1 == sentenceStarts.size()) ? m.size() : sentenceStarts[s + 1];
-		while (end && m[end - 1].word == Words.sectionWord)
-			end--; // cut off end of paragraphs
-		// end may equal m.size() here ? one past the last token.
-		if (end < m.size() && (m[end].word == primaryQuoteCloseWord || m[end].word == secondaryQuoteCloseWord))
-			end++;
-		debugTrace = m[begin].t;
-		if (debugTrace.traceTestSyntacticRelations)
-		{
-			lpwstring sentence, originalIWord;
-			for (unsigned int where = begin; where < end; where++)
-			{
-				getOriginalWord(where, originalIWord, false, false);
-				sentence += originalIWord + u" ";
-			}
-			auto mc = metaCommandsEmbeddedInSource.find(begin);
-			if (mc != metaCommandsEmbeddedInSource.end())
-				lplog(LOG_INFO, u"\n*****  %s  *****", mc->second.c_str());
-			else if (end - begin > 1)
-				lplog(LOG_INFO, u"\n FAILED to find comment at sentence offset %d.", begin);
-			bool printedSentence = false;
-			for (unsigned int where = begin; where < end; where++)
-			{
-				lpwstring relationsPerWord;
-				if (m[where].relSubject != -1) relationsPerWord += u"relSubject='" + m[m[where].relSubject].word->first + u"' ";
-				if (m[where].getRelVerb() != -1) relationsPerWord += u"relVerb='" + m[m[where].getRelVerb()].word->first + u"' ";
-				if (m[where].getRelObject() != -1) relationsPerWord += u"relObject='" + m[m[where].getRelObject()].word->first + u"' ";
-				if (m[where].relPrep != -1) relationsPerWord += u"relPrep='" + m[m[where].relPrep].word->first + u"' ";
-				if (m[where].relInternalObject != -1) relationsPerWord += u"relInternalObject='" + m[m[where].relInternalObject].word->first + u"' ";
-				if (m[where].relInternalVerb != -1) relationsPerWord += u"relInternalVerb='" + m[m[where].relInternalVerb].word->first + u"' ";
-				if (m[where].nextCompoundPartObject != -1) relationsPerWord += u"nextCompoundPartObject='" + m[m[where].nextCompoundPartObject].word->first + u"' ";
-				if (m[where].previousCompoundPartObject != -1) relationsPerWord += u"previousCompoundPartObject='" + m[m[where].previousCompoundPartObject].word->first + u"' ";
-				if (relationsPerWord.length() > 0)
-				{
-					if (!printedSentence)
-					{
-						lplog(LOG_INFO, u"%s", sentence.c_str());
-						printedSentence = true;
-					}
-					lplog(LOG_INFO, u"~~~ %s: %s", m[where].word->first.c_str(), relationsPerWord.substr(0, relationsPerWord.length() - 1).c_str());
-				}
-			}
-			if (!printedSentence && end - begin > 1)
-				lplog(LOG_INFO, u"%d-%d:%s: no relations found", begin, end, sentence.c_str());
-			for (; srg != syntacticRelationGroups.end() && ((unsigned)srg->where) < end; srg++)
-				logSyntacticRelationGroup(*srg, u"~~~");
-		}
-	}
-}

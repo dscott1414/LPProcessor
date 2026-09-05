@@ -200,7 +200,6 @@ public:
   {
     return (p<<CHILDPATBITS)+ENDMASK(end);
   }
-  void minimize(void);
   void clear(void);
   void check(void);
   int greatestLength(unsigned int p,int where);

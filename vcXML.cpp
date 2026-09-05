@@ -198,15 +198,6 @@ bool aVNSYN(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
 	return lineX(buf, offset, vxc, u"SYNRESTRS/") || endX(buf, offset, tmp) == u"SYNRESTRS";
 }
 
-// Consumes <SUBCLASSES>…<SUBCLASS/>…</SUBCLASSES> (or the self-closing form).
-bool aSUBCLASS(lpchar_t* buf, int64_t& offset, vector <cXMLClass>& vxc)
-{
-	LFS
-		while (lineX(buf, offset, vxc, u"SUBCLASSES"))
-			while (lineX(buf, offset, vxc[vxc.size() - 1].vxc, u"SUBCLASS"));
-	lpwstring tmp;
-	return lineX(buf, offset, vxc, u"SUBCLASSES/") || endX(buf, offset, tmp) == u"SUBCLASSES";
-}
 
 // Consumes <NP> plus either SYNRESTRS or SELRESTRS, then </NP>. Returns false if either piece is missing.
 //      <NP value="Agent">

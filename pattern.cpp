@@ -124,29 +124,6 @@ unsigned int cMatchElement::getChildLen()
 		return cPatternElementMatchArray::ENDMASK(elementMatchedIndex);
 };
 
-// Space-separated names of this element's form and child-pattern alternatives.
-// An index < 0 (unresolved) is rendered as "***".
-lpwstring cPatternElement::formsStr(void)
-{
-	LFS
-		lpwstring allForms;
-	int index;
-	for (unsigned int form = 0; form < formIndexes.size(); form++)
-	{
-		if ((index = formIndexes[form]) < 0)
-			allForms += u"***";
-		else
-			allForms = allForms + lpwstring(u" ") + Forms[index]->name;
-	}
-	for (unsigned int pattern = 0; pattern < patternIndexes.size(); pattern++)
-	{
-		if ((index = patternIndexes[pattern]) < 0)
-			allForms += u"***";
-		else
-			allForms = allForms + lpwstring(u" ") + patterns[index]->name;
-	}
-	return allForms;
-}
 
 // Walk the previousMatch chain from elementMatched back to the start and
 // format each step into s (used only under LOG_PATTERN_MATCHING).
@@ -1538,16 +1515,6 @@ struct {
 	{-1,NULL}
 };
 
-// Render cSourceWordInfo flag bits into sFlags (debug / logging).
-const lpchar_t* allWordFlags(int wordflags, lpwstring& sFlags)
-{
-	LFS
-		sFlags.clear();
-	for (int I = 0; wordFlagList[I].sFlag; I++)
-		if (wordFlagList[I].flag & wordflags)
-			sFlags += wordFlagList[I].sFlag + lpwstring(u" ");
-	return sFlags.c_str();
-}
 
 // Dump this pattern's flags, ancestor names, descendant tags, tag-set
 // membership and every element's alternatives to the log.  Uses a 1024-wchar
@@ -2511,18 +2478,6 @@ void findTagSet(vector <cTagLocation>& tagSet, unsigned int desiredTagSetNum, ch
 			tagFilledArray[setOffset] = 1;
 }
 
-// True if both vectors have the same length and the same tag ids in order
-// (other cTagLocation fields are ignored).
-bool cPattern::equivalentTagSet(vector <cTagLocation>& tagSet, vector <cTagLocation>& tagSet2)
-{
-	LFS
-		if (tagSet.size() != tagSet2.size()) return false;
-	vector <cTagLocation>::iterator t = tagSet.begin(), tEnd = tagSet.end(), t2 = tagSet2.begin();
-	for (; t != tEnd; t++, t2++)
-		if (t->tag != t2->tag)
-			return false;
-	return true;
-}
 
 // Log every cTagLocation in tagSet.  ts>=0 prints a "TAGSET N:" header and
 // includes PEMAOffset; ts<0 is the compact form used when embedding in a
@@ -2631,29 +2586,9 @@ void cSource::printTagSet(int logType, const lpchar_t* descriptor, int ts, vecto
 	printTagSet(logType, NULL, ts, tagSet, position, PEMAPosition);
 }
 
-// Unfinished stubs — bodies are empty.  Declared private on cPattern.
-void cPattern::firstForm(void)
-{
-	LFS
-}
 
-// Unfinished stub (empty body).
-void cPattern::lastForm(void)
-{
-	LFS
-}
 
-// Unfinished stub (empty body).
-void cPattern::firstNonMandatoryForm(void)
-{
-	LFS
-}
 
-// Unfinished stub (empty body).
-void cPattern::lastNonMandatoryForm(void)
-{
-	LFS
-}
 
 // Log per-pattern match/push/compare/winner counters and every element's
 // usage line.  Read-only: `patterns` / `patternReferences` are process-wide

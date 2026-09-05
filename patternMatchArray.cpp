@@ -16,7 +16,7 @@
 		- push_back_unique() / push_back() - insert or locate a (pattern,len)
 		- find() / lower_bound() - bsearch and hand-rolled lower_bound
 		- consolidateWinners() - keep only winners; translate PEMA indexes
-		- queryPattern* / queryPatternDiff* / queryTagSet / findAgent / getNextPosition
+		- queryPattern* / queryPatternDiff*
 
 	Key data structures / globals:
 		- content / count / allocated - the buffer; allocated doubles from 5
@@ -29,7 +29,6 @@
 		  before using it for allocation or the payload bounds check.
 		- queryPattern(int, int& len) initializes len=-1 on entry, same as the
 		  other overloads.
-		- getNextPosition seeds minPatternMatch with INT_MIN.
 */
 // Batch B5: the Win32-only includes that used to head this file (windows.h and
 // friends) are gone; these are what the code below actually needs on macOS.
@@ -96,15 +95,6 @@ cPatternMatchArray::cPatternMatchArray(const cPatternMatchArray& rhs)
 	}
 }
 
-// Shrink allocated down to count.  trealloc result is assigned over content:
-// if it fails the original buffer is leaked and content becomes NULL.
-void cPatternMatchArray::minimize(void)
-{
-	LFS
-		int oldAllocated = allocated;
-	allocated = count;
-	content = (tPatternMatch*)trealloc(2, content, oldAllocated * sizeof(*content), allocated * sizeof(*content));
-}
 
 // Write count then the raw content bytes to a POSIX fd.  Return is always true;
 // ::write errors are ignored.
@@ -431,28 +421,6 @@ int cPatternMatchArray::queryPattern(int pattern, int& len)
 	return element;
 }
 
-// Longest match whose pattern belongs to desiredTagSetNum.  On a length tie,
-// a NAME tag already chosen wins over a later NOUN (guarded by tag>=0 so an
-// unset `tag` from a prior no-op hasTagInSet is never used to index
-// patternTagStrings).  Returns the tag id (or -1); element is the PMA index
-// | patternFlag.
-int cPatternMatchArray::queryTagSet(unsigned int& element, int desiredTagSetNum, int& maxLen)
-{
-	LFS
-		unsigned int tagInSet;
-	maxLen = -1;
-	int tag = -1;
-	for (unsigned int I = 0; I < count; I++)
-		if (content[I].len >= maxLen && patterns[content[I].getPattern()]->tagSetMemberInclusion[desiredTagSetNum])
-		{
-			if (content[I].len == maxLen && tag >= 0 && patternTagStrings[tag] == u"NAME") continue; // NAME tags have precedence over NOUN tags
-			tagInSet = 0;
-			tag = patterns[content[I].getPattern()]->hasTagInSet(desiredTagSetNum, tagInSet);
-			maxLen = content[I].len;
-			element = I | cMatchElement::patternFlag;
-		}
-	return tag;
-}
 
 
 // Exact (pattern#, len) via bsearch.  Returns PMA index | patternFlag, or -1.
@@ -489,28 +457,6 @@ int cPatternMatchArray::queryPattern(int pattern)
 	return element;
 }
 
-// Longest __NOUN whose differentiator is '2' (common noun) or, if
-// includePronouns, 'C' (pronominal), and whose len <= maximumMaxLen.
-// Returns the PMA index | patternFlag (also written to element), or -1.
-int cPatternMatchArray::findAgent(int& element, int maximumMaxLen, bool includePronouns)
-{
-	LFS
-		element = -1;
-	int maxLen = -1;
-	for (unsigned int I = 0; I < count; I++)
-	{
-		int p = content[I].getPattern();
-		lpchar_t diff = patterns[p]->differentiator[0];
-		if (patterns[p]->name == u"__NOUN" &&
-			(diff == u'2' || (includePronouns && diff == u'C')) &&
-			content[I].len > maxLen && content[I].len <= maximumMaxLen)
-		{
-			maxLen = content[I].len;
-			element = I | cMatchElement::patternFlag;
-		}
-	}
-	return element;
-}
 
 // Longest match of (pattern, differentiator); discards the maxLen out-param.
 int cPatternMatchArray::queryPatternDiff(lpwstring pattern, lpwstring differentiator)
@@ -598,20 +544,6 @@ int cPatternMatchArray::queryQuestionFlagPattern()
 	return element;
 }
 
-// Smallest match length in this PMA, if it is > w; otherwise w+1.  Used to
-// skip forward when no match covering more than `w` tokens starts here.
-// Seeds the scan with INT_MIN.
-int cPatternMatchArray::getNextPosition(int w)
-{
-	LFS
-		int minPatternMatch = INT_MIN;
-	for (unsigned int I = 0; I < count; I++)
-		if (content[I].len < minPatternMatch)
-			minPatternMatch = content[I].len;
-	if (minPatternMatch != (INT_MIN) && minPatternMatch > w)
-		return minPatternMatch;
-	return w + 1;
-}
 
 // bsearch comparator: ascending pattern #, then ascending len.  Not a member;
 // the commented trace used a `t` that is not in scope here.

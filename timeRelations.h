@@ -74,7 +74,6 @@ int whichRecurrence(lpwstring w);
 lpwstring capacityString(int capacityFlags);
 lpwstring timeString(int timeWordFlags, lpwstring& s);
 lpwstring senseString(lpwstring& s, int verbSense);
-lpwstring holidayString(int holiday);
 // TENSE (vB, vC etc) from Quirk
 // Tense flags from Reichenbach
 

@@ -196,17 +196,6 @@ void cSource::resetProcessingFlags(void)
 	unlockTables(mysql);
 }
 
-// Set processing=true on sources.id=thisSourceId.  Returns false if LOCK fails.
-bool cSource::signalBeginProcessingSource(int thisSourceId)
-{
-	LFS
-		if (!myquery(&mysql, u"LOCK TABLES sources WRITE")) return false;
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"update sources set processing=true where id=%d", thisSourceId);
-	myquery(&mysql, qt);
-	unlockTables(mysql);
-	return true;
-}
 
 // Mark thisSourceId processed, clear processing, stamp lastProcessedTime=NOW().
 bool cSource::signalFinishedProcessingSource(int thisSourceId)
@@ -285,17 +274,6 @@ bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step)
 	return numResults > 0;
 }
 
-// Write path/start/repeatStart/sizeInBytes for the sources row whose etext
-// matches.  path and start are escapeStr'd in place (mutated).
-bool cSource::updateSource(lpwstring& path, lpwstring& start, int repeatStart, lpwstring& etext, int actualLenInBytes)
-{
-	LFS
-		lpwstring tmp, tmp2, sqlStatement;
-	escapeStr(path);
-	escapeStr(start);
-	sqlStatement = u"update sources set path='" + path + u"', start='" + start + u"', repeatStart=" + itos(repeatStart, tmp) + u", sizeInBytes=" + itos(actualLenInBytes, tmp2) + u" where etext='" + escaped(etext) + u"'";
-	return myquery(&mysql, (lpchar_t*)sqlStatement.c_str());
-}
 
 // Like updateSource but only start/repeatStart/sizeInBytes.  start is
 // truncated to the last 255 chars (the column is VARCHAR(256)).
@@ -402,27 +380,7 @@ void cSource::updateSourceStatistics(int numSentences, int matchedSentences, int
 	unlockTables(mysql);
 }
 
-// Write sizeInBytes / numWordRelations.  Same missing-UNLOCK as above.
-void cSource::updateSourceStatistics2(int sizeInBytes, int numWordRelations)
-{
-	LFS
-		lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	if (!myquery(&mysql, u"LOCK TABLES sources WRITE")) return;
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"UPDATE sources SET sizeInBytes=%d, numWordRelations=%d where id=%d", sizeInBytes, numWordRelations, sourceId);
-	myquery(&mysql, qt);
-	unlockTables(mysql);
-}
 
-// Write numMultiWordRelations.  Same missing-UNLOCK as above.
-void cSource::updateSourceStatistics3(int numMultiWordRelations)
-{
-	LFS
-		lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	if (!myquery(&mysql, u"LOCK TABLES sources WRITE")) return;
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"UPDATE sources SET numMultiWordRelations=%d where id=%d", numMultiWordRelations, sourceId);
-	myquery(&mysql, qt);
-	unlockTables(mysql);
-}
 
 // Load objects.common=1 (multi-source / location-like) and their
 // objectWordMap rows, appending cObject / cWordMatch entries and filling
@@ -499,75 +457,6 @@ int cSource::readMultiSourceObjects(tIWMM* wordMap, int numWords)
 	return 0;
 }
 
-// REPLACE INTO objects and INSERT INTO objectWordMap for every index in
-// objectsToFlush.  Uses checkFull() to batch VALUES lists.  Returns 0, or
-// -1 if LOCK/checkFull fails (the checkFull-failure path does not UNLOCK).
-// objectLocations is not written (numObjectLocationsInserted stays 0).
-// right now it is assumed that all objects from books are kept separate,
-// so there is no check for merging information between info sources
-// but there is a 'common' list consisting of all multiple-word objects, usually locations.
-int cSource::flushObjects(set <int>& objectsToFlush)
-{
-	LFS
-		lp_wprintf(u"Writing objects to database...\r");
-	if (!myquery(&mysql, u"LOCK TABLES objects WRITE")) return -1;
-
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lpchar_t wmqt[QUERY_BUFFER_LEN_OVERFLOW];
-	int startTime = clock(), numObjectsInserted = 0, numObjectLocationsInserted = 0, where, lastProgressPercent = -1;
-	lp_strcpy(qt, u"REPLACE INTO objects VALUES ");
-	size_t len = lp_strlen(qt);
-	set <int>::iterator oi = objectsToFlush.begin(), oiEnd = objectsToFlush.end();
-	for (; oi != oiEnd && !exitNow; oi++, numObjectsInserted++)
-	{
-		//int no=*oi;
-		cObject* o = &(objects[*oi]);
-		len += lp_snprintf(qt + len, QUERY_BUFFER_LEN - len, u"(%d,%d,%d,%d,%d,%d,%d,%d,%d,NULL,%d,%d,%d,%d,%d,%d,%d),",
-			sourceId, *oi,
-			o->objectClass, o->numEncounters, o->numIdentifiedAsSpeaker, o->name.nickName, o->getOwnerWhere(), o->getFirstSpeakerGroup(),
-			getProfession(*oi),
-			o->identified == true ? 1 : 0, o->plural == true ? 1 : 0, o->male == true ? 1 : 0, o->female == true ? 1 : 0, o->neuter == true ? 1 : 0,
-			/*multiSource*/0,
-			(o->objectClass == NAME_OBJECT_CLASS) ? 1 : 0);
-		if ((where = numObjectsInserted * 100 / objects.size()) > lastProgressPercent)
-		{
-			lp_wprintf(u"PROGRESS: %03d%% objects written to database with %04d seconds elapsed \r", where, clocksec());
-			lastProgressPercent = where;
-		}
-		if (!checkFull(&mysql, qt, len, false, NULL)) return -1;
-	}
-	if (!checkFull(&mysql, qt, len, true, NULL)) return -1;
-	myquery(&mysql, u"UNLOCK TABLES");
-	lastProgressPercent = -1;
-	int objectDetails = 0;
-	if (!myquery(&mysql, u"LOCK TABLES objectWordMap WRITE", true)) return -1;
-	lp_strcpy(wmqt, u"INSERT INTO objectWordMap VALUES ");
-	size_t wmlen = lp_strlen(wmqt);
-	for (oi = objectsToFlush.begin(); oi != oiEnd && !exitNow; oi++, objectDetails++)
-	{
-		cObject* o = &(objects[*oi]);
-		if ((where = objectDetails * 100 / objects.size()) > lastProgressPercent)
-		{
-			lp_wprintf(u"PROGRESS: %03d%% object details written to database with %04d seconds elapsed \r", where, clocksec());
-			lastProgressPercent = where;
-		}
-		if (o->objectClass == NAME_OBJECT_CLASS)
-			wmlen += o->name.insertSQL(wmqt + wmlen, sourceId, *oi, QUERY_BUFFER_LEN - wmlen);
-		else
-		{
-			for (int I = o->begin; I < o->end; I++)
-				if (m[I].word->second.index >= 0)
-					wmlen += lp_snprintf(wmqt + wmlen, QUERY_BUFFER_LEN - wmlen, u"(%d,%d,%d,%d),", sourceId, *oi, m[I].word->second.index, I - o->begin);
-		}
-		if (!checkFull(&mysql, wmqt, wmlen, false, NULL)) return -1;
-	}
-	if (!checkFull(&mysql, wmqt, wmlen, true, NULL)) return -1;
-	if (numObjectsInserted && logDatabaseDetails)
-		lplog(u"Inserting %d objects from %d locations took %d seconds.", numObjectsInserted, numObjectLocationsInserted, (clock() - startTime) / CLOCKS_PER_SEC);
-	myquery(&mysql, u"UNLOCK TABLES");
-	lp_wprintf(u"PROGRESS: 100%% objects written to database with %04d seconds elapsed         \n", clocksec());
-	return 0;
-}
 
 // Empty word: no forms, index = -uniqueNewIndex++ (a unique negative id
 // until the DB assigns a real one), all usage/relation slots zeroed.
@@ -780,19 +669,6 @@ tIWMM cWord::wordStructureGivenWordIdExists(int wordId)
 	return idToMap[wordId];
 }
 
-// If an open-class word has no mainEntry, LOG_INFO and set
-// queryOnAnyAppearance so the next DB refresh will try again.  'where' is
-// only for the log (a call-site cookie).
-void cSourceWordInfo::mainEntryCheck(const lpwstring first, int where)
-{
-	LFS
-		if (mainEntry == wNULL && (query(nounForm) >= 0 || query(verbForm) >= 0 || query(adjectiveForm) >= 0 || query(adverbForm) >= 0))
-		{
-			if (!iswalpha(first[0])) return;
-			::lplog(LOG_INFO, u"Word %s has no mainEntry CHECK(%d)!", first.c_str(), where);
-			flags |= cSourceWordInfo::queryOnAnyAppearance;
-		}
-}
 
 // SELECT forms (optionally only rows newer than lastReadfromDBTime) and
 // append any name not already in Forms.  FATAL if both sides grew since the
@@ -1228,52 +1104,5 @@ void maxFieldLengths(const lpwstring key, cOntologyEntry& dbPredicate, int& maxK
 		numGT190++;
 }
 
-// In-place: prefix ' and " with \\, and double existing backslashes.  Used
-// by writeDbOntologyEntry; not the same as escapeStr() (single-quote only).
-void escapeAllQuote(lpwstring& str)
-{
-	LFS
-		lpwstring ess;
-	for (unsigned int I = 0; I < str.length(); I++)
-	{
-		if (str[I] == '\'' || str[I] == '\"') ess += '\\';
-		ess += str[I];
-		if (str[I] == '\\') ess += '\\';
-	}
-	str = ess;
-}
 
-// INSERT one ontology row.  Mutates dbPredicate (clamps negative ranks) and
-// escapeAllQuote's onkey/compactLabel/abstractDescription in place; infoPage
-// and commentDescription / superClasses are NOT escaped.  allowFailure=true
-// so ER_DUP_ENTRY is treated as success.  Superclass strings >10000 are
-// logged and skipped.
-bool writeDbOntologyEntry(MYSQL& mysql, const lpwstring key, cOntologyEntry& dbPredicate)
-{
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lpwstring superClasses;
-	for (auto sc : dbPredicate.superClasses)
-		superClasses += sc + u"|";
-	lpwstring onkey = key;
-	escapeAllQuote(onkey);
-	escapeAllQuote(dbPredicate.compactLabel);
-	escapeAllQuote(dbPredicate.abstractDescription);
-	if (dbPredicate.numLine < 0)
-		dbPredicate.numLine = 0;
-	if (dbPredicate.ontologyHierarchicalRank < 0)
-		dbPredicate.ontologyHierarchicalRank = 100;
-	if (dbPredicate.ontologyType < 0)
-		dbPredicate.ontologyType = 100;
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"insert into ontology (onkey,compactLabel,infoPage,abstractDescription,commentDescription,numLine,ontologyHierarchicalRank,ontologyType,superClasses) VALUES (\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d,%d,%d,\"%s\")",
-		onkey.c_str(), dbPredicate.compactLabel.c_str(), dbPredicate.infoPage.c_str(), dbPredicate.abstractDescription.c_str(), dbPredicate.commentDescription.c_str(), dbPredicate.numLine, dbPredicate.ontologyHierarchicalRank,
-		dbPredicate.ontologyType, superClasses.c_str());
-	if (superClasses.length() > 10000)
-		lplog(LOG_INFO, u"SUPER CLASSES TOO LONG:\n%s", qt);
-	else
-	{
-		bool success = (myquery(&mysql, qt, true) || mysql_errno(&mysql) == ER_DUP_ENTRY);
-		return success;
-	}
-	return false;
-}
 

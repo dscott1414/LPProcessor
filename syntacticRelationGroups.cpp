@@ -10,7 +10,7 @@
 		on-disk serialize/deserialize pair, source-index remapping used when
 		a child source is spliced into a question, and the debug printers
 		that dump an SRG as a labelled S/V/O string.  Adjective/adverb
-		extractors (getWSAdjective, getOSAdjective, getMSAdverb, ...) pull
+		extractors (getWSAdjective, ...) pull
 		modifiers off an object span or, when the object is missing, off the
 		words immediately after the verb (typical of "How old is X?").
 
@@ -184,22 +184,6 @@ int cSource::checkInsertPrep(set <int> &relPreps, int wp, int wo)
 	return 0;
 }
 
-// Lexicon index of a GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS at `object`,
-// or of its single objectMatch.  NULLWORD (187) if object < 0 or not an
-// occupation/role.
-int cSource::getProfession(int object)
-{
-	LFS
-		if (object < 0) return NULLWORD;
-	int where = m[object].principalWherePosition;
-	if (where < 0) return NULLWORD;
-	if (objects[object].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS)
-		return m[where].word->second.index;
-	if (m[where].objectMatches.size() == 1 && objects[object = m[where].objectMatches[0].object].objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS &&
-		objects[object].originalLocation >= 0)
-		return m[objects[object].originalLocation].word->second.index;
-	return NULLWORD;
-}
 
 // Fill srg->printMin / printMax with the source-position window covering
 // controller, subject, verb, object, secondary object and every prep in
@@ -279,21 +263,6 @@ lpwstring cSource::getWSAdjective(int where, int numOrder)
 	return u"";
 }
 
-// Object-id of the first adjectival object inside `where`, or — if where < 0 —
-// of a post-verbal adjectival object (whereVerb+1, or +2 if +1 is an adverb).
-// Returns -1 if none.
-int cSource::getOSAdjective(int whereVerb, int where)
-{
-	LFS
-		if (where >= 0)
-			return getOSAdjective(where);
-	if (whereVerb < 0) return -1;
-	if (whereVerb + 1 < (signed)m.size() && m[whereVerb + 1].principalWhereAdjectivalPosition >= 0 && acceptableObjectPosition(whereVerb + 1))
-		return (m[whereVerb + 1].getObject() >= 0) ? m[whereVerb + 1].getObject() : m[whereVerb + 1].objectMatches[0].object;
-	if (whereVerb + 2 < (signed)m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0 && m[whereVerb + 2].principalWhereAdjectivalPosition >= 0 && acceptableObjectPosition(whereVerb + 2))
-		return (m[whereVerb + 2].getObject() >= 0) ? m[whereVerb + 2].getObject() : m[whereVerb + 2].objectMatches[0].object;
-	return -1;
-}
 
 // whereString of the first adjectival object at `where`, else (if where < 0)
 // of the post-verbal adjectival object next to whereVerb.  Writes into tmpstr.
@@ -311,31 +280,6 @@ lpwstring cSource::getWOSAdjective(int whereVerb, int where, lpwstring &tmpstr)
 	return tmpstr;
 }
 
-// Lexicon index of the numOrder-th non-object adjective at `where`, or —
-// if where < 0 and numOrder == 0 — of a post-verbal adjective / _Q2-I
-// "What is X short for?" complement.  NULLWORD if none.
-int cSource::getMSAdjective(int whereVerb, int where, int numOrder)
-{
-	LFS
-		if (where >= 0)
-			return getMSAdjective(where, numOrder);
-	if (numOrder != 0) return NULLWORD;
-	int i;
-	// How old is Darrell Hammond?
-	//if (where<0 && whereVerb>=0 && (m[whereVerb].flags&cWordMatch::flagInQuestion) && m[whereVerb].relSubject<0 &&
-	//	  m[whereVerb-1].queryWinnerForm(adjectiveForm)>=0 && m[whereVerb-1].getObject()<0)
-	//	return ((i=m[whereVerb-1].word->second.index)<0) ? NULLWORD : i;
-	if (whereVerb < 0 || (whereVerb + 1 >= where && where >= 0)) return NULLWORD;
-	int maxEnd, q2IElement = queryPattern(whereVerb, u"_Q2", maxEnd);
-	if (q2IElement >= 0 && patterns[pema[q2IElement].getParentPattern()]->differentiator == u"I" && m[whereVerb].relSubject >= 0 && (i = m[m[whereVerb].relSubject].endObjectPosition) >= 0 &&
-		(m[i].queryWinnerForm(adjectiveForm) >= 0 || (m[i].queryWinnerForm(quoteForm) >= 0 && i + 1 < (signed)m.size() && m[i = i + 1].queryWinnerForm(adjectiveForm) >= 0))) // What is "WWE" short for?
-		return ((i = m[i].word->second.index) < 0) ? NULLWORD : i;
-	if (whereVerb + 1 < (signed)m.size() && acceptableAdjective(whereVerb + 1) && !acceptableObjectPosition(whereVerb + 1))
-		return ((i = m[whereVerb + 1].word->second.index) < 0) ? NULLWORD : i;
-	if (whereVerb + 2 < (signed)m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0 && acceptableAdjective(whereVerb + 2) && !acceptableObjectPosition(whereVerb + 2))
-		return ((i = m[whereVerb + 2].word->second.index) < 0) ? NULLWORD : i;
-	return NULLWORD;
-}
 
 // Word string of the numOrder-th non-object adjective at `where`, falling
 // back to a post-verbal / _Q2-I adjective when where < 0 and numOrder == 0.
@@ -359,29 +303,10 @@ lpwstring cSource::getWSAdjective(int whereVerb, int where, int numOrder, lpwstr
 	return tmpstr;
 }
 
-// Lexicon index of an adverb immediately after or before whereVerb.
-// If changeStateAdverb, also accepts a T_START/STOP/FINISH/RESUME time
-// word immediately before the verb.  NULLWORD / -1 if none.
-int cSource::getMSAdverb(int whereVerb, bool changeStateAdverb)
-{
-	LFS
-		int i = -1;
-	if (whereVerb >= 0 && whereVerb + 1 < (signed)m.size() && m[whereVerb + 1].queryWinnerForm(adverbForm) >= 0)
-		return ((i = m[whereVerb + 1].word->second.index) < 0) ? NULLWORD : i;
-	if (whereVerb > 0 && m[whereVerb - 1].queryWinnerForm(adverbForm) >= 0)
-		return ((i = m[whereVerb - 1].word->second.index) < 0) ? NULLWORD : i;
-	if (whereVerb > 0 && changeStateAdverb)
-	{
-		int timeFlag = (m[whereVerb - 1].word->second.timeFlags & 31);
-		if (timeFlag == T_START || timeFlag == T_STOP || timeFlag == T_FINISH || timeFlag == T_RESUME)
-			return ((i = m[whereVerb - 1].word->second.index) < 0) ? NULLWORD : i;
-	}
-	return i;
-}
 
 // Word string of an adverb next to whereVerb (prefers before, then after).
 // changeStateAdverb=true also accepts a T_START/STOP/FINISH/RESUME time
-// word immediately before the verb, same filter as getMSAdverb.
+// word immediately before the verb.
 const lpchar_t *cSource::getWSAdverb(int whereVerb, bool changeStateAdverb)
 {
 	LFS
@@ -418,22 +343,6 @@ bool cSource::acceptableAdjective(int where)
 		m[where].queryWinnerForm(demonstrativeDeterminerForm) >= 0 || m[where].queryWinnerForm(possessiveDeterminerForm) >= 0 || m[where].queryWinnerForm(quantifierForm) >= 0;
 }
 
-// return the first adjective that is an object
-// Object-id of that first adjectival object inside the span at `where`,
-// or -1.  Prefers getObject() over objectMatches[0].
-int cSource::getOSAdjective(int where)
-{
-	LFS
-		if (where < 0) return -1;
-	int object = m[where].getObject();
-	if (object >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1 && where > 0)
-	{
-		for (int I = m[where].beginObjectPosition; I < m[where].endObjectPosition - 1; I++)
-			if (m[I].principalWhereAdjectivalPosition >= 0 && acceptableObjectPosition(I))
-				return (m[I].getObject() >= 0) ? m[I].getObject() : m[I].objectMatches[0].object;
-	}
-	return -1;
-}
 
 // whereString of the first adjectival object inside the span at `where`.
 // Empty if where < 0 or none found.  Writes into tmpstr.
@@ -451,29 +360,6 @@ lpwstring cSource::getWOSAdjective(int where, lpwstring &tmpstr)
 	return u"";
 }
 
-// return the first adjective that is not an object
-// Lexicon index of the numOrder-th such adjective inside the object span
-// at `where`.  NULLWORD if where < 0 or none remain.
-int cSource::getMSAdjective(int where, int numOrder)
-{
-	LFS
-		if (where < 0) return NULLWORD;
-	int object = m[where].getObject(), index;
-	if (object >= 0 && m[where].endObjectPosition - m[where].beginObjectPosition > 1)
-	{
-		for (int I = m[where].beginObjectPosition; I < m[where].endObjectPosition - 1; I++)
-		{
-			if (acceptableAdjective(I) && !acceptableObjectPosition(I))
-			{
-				if (numOrder == 0)
-					return ((index = m[I].word->second.index) < 0) ? NULLWORD : index;
-				else
-					numOrder--;
-			}
-		}
-	}
-	return NULLWORD;
-}
 
 // Overload: render prep `ps` via prepPhraseToString then call the lpwstring
 // printSRG.  s/ws/wo are sentence / subject / object positions for the dump.

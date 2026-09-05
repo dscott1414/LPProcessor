@@ -27,9 +27,9 @@
 		- NO_OWNER and VERB_NO_PAST share the same bit (_MIL*64) by design.
 		- memoryAllocated - process-wide counter mutated by tmalloc/tfree; comment
 			in memoryStat.cpp says "protect with mutex" but there is no lock.
-		- Google/Bing/Merriam-Webster credentials - read from the environment via
+		- Google/Bing credentials - read from the environment via
 			envConfig.h's getGoogleCSEKey() / getGoogleCSEContext() /
-			getBingSubscriptionKey() / getMerriamWebsterKey(), not stored as globals
+			getBingSubscriptionKey(), not stored as globals
 			here (there used to be a hardcoded webSearchKey/BINGAccountKey/cseContext
 			set of globals in questionAnsweringWebSearch.cpp; removed).
 		- mySQLQueryBufferSRWLock / mySQLTotalTimeSRWLock / rdfTypeMapSRWLock /
@@ -233,7 +233,6 @@ void itos(const lpchar_t *before,int i,lpwstring &concat,lpchar_t *after);
 void itos(const lpchar_t *before,int i,lpwstring &concat,lpwstring after);
 lpwstring itos(int i, lpwstring &tmp);
 lpwstring itos(int i, const lpchar_t *format, lpwstring &tmp);
-lpwstring dtos(double fl,lpwstring &tmp);
 char *wTM(lpwstring inString,string &outString,int codePage=CP_UTF8);
 const lpchar_t *mTW(string inString, lpwstring &outString);
 const lpchar_t *mTW(string inString, lpwstring &outString, int &codePage);
@@ -318,7 +317,6 @@ void getAllHyperNyms(lpwstring in,vector < set <string> > &objects);
 void getAllOrderedHyperNyms(lpwstring in,vector < vector <string> > &objects);
 void deriveMainEntry(int where,int fromWhere,lpwstring &in,int &inflectionFlags,bool isVerb,bool isNoun,lpwstring &lastNounNotFound,lpwstring &lastVerbNotFound);
 const lpchar_t *inflectionFlagsToStr(int inflectionFlags, lpwstring &sFlags);
-const lpchar_t *allWordFlags(int inflectionFlags, lpwstring &sFlags);
 void readVBNet(void);
 lpwstring relationString(int r);
 void *WideCharToMultiByte(const lpchar_t * q,int &queryLength,void *&buffer,unsigned int &bufSize);
@@ -346,7 +344,6 @@ typedef struct MYSQL MYSQL;
 int initializeDatabaseHandle(MYSQL &mysql,const lpchar_t *where,bool &alreadyConnected);
 lpwstring lastErrorMsg();
 
-const char * LastErrorStr(void);
 // Batch B3: these four were Win32 SRWLOCKs (a reader/writer lock initialized by
 // InitializeSRWLock and taken via AcquireSRWLockShared/Exclusive). std::shared_mutex
 // is the direct, portable equivalent -- same shared/exclusive semantics, and unlike

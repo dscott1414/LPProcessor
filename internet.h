@@ -15,9 +15,8 @@
 
 	Key entry points:
 		- readPage() - GET a URL into a lpwstring (decoded via mTW).
-		- readBinaryPage() - GET a URL and write raw bytes to an fd.
 		- cacheWebPath() / getWebPath() - cache-aside read of a URL.
-		- LPInternetOpen() / closeConnection() - process-wide session handle.
+		- LPInternetOpen() - process-wide session handle.
 		- runJavaJerichoHTML() - spawn "java ... RenderToText".
 
 	Key data structures / globals:
@@ -43,8 +42,8 @@
 #include <shared_mutex> // batch B3: totalInternetTimeWaitBandwidthControlSRWLock's type
 #include <string>
 // Batch B9: the WinINet client is gone, replaced by libcurl. The public surface
-// below (readPage / readBinaryPage / cacheWebPath / getWebPath / LPInternetOpen /
-// closeConnection / runJavaJerichoHTML) is unchanged, exactly as the port plan
+// below (readPage / cacheWebPath / getWebPath / LPInternetOpen /
+// runJavaJerichoHTML) is unchanged, exactly as the port plan
 // requires, so none of the ~10 consumer files needed a signature change.
 //
 // What went away with WinINet, and why nothing replaces it:
@@ -64,8 +63,6 @@ public:
 	static int readPage(const lpchar_t *str, lpwstring &buffer);
 	static bool LPInternetOpen(int timer);
 	static int readPage(const lpchar_t *str, lpwstring &buffer, lpwstring &headers);
-	static int readBinaryPage(lpchar_t *str, int destfile, int &total);
-	static bool closeConnection(void);
 	static int cacheWebPath(lpwstring webAddress, lpwstring &buffer, lpwstring epath, lpwstring cacheTypePath, bool forceWebReread, bool &networkAccessed, lpwstring &diskPath);
 	// The process-wide libcurl easy handle (void* so this header does not have to
 	// pull in curl/curl.h; Internet.cpp casts it back to CURL*). Replaces hINet.

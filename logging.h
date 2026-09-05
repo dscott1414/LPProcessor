@@ -14,7 +14,6 @@
 
 	Key entry points:
 		- lplog() / lplog(format,...) / lplog(logLevel,format,...) - format and write.
-		- lplogNR() - same as lplog(logLevel,...) but does not append a newline.
 		- logstring() - the sink: opens/buffers the per-level FILE*, writes, and on
 			LOG_FATAL_ERROR calls fatalExit() (exits EXIT_FAILURE; waits for a
 			keypress only when interactive).
@@ -33,8 +32,6 @@
 			status; they do not hang waiting on stdin.
 		- LOG_FATAL_ERROR is also treated as LOG_INFO for file routing (writes main.lplog)
 			and lplog() ORs in LOG_ERROR, but logstring() exits before the error-file pass.
-		- lplogNR is "no newline" (it skips the wcscat u"\\n"), not "no return" - both
-			lplog and lplogNR abort on FATAL via logstring().
 		- When LOG_BUFFER is defined (it is), the FILE* handles are TLS, same as
 			logFileExtension, so two threads never share the same handle.
 */
@@ -120,7 +117,6 @@ extern int logDatabaseDetails;
 int lplog(void);
 int lplog(const lpchar_t *format,...);
 int lplog(int logLevel,const lpchar_t *format,...);
-int lplogNR(int logLevel,const lpchar_t *format,...);
 int logstring(int logLevel,const lpchar_t *s);
 #define SCREEN_WIDTH 280
 // Per-document (copied onto cSource::debugTrace) switches that gate the expensive

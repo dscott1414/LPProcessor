@@ -411,7 +411,6 @@ public:
     LAST_USAGE_PATTERN,
     MAX_USAGE_PATTERNS=16
   };
-	lpwstring patternString(int p);
 	static const int patternFormNumOffset=32750;
   static const int HIGHEST_COST_OF_INCORRECT_NOUN_DET_USAGE=4;
   static const int HIGHEST_COST_OF_INCORRECT_VERB_USAGE=4;
@@ -481,7 +480,6 @@ public:
 	cSourceWordInfo(int iForm,int iInflectionFlags,int iFlags,int iTimeFlags,int derivationRules,tIWMM iMainEntry,int sourceId);
   cSourceWordInfo(char *buffer,int &where,int limit,lpwstring &ME,int sourceId);
   bool updateFromDisk(char *buffer,int &where,int limit,lpwstring &ME);
-	void computeDBUsagePatternsToUsagePattern(unordered_map <int, int> &dbUsagePatterns);
 	bool retrieveWordFromDatabase(lpwstring &sWord, MYSQL &mysql, cSourceWordInfo &dbWordInfo, unordered_map <int, int> &dbUsagePatterns,int &dbMainEntryWordId);
 	bool write(void *buffer,int &where,int limit);
   // MYSQL database
@@ -492,7 +490,6 @@ public:
 	bool toLowestCostPreferForm(int form,int preferForm);
 	bool toLowestCost(int form);
 	bool setCost(int form,int cost);
-  void mainEntryCheck(const lpwstring first,int where);
   void lplog(void);
   void transferFormsAndUsage(unsigned int *forms,unsigned int &iCount,int formNum,lpwstring &word);
   void transferDBUsagePatternsToUsagePattern(int highestCost,int *DBUsagePatterns,unsigned int upStart,unsigned int upLength);
@@ -506,7 +503,6 @@ public:
 	bool hasNounForm();
 	int query(lpwstring form);
   int lowestSeparatorCost();
-    bool isLowestCost(int form);
   int queryForSeparator(void);
   bool remove(int form);
   bool remove(lpchar_t *formName);
@@ -518,10 +514,8 @@ public:
 	bool isNonCachedWord(void);
 	void setTopLevel(void);
   bool isSeparator(void);
-	void removeIllegalForms(void);
 	void setIgnore(void);
   bool isIgnore(void);
-  bool isRareWord(void);
   void preferVerbPresentParticiple(void);
   bool notCostable(lpwstring word,int flags);
   void logFormUsageCosts(lpwstring w);
@@ -730,7 +724,6 @@ void removeDots(lpwstring &str);
 int takeLastMatch(lpwstring &buffer,lpwstring begin_string,lpwstring end_string,lpwstring &match,bool include_begin_and_end);
 size_t firstMatch(lpwstring &buffer,lpwstring begin_string,lpwstring end_string,size_t &beginPos,lpwstring &match,bool include_begin_and_end);
 int firstMatchNonEmbedded(lpwstring &buffer,lpwstring beginString,lpwstring endString,size_t &beginPos,lpwstring &match,bool include_begin_and_end);
-int getInflection(lpwstring sWord,lpwstring form,lpwstring mainEntry,lpwstring iform,vector <lpwstring> &allInflections);
 int nextMatch(lpwstring &buffer,lpwstring begin_string,lpwstring end_string,size_t &begin_pos,lpwstring &match,bool include_begin_and_end);
 int getPath(const lpchar_t *pathname,void *buffer,int maxlen,int &actualLen);
 
@@ -747,7 +740,6 @@ public:
   void adjustUsages();
   void initializeCosts();
   void initialize();
-	void initializeChangeStateVerbs();
   ~cWord();
   tIWMM sectionWord; // special word only for section breaks
   tIWMM PPN; // special word only for personal/gendered proper nouns (relations)
@@ -801,7 +793,6 @@ public:
 	int readFormsCache(char *buffer,int bufferlen,int &numReadForms);
   int readWords(lpwstring oPath,int sourceId, bool disqualifyWords, lpwstring specialExtension);
 	int writeFormsCache(int fd);
-  bool removeInflectionFlag(lpwstring sWord,int flag);
 	static bool isDash(lpchar_t ch);
 	static bool isSingleQuote(lpchar_t ch);
 	static bool isDoubleQuote(lpchar_t ch);
@@ -811,7 +802,6 @@ public:
   void readForms(MYSQL &mysql, lpchar_t *qt);
 	void mapWordIdToWordStructure(int wordId, tIWMM iWord);
 	tIWMM wordStructureGivenWordIdExists(int wordId);
-  bool acquireLock(MYSQL &mysql,bool persistent);
   void releaseLock(MYSQL &mysql);
 
   // Current lexicon size (WMM.size()), including sentinels and unknowns.
@@ -819,7 +809,6 @@ public:
   // if word is a new word discovered since last flush, the index in cSourceWordInfo will be -1.
 	bool readWordsOfMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
 	void addMultiWordObjects(vector < vector < tmWS > > &multiWordStrings,vector < vector < vector <tIWMM> > > &multiWordObjects);
-  int wordCheck(void);
   void createHonorificWordCategories();
   void createAbbreviationWordCategories();
   void createPronounCategories();
@@ -882,8 +871,6 @@ private:
   static bool inCreateDictionaryPhase;
   vector <lpwstring> unknownWDWords;
   vector <lpwstring> unknownCDWords;
-  void readUnknownWords(lpchar_t *fileName,vector <lpwstring> &unknownWords);
-  void writeUnknownWords(lpchar_t *fileName,vector <lpwstring> &unknownWords);
   int write(void);
 
   // initialized
@@ -903,15 +890,12 @@ private:
 	void addTimeFlags();
   void createTimeCategories(bool normalize);
   static int getForms(MYSQL *mysql,tIWMM &iWord,lpwstring sWord,int sourceId, bool logEverything);
-  tIWMM addCopy(lpwstring sWord,tIWMM iWord,bool &added);
   static tIWMM query(lpwstring sWord,int form,int inflection,int &offset);
-  bool addInflectionFlag(lpwstring sWord,int flag);
   static tIWMM hasFormInflection(tIWMM iWord,lpwstring sForm,int inflection);
   static bool handleExtendedParseWords(const lpchar_t * word);
   int continueParse(lpchar_t *buffer,int64_t begincp,int64_t bufferLen,vector<lpchar_t *> &multiWords);
   static int addWordToForm(lpwstring sWord,tIWMM &iWord,int flags,lpwstring sForm,lpwstring shortForm,int inflection,int derivationRules,lpwstring mainEntry,int sourceId,bool &added,bool markUndefined=false);
   int predefineWords(InflectionsRoot words[],lpwstring form,lpwstring shortForm,lpwstring inflectionsClass=u"",int flags=0,bool properNounSubClass=false);
-  bool closeConnection(void);
   static int checkAdd(const lpchar_t * fromWhere,tIWMM &iWord,lpwstring sWord,int flags,lpwstring sForm,int inflection,int derivationRules,lpwstring mainEntry,int sourceId,bool log);
 
   #ifdef CHECK_WORD_CACHE

@@ -113,7 +113,7 @@ class cSyntacticRelationGroup;
 #define MAX_LEN 2048
 
 // One thesaurus/dictionary entry as scraped by the get*.cpp acquisition code and written to
-// the MySQL thesaurus tables by cSource::writeThesaurusEntry.  Narrow (char) strings because
+// the MySQL thesaurus tables.  Narrow (char) strings because
 // the scraped sources are ASCII/UTF-8 byte streams, unlike the lpchar_t document text.
 //   mainEntry            - the headword being defined.
 //   wordType             - part of speech as given by the source ("noun", "verb", ...).
@@ -142,7 +142,6 @@ typedef struct {
 
 void escapeStr(lpwstring &str);
 lpwstring escaped(const lpwstring &str);
-unsigned long encodeEscape(MYSQL &mysql, lpwstring &to, lpwstring from);
 
 // "Object Match": an entity plus the confidence/preference score with which it was matched at
 // some source position.  This is the element type of every match list in the system
@@ -1911,11 +1910,14 @@ public:
 	int beginClock;
 	int pass;
 	bool RDFFileCaching; // sets whether rdfTypes are read from disk.  They may still be cached in memory! (cOntology::cacheRdfTypes determines that).  This is different than cQuestionAnswering::fileCaching.
+	// These ordinals are persisted: they are written to the `sources.sourceType`
+	// column and are baked into existing rows and binary source caches.  Do not
+	// reorder or delete a member -- RETIRED_SOURCE_TYPE_3 is a retired NewsBank
+	// slot, kept purely so every member after it keeps its stored value.
 	enum sourceTypeEnum {
-		NO_SOURCE_TYPE, TEST_SOURCE_TYPE, GUTENBERG_SOURCE_TYPE, NEWS_BANK_SOURCE_TYPE, BNC_SOURCE_TYPE, SCRIPT_SOURCE_TYPE,
+		NO_SOURCE_TYPE, TEST_SOURCE_TYPE, GUTENBERG_SOURCE_TYPE, RETIRED_SOURCE_TYPE_3, BNC_SOURCE_TYPE, SCRIPT_SOURCE_TYPE,
 		WEB_SEARCH_SOURCE_TYPE, WIKIPEDIA_SOURCE_TYPE, INTERACTIVE_SOURCE_TYPE, PATTERN_TRANSFORM_TYPE, REQUEST_TYPE
 	};
-	//enum sourceType {NoType,TestType,BookType,NewsBankType,BNCType,ScriptType};
 	inline static bool updateWordUsageCostsDynamically=false;  // this is turned of by default.  Do NOT turn this back on unless a great deal of testing is done, as this will
 																// upset carefully defined weights of word forms usages, and it will also accumulate usages into costs which will make results nonreproducible
 	                              // from actual to test because the exact parsing history from the beginning of Source initialization must be followed
@@ -1930,7 +1932,6 @@ public:
 	vector <cWordMatch> m;
 	unordered_map <unsigned int, lpwstring> metaCommandsEmbeddedInSource;
 	cPatternElementMatchArray pema;
-	bool parseNecessary(lpchar_t *path);
 	int readSourceBuffer(lpwstring title, lpwstring etext, lpwstring path, lpwstring encoding, lpwstring &start, int &repeatStart);
 	int parseBuffer(lpwstring &path,unsigned int &unknownCount);
 	void parsePattern(unordered_map <lpwstring, lpwstring> &parseVariables, const lpwstring lastMetaCommandEmbeddedInSource, lpwstring& sWord, int& nounOwner);
@@ -1948,7 +1949,6 @@ public:
 	bool read(char *buffer,int &where,unsigned int total, bool &parsedOnly, bool printProgress, lpwstring specialExtension);
 	bool flush(int fd,void *buffer,int &where);
 	bool FlushFile(int fd, void *buffer, int &where); // batch B5: POSIX fd, was a Win32 HANDLE
-	bool writeCheck(lpwstring path);
 	bool writePatternUsage(lpwstring path, bool zeroOutPatternUsage);
 	bool write(lpwstring file,bool S2, bool saveOld, lpwstring specialExtension);
 	bool findStart(lpwstring &buffer,lpwstring &start,int &repeatStart,lpwstring &title);
@@ -2303,7 +2303,6 @@ public:
 	void setRelPrep(int where,int relPrep,int fromWhere,int setType, int whereVerb);
 	lpwstring lastNounNotFound,lastVerbNotFound;
 
-	void printObjects(void);
 	void printSectionStatistics(void);
 	void printResolutionCheck(vector <int> &badSpeakers);
 	bool isSpeaker(int where,int esg,int tempCSG);
@@ -2316,9 +2315,7 @@ public:
 	tIWMM getTense(tIWMM verb, tIWMM subject, int tenseDesired);
 	lpwstring getTense(int where, lpwstring candidate, int preferredVerb);
 	void analyzeWordSenses(void);
-	void printVerbFrequency();
 	// speaker resolution
-	void checkObject(vector <cObject>::iterator o);
 	bool eraseWinnerFromRecalculatingAloneness(int I,cPatternMatchArray::tPatternMatch *pma);
 	bool removeWinnerFlag(int where, cPatternMatchArray::tPatternMatch *pma,int recursionSpaces, vector <cPatternMatchArray::tPatternMatch *> &PMAToRemoveWinner, vector <int> &parentPEMAToRemoveWinner);
 	bool isAnySeparator(int where);
@@ -2398,7 +2395,6 @@ public:
 	void syntacticRelationsEvaluateRelations(vector <cWordMatch>::iterator im, const int I);
 	void syntacticRelationsEOS(int I, int& lastBeginS1, int& lastRelativePhrase, int& lastQ2, int& lastVerb, int& firstFreePrep, int& whereLastVerb);
 	void syntacticRelations();
-	void testSyntacticRelations();
 	bool replaceSubsequentMatches(set <int> &so,int sgEnd);
 	bool replaceAliasesAndReplacements(set <int> &objects);
 	bool eraseAliasesAndReplacementsInSpeakerGroup(vector <cSpeakerGroup>::iterator sg,bool eraseSubsequentMatches);
@@ -2443,7 +2439,6 @@ public:
 	bool like(lpwstring str1,lpwstring str2);
 
 	// where
-	void getMaxWhereSR(vector <cSyntacticRelationGroup>::iterator csr,int &begin,int &end);
 	vector <cSyntacticRelationGroup>::iterator findSyntacticRelationGroup(int where);
 	const lpchar_t *src(int where,lpwstring description,lpwstring &tmpstr);
 	bool followerPOVToObserverConversion(vector <cSyntacticRelationGroup>::iterator sr,int sg);
@@ -2526,11 +2521,9 @@ public:
 	void srd(int where,lpwstring spd,lpwstring &description);
 	lpwstring wsrToText(int where,lpwstring &description);
 	lpwstring srToText(int &spr,lpwstring &description);
-	void cancelSubType(int object);
 	unordered_map <lpwstring, set <int> >::iterator getVerbClasses(int where,lpwstring &verb);
 	lpwstring getBaseVerb(int where,int fromWhere,lpwstring &verb);
 	bool isVerbClass(int where,int verbClass);
-	bool isControlVerb(int where);
 	bool isSpecialVerb(int where,bool moveOnly);
 	bool isPhysicalActionVerb(int where);
 	bool isSelfMoveVerb(int where,bool &exitOnly);
@@ -2565,7 +2558,6 @@ public:
 	void accumulateSubjects(int I,int o,bool inPrimaryQuote,bool inSecondaryQuote,int &whereSubject,bool &accumulateMultipleSubjects,vector <int> &lastSubjects);
 	bool isAgentObject(int object);
 	bool hasAgentObjectOwner(int where,int &ownerWhere);
-	void checkInfinitivePhraseForLocation(vector <cTagLocation> &tagSet,bool locationTense);
 	unordered_map <lpwstring,int> prepTypesMap;
 	void preparePrepMap(void);
 	int getMovementPrepType(tIWMM prepWord);
@@ -2649,7 +2641,6 @@ public:
 	void initializeTimelineSegments(void);
 	void createTimelineSegment(int where);
 	bool adjustWord(unsigned int q);
-	void adjustWords(void);
 	void eraseLastQuote(int &lastQuote,tIWMM quoteCloseWord,unsigned int &q);
 	bool testConversionToDoubleQuotes();
 	bool getFormFlags(int where, bool &maybeVerb, bool &maybeNoun, bool &maybeAdjective, bool &preferNoun);
@@ -2712,8 +2703,6 @@ public:
 	void reduceLocalFreebase(lpchar_t *path,lpchar_t *filename);
 	void getObjectString(int where,lpwstring &object,vector <lpwstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases, bool removePrecedingUncapitalizedWordsFromProperNouns=false);
 	int getWikipediaPath(int principalWhere,vector <lpwstring> &wikipediaLinks,lpchar_t *path,vector <lpwstring> &lookForSubject,int includeNonMixedCaseDirectlyAttachedPrepositionalPhrases,bool removePrecedingUncapitalizedWordsFromProperNouns);
-	int evaluateISARelation(int parentSourceWhere,int where,vector <cTagLocation> &tagSet,vector <lpwstring> &lookForSubject);
-	bool getISARelations(int parentSourceWhere,int where,vector < vector <cTagLocation> > &tagSets,vector <int> &OCTypes,vector <lpwstring> &lookForSubject);
 	int getObjectRDFTypes(int object,vector <cTreeCat *> &rdfTypes,unordered_map <lpwstring ,int > &topHierarchyClassIndexes,lpwstring fromWhere);
 	int getExtendedRDFTypes(int where, vector <cTreeCat *> &rdfTypes, unordered_map <lpwstring, int > &topHierarchyClassIndexes, lpwstring fromWhere, bool ignoreMatches=false, bool fileCaching=true);
 	class cExtendedMapType
@@ -2743,7 +2732,6 @@ public:
 	bool capitalizationCheck(int begin, int len);
 	bool rejectISARelation(int principalWhere);
 	bool isDefiniteObject(int where, const lpchar_t * definiteObjectType, int &ownerWhere, bool recursed);
-	int identifyISARelationTextAnalysis(cQuestionAnswering &qa, int principalWhere,bool parseOnly);
 	int checkParticularPartSemanticMatch(int logType, int parentWhere, cSource *childSource, int childWhere, int childObject, bool &synonym, int &semanticMismatch, bool fileCaching);
 	void checkParticularPartSemanticMatchWord(int logType, int parentWhere, bool &synonym, unordered_set <lpwstring> &parentSynonyms, lpwstring pw, lpwstring pwme, int &lowestConfidence, unordered_map <lpwstring, int >::iterator ami);
 	bool isObjectCapitalized(int where);
@@ -2838,7 +2826,6 @@ public:
 	int speakersMatched,speakersNotMatched,counterSpeakersMatched,counterSpeakersNotMatched;
 	lpwstring storageLocation;
 	int lastSourcePositionSet;
-	int makeRelationHash(int num1,int num2,int num3);
 	class cRelationHistory
 	{
 	public:
@@ -2873,8 +2860,6 @@ public:
 	vector <int> delayedWordRelations;  // stores relations that should be delayed from being recorded in the syntactic phase because speakers are not resolved
 	vector <int> delayedMultiWordRelations;  // stores relations that should be delayed from being recorded in the syntactic phase because speakers are not resolved
 	void addDelayedWordRelations(int where,int fromWhere,int toWhere,int relationType);
-	void createProbableRelationsList();
-	void reportProbableRelationsAccuracy();
 	void resolveWordRelations();
 	cSourceWordInfo::cRMap::tIcRMap addRelations(int where,tIWMM from,tIWMM to,int relationType);
 	// multiWordStrings is read once from txt files in Source initialization.
@@ -2890,21 +2875,14 @@ public:
 	int sourceId;
 	int createDatabase(const lpchar_t * server);
 	int insertWordRelationTypes(void);
-	bool signalBeginProcessingSource(int sourceId);
 	bool signalFinishedProcessingSource(int sourceId);
 	bool updateSourceEncoding(int readBufferType, lpwstring sourceEncoding, lpwstring etext);
 	bool updateSourceStart(lpwstring &start, int repeatStart, lpwstring &etext, int64_t actualLenInBytes);
-	bool updateSource(lpwstring &path,lpwstring &start,int repeatStart,lpwstring &etext,int actualLenInBytes);
-	int createThesaurusTables(void);
-	int createGroupTables(void);
-	int writeThesaurusEntry(sDefinition &d);
 	bool resetAllSource(void);
 	bool resetSource(int beginSource,int endSource);
 	void resetProcessingFlags(void);
 	void updateSourceStatistics(int numSentences, int matchedSentences, int numWords, int numUnknown,
 		int numUnmatched,int numOvermatched, int numQuotations, int quotationExceptions, int numTicks, int averagePatternMatch);
-	void updateSourceStatistics2(int sizeInBytes, int numWordRelations);
-	void updateSourceStatistics3(int numMultiWordRelations);
 	void logPatternChain(int sourcePosition,int insertionPoint,enum cPatternElementMatchArray::chainType patternChainType);
 	void printSRG(lpwstring logPrefix,cSyntacticRelationGroup* srg,int s,int ws,int wo,int ps,bool overWrote,int matchSum,lpwstring matchInfo,int logDestination=LOG_WHERE);
 	void printSRG(lpwstring logPrefix,cSyntacticRelationGroup* srg,int s,int ws,int wo,lpwstring ps,bool overWrote,int matchSum,lpwstring matchInfo,int logDestination=LOG_WHERE);
@@ -2914,7 +2892,6 @@ public:
 	int initializeNounVerbMapping(void);
 	void getSynonyms(lpwstring word, unordered_set <lpwstring> &synonyms, int synonymType);
 	void getSynonyms(lpwstring word, vector <unordered_set <lpwstring> > &synonyms, int synonymType);
-	void getWordNetSynonymsOnly(lpwstring word, vector <unordered_set <lpwstring> > &synonyms, int synonymType);
 	
 	// tense statistics
 	cTenseStat narratorTenseStatistics[NUM_SIMPLE_TENSE];
@@ -2968,7 +2945,6 @@ private:
 
 	bool compoundObjectSubChain(vector < int > &objectPositions);
 	unsigned int getNumCompoundObjects(int where,int &combinantScore,lpwstring &combinantStr);
-	void getCompoundPositions(int where,vector <cTagLocation> &mobjectTagSets,vector < int > &objectPositions);
 	void markMultipleObjects(int where);
 	bool setAdditionalRoleTags(int where,int &firstFreePrep,vector <int> &futureBoundPrepositions,bool inPrimaryQuote,bool inSecondaryQuote,
 		bool &nextVerbInSeries,int &sense,int &whereLastVerb,bool &ambiguousSense,bool inQuotedString,bool inSectionHeader,int sentenceBegin,int sentenceEnd,vector < vector <cTagLocation> > &tagSets);
@@ -3091,7 +3067,6 @@ private:
 	bool resolveGenderedObject(int where,bool definitelyResolveSpeaker,bool inPrimaryQuote,bool inSecondaryQuote,int lastBeginS1,int lastRelativePhrase,int lastQ2,
 					vector <cOM> &objectMatches,vector <cObject>::iterator object,int wordOrderSensitiveModifier,
 					int &subjectCataRestriction,bool &mixedPlurality,bool limitTwo,bool isPhysicallyPresent,bool physicallyEvaluated);
-	void mixedPluralityUsageSubGroupEnhancement(int where);
 	void processSubjectCataRestriction(int where,int subjectCataRestriction);
 	void addPreviousDemonyms(int where);
 	bool addNewNumberedSpeakers(int where,vector <cOM> &objectMatches);
@@ -3129,7 +3104,6 @@ private:
 	void resolveObject(int where, bool definitelySpeaker, bool inPrimaryQuote, bool inSecondaryQuote, int lastBeginS1, int lastRelativePhrase, int lastQ2, int lastVerb, bool resolveForSpeaker, bool avoidCurrentSpeaker, bool limitTwo);
 	bool quotedString(unsigned int beginQuote,unsigned int endQuote,bool &noTextBeforeOrAfter,bool &noSpeakerAfterward);
 	int speakerBefore(int beginQuote,bool &previousParagraph);
-	void addCataSpeaker(int position,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb,bool definitelySpeaker);
 	void setSameAudience(int whereVerb,int speakerObjectPosition,int &audienceObjectPosition);
 	int scanForSpeaker(int position,bool &definitelySpeaker,bool &crossedSectionBoundary,int &audienceObjectPosition);
 	int repeatReplaceObjectInSectionPosition;
@@ -3153,7 +3127,6 @@ private:
 	void printUnresolvedLocation(int urs);
 	void resolveSpeakersByAlternationForwards(int where,int currentSpeakerWhere,bool definitelySpeaker);
 	void resolvePreviousSpeakersByAlternationBackwards(int where,int currentSpeakerWhere,bool definitelySpeaker);
-	bool quotationsImmediatelyBefore(int beginQuote);
 	int flipSpeaker(int &previousSpeakers,int &beforePreviousSpeakers);
 	int assignSecondarySpeaker(unsigned int beginQuote,unsigned int endQuote);
 	void displayQuoteContext(unsigned int begin,unsigned int end);
@@ -3177,7 +3150,6 @@ private:
 	bool findNoun(int I,pronounResolutionSearchType prsType,vector <cLocalFocus> &ls,bool inQuote);
 	void createSemanticPatterns(void);
 	bool preferVerbRel(int position,unsigned int J,cPattern *p);
-	bool preferS1(int position,unsigned int J);
 	void consolidateWinners(int begin);
 	void addSpeakerObjects(int position,bool toMatched,int where,vector <int> speakers,int64_t resolutionFlag);
 	// exactly like PEMA but with position
@@ -3305,7 +3277,6 @@ private:
 	void printNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap, const lpchar_t * type, const lpchar_t * subtype, const lpchar_t * subsubtype);
 	bool setNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap);
 	void clearNyms(vector <tIWMM> &nyms1, map <tIWMM,vector <tIWMM>,cSourceWordInfo::cRMap::wordMapCompare > &wnMap);
-	bool objectClassComparable(vector <cObject>::iterator o,vector <cObject>::iterator lso);
 	bool hasDemonyms(vector <cObject>::iterator o);
 	bool sharedDemonyms(int where,bool traceNymMatch,vector <cObject>::iterator o,vector <cObject>::iterator lso,tIWMM &fromMatch,tIWMM &toMatch,tIWMM &toMapMatch);
 	bool nymNoMatch(vector <cObject>::iterator o,tIWMM adj);
@@ -3385,7 +3356,6 @@ private:
 	void pushLocalObjectOntoMatches(int where,vector <cLocalFocus>::iterator lsi, const lpchar_t * reason);
 	void narrowGender(int where,int toObject);
 	void eliminateBodyObjectRedundancy(int where,vector <cOM> &objectMatches);
-	bool mixedPluralityInSameSentence(int where);
 	bool evaluateCompoundObjectAsGroup(int where,bool &physicallyEvaluated);
 	void matchAdditionalObjectsIfPlural(int where,bool isPlural,bool atLeastOneReference,
 																						bool physicallyEvaluated,bool physicallyPresent,
@@ -3429,7 +3399,6 @@ private:
 	char *tagSetTimeArray;
 	unsigned int tagSetTimeArraySize;
 	int getVerbTense(vector <cTagLocation> &tagSet,int verbTagIndex,bool &isId);
-	bool getIVerb(vector <cTagLocation> &tagSet,int &tag);
 	bool checkRelation(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,int parentPosition,int position,tIWMM verbWord,tIWMM objectWord,int relationType);
 	int calculateVerbAfterVerbUsage(int whereVerb,unsigned int nextWord, bool adverbialObject);
 	void evaluateVerbObjectsInfo(cPatternMatchArray::tPatternMatch* pm, 
@@ -3446,7 +3415,6 @@ private:
 		const int whereObjectTag, const int nextObjectTag, unsigned int &numObjects,
 		tIWMM object1Word, const int object2, tIWMM object2Word, const int verbTagIndex, tIWMM verbWord);
 	int evaluateVerbObjects(cPatternMatchArray::tPatternMatch *parentpm,cPatternMatchArray::tPatternMatch *pm,int parentPosition,int position,vector <cTagLocation> &tagSet,bool infinitive,bool assessCost,int &voRelationsFound,int &traceSource,lpwstring purpose);
-	int properNounCheck(int &traceSource,int begin,int end,int whereDet);
 	void evaluateNounDeterminerAdjectiveVerbPresentParticiple(int begin, int end, int fromPEMAPosition, int& PNC);
 	void evaluateNounDeterminerFromToOrToSame(int begin, int end, int fromPEMAPosition, int& PNC);
 	void evaluateNounDeterminerPreferVerbAfterTo(int begin, int end, int fromPEMAPosition, int& PNC);
@@ -3514,7 +3482,6 @@ private:
 	void evaluateNounDeterminers(int PEMAPosition,int position,vector < vector <cTagLocation> > &tagSets, bool alternateShortTry, lpwstring purpose);
 	void evaluatePrepObjects(int PEMAPosition, int position, vector < vector <cTagLocation> > &tagSets, lpwstring purpose);
 	int evaluatePrepObjectRelation(vector <cTagLocation> &tagSet,int &pIndex,tIWMM &prepWord,int &object,int &wherePrepObject,tIWMM &objectWord);
-	bool inTag(cTagLocation &innerTag,cTagLocation &outerTag);
 	void equivocateObjects(int where,int eTo,int eFrom);
 	void assignMetaQueryAudience(int beginQuote,int previousQuote,int primaryObject,int secondaryObject,int secondaryTag,vector <cTagLocation> &tagSet);
 	bool processMetaSpeakerQueryAnswer(int beginQuote,int previousQuote,int lastQuery);
@@ -3555,15 +3522,12 @@ private:
 	int createObject(lpwstring derivation, lpwstring descriptor);
 
 	// MYSQL Database
-	int createLocationTables(void);
 	int createSentimentTables(void);
 	int createObjectTables(void);
-	int createTimeRelationTables(void);
 	int createRelationTables(void);
 	int flushObjectRelations();
 	int alreadyExists(char *word);
 	int readMultiSourceObjects(tIWMM *wordMap,int numWords);
-	int flushObjects(set <int> &objectsToFlush);
 	int flushGroups(int sourceId);
 	bool abbreviationEquivalent(tIWMM w,tIWMM w2);
 	bool accumulateRelatedObjects(int object,set <int> &relatedObjects);
@@ -3575,17 +3539,11 @@ private:
 	const lpchar_t *wrti(int where, const lpchar_t * id,lpwstring &tmpstr,bool shortFormat=false);
 	bool acceptableAdjective(int where);
 	bool acceptableObjectPosition(int where);
-	int getMSAdverb(int whereVerb,bool changeStateAdverb);
-	int getOSAdjective(int whereVerb,int where);
-	int getOSAdjective(int object);
-	int getMSAdjective(int whereVerb,int where,int numOrder);
-	int getMSAdjective(int object,int numOrder);
 	const lpchar_t *getWSAdverb(int whereVerb,bool changeStateAdverb);
 	lpwstring getWOSAdjective(int whereVerb,int where,lpwstring &tmpstr);
 	lpwstring getWOSAdjective(int where,lpwstring &tmpstr);
 	lpwstring getWSAdjective(int whereVerb,int where,int numOrder,lpwstring &tmpstr);
 	lpwstring getWSAdjective(int where,int numOrder);
-	int getProfession(int object);
 	int maxBackwards(int where);
 	int getMinPosition(int where);
 	int gmo(int wo);

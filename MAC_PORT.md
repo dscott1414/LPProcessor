@@ -129,7 +129,7 @@ Three bugs were found and fixed rather than ported faithfully:
    the shared helper rather than per variable, so the first getter to run
    populated it and every later getter sharing that helper returned *its* value —
    `getDBHost()` handed back `LP_DB_USER`, and `getGoogleCSEContext()`,
-   `getBingSubscriptionKey()` and `getMerriamWebsterKey()` all handed back the
+   and `getBingSubscriptionKey()` both handed back the
    Google CSE key. Now cached per getter, and covered by a compiled-and-run check.
 2. **`getWordNet.cpp`'s `getAllOrderedHyperNyms`** took the ordered-hypernym lock
    *shared* and then wrote the map under it (both the insert and the counter
@@ -290,7 +290,7 @@ Genuinely open, in rough order of how likely they are to bite:
    before this port (it is U+FFFD in git history too, and was a meaningless
    multi-character literal under MSVC as well). The function has therefore never
    removed what its name says. The likely intent is U+00B7 MIDDLE DOT, the
-   Merriam-Webster syllable separator. **This needs the author's decision**; it was
+   syllable separator used in dictionary entries. **This needs the author's decision**; it was
    not guessed at.
 4. **Windows path separators (`\`) remain throughout** outside the files that had
    to change. They are a runtime problem, not a compile-time one, so they will

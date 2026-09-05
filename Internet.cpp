@@ -16,8 +16,8 @@
 		Stage 8 (QA web search / Wikipedia / SPARQL) and the get*.cpp scrapers.
 
 	Key entry points:
-		- readPage / readBinaryPage / cacheWebPath / getWebPath
-		- LPInternetOpen / closeConnection / InetOption
+		- readPage / cacheWebPath / getWebPath
+		- LPInternetOpen
 		- InternetReadFile_Wait / InternetReadFile_Child
 		- runJavaJerichoHTML / PrepAndLaunchRedirectedChild / ReadAndHandleOutput
 
@@ -111,7 +111,7 @@ int cInternet::readPage(const lpchar_t* str, lpwstring& buffer)
 }
 
 // Batch B9: libcurl write callbacks. The first accumulates the body into a
-// std::string (readPage); the second writes it straight to an fd (readBinaryPage).
+// std::string, for readPage.
 // Both follow libcurl's contract: return the number of bytes consumed, and
 // returning anything else aborts the transfer.
 static size_t appendToStringCallback(char* data, size_t size, size_t nmemb, void* userp)
@@ -122,18 +122,6 @@ static size_t appendToStringCallback(char* data, size_t size, size_t nmemb, void
 }
 
 struct sBinarySink { int fd; int* total; bool failed; };
-static size_t writeToFdCallback(char* data, size_t size, size_t nmemb, void* userp)
-{
-	size_t total = size * nmemb;
-	sBinarySink* sink = static_cast<sBinarySink*>(userp);
-	if (::write(sink->fd, data, total) != (ssize_t)total)
-	{
-		sink->failed = true;
-		return 0; // aborts the transfer
-	}
-	*sink->total += (int)total;
-	return total;
-}
 
 // Batch B9: the per-request option set, applied to the shared easy handle before
 // every transfer. CURLOPT_TIMEOUT is the piece that replaces the entire
@@ -295,74 +283,7 @@ int cInternet::readPage(const lpchar_t* str, lpwstring& buffer, lpwstring& heade
 	return (errors) ? INTERNET_OPEN_URL_FAILED : 0;
 }
 
-// GET 'str' and write raw bytes to destfile, adding the byte count to
-// 'total'.  The `while (true)` never retries - the failure arm returns -1.
-// FATAL if the write fails.  Returns 0, INTERNET_OPEN_FAILED, or -1.
-int cInternet::readBinaryPage(lpchar_t* str, int destfile, int& total)
-{
-	LFS
-		// Batch B3: same restructuring as readPage's copy of this block above.
-		int timeWait = 0;
-	{
-		std::shared_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
-		if (clock() - cProfile::lastNetClock < bandwidthControl)
-			timeWait = bandwidthControl - (clock() - cProfile::lastNetClock);
-	}
-	if (timeWait > 0)
-	{
-		{
-			std::unique_lock<std::shared_mutex> bandwidthLock(totalInternetTimeWaitBandwidthControlSRWLock);
-			cProfile::totalInternetTimeWaitBandwidthControl += timeWait;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(timeWait));
-	}
-	{
-		// Batch B3: EXCLUSIVE, where the original took this lock SHARED to perform a
-		// write -- a pre-existing bug (readPage's identical "stamp lastNetClock" line
-		// correctly used the exclusive form), so a faithful shared_lock port would
-		// have kept a data race on lastNetClock.
-		std::unique_lock<std::shared_mutex> networkTimeLock(cProfile::networkTimeSRWLock);
-		cProfile::lastNetClock = clock();
-	}
-	lpwstring ioe;
-	if (!LPInternetOpen(0))
-	{
-		lplog(LOG_ERROR, u"ERROR:LPInternetOpen Failed - %s", getLastErrorMessage(ioe));
-		return INTERNET_OPEN_FAILED;
-	}
-	CURL* curl = (CURL*)curlHandle;
-	applyCommonCurlOptions(curl, lp_utf16_to_utf8(lpwstring(str)));
-	// Batch B9: the body streams straight to the fd through the write callback,
-	// so there is no MAX_BUF staging buffer any more and no size limit on a page.
-	sBinarySink sink = { destfile, &total, false };
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToFdCallback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
-	char curlError[CURL_ERROR_SIZE] = { 0 };
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlError);
-	CURLcode result = curl_easy_perform(curl);
-	if (sink.failed)
-	{
-		lplog(LOG_FATAL_ERROR, u"Cannot write rdfTypes dbPediaCache - %S.", strerror(errno));
-		return -1;
-	}
-	if (result != CURLE_OK)
-	{
-		lplog(LOG_ERROR, u"ERROR:Cannot open URL %s - %S.", str, (curlError[0] ? curlError : curl_easy_strerror(result)));
-		lplog(LOG_ERROR, NULL);
-		return -1;
-	}
-	if (log_net) lplog(u"Successfully opened URL %s.", str);
-	return 0;
-}
 
-// Batch B9: release the shared easy handle. Always returns true.
-bool cInternet::closeConnection(void)
-{
-	LFS
-		if (curlHandle) curl_easy_cleanup((CURL*)curlHandle);
-	curlHandle = 0;
-	return true;
-}
 
 // Cache-aside GET: path is CACHEDIR\\cacheTypePath\\_<sanitized epath>
 // (distributed into two-letter subdirs).  On miss or forceWebReread, readPage

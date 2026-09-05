@@ -101,15 +101,6 @@ cPatternElementMatchArray::cPatternElementMatchArray(const cPatternElementMatchA
 	}
 }
 
-// Shrink allocated down to count.  trealloc-over-content leaks the old buffer
-// if the realloc fails.
-void cPatternElementMatchArray::minimize(void)
-{
-	LFS
-		int oldAllocated = allocated;
-	allocated = count;
-	content = (tPatternElementMatch*)trealloc(6, content, oldAllocated * sizeof(*content), allocated * sizeof(*content));
-}
 
 // Write count then raw content bytes to a POSIX fd.  Always returns true.
 bool cPatternElementMatchArray::write(IOHANDLE file)

@@ -7,7 +7,7 @@
 		Defines the same iterator sentinels, cProfile statics and SRWLOCKs as
 		main.cpp (they cannot be linked in one binary).  wmain() does not parse
 		main.cpp's -Book/-mp/... command line; it dispatches on -step N (and a
-		few switches) to word-frequency harvest, Webster/DBpedia cache sweeps,
+		few switches) to word-frequency harvest, DBpedia cache sweeps,
 		pattern dumps, Stanford PCFG/Maxent agreement, and multi-source Viterbi.
 
 	Pipeline position:
@@ -39,7 +39,6 @@
 	Dependencies:
 		MySQL (sources.proc2, wordfrequencymemory, words/wordforms, noRDFTypes,
 		stanfordPCFGParsedSentences), JNI Stanford, caches under M:\ and J:\,
-		Merriam-Webster API (MWCheck daily cap).
 
 	Notes / gotchas:
 		- Many paths LOCK TABLES and return without UNLOCK.
@@ -120,7 +119,6 @@ int64_t cProfile::lastNetworkTimePrinted;
 int64_t cProfile::accumulateNetworkTimeCount;
 int cProfile::lastNetClock;
 unordered_map < lpwstring, int64_t > cProfile::netAndSleepTimes,cProfile::onlyNetTimes,cProfile::numTimesPerURL;
-int websterQueriedToday = 0;
 
 // Batch B4b: matches main.cpp and word.h's declaration -- these are written by a
 // signal handler, where only volatile sig_atomic_t is safe to touch.
@@ -379,104 +377,33 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 // cannot be imposed from inside the process.
 
 
-// Daily Merriam-Webster cap (2000) stored in ./MWCheck.  Sets websterQueriedToday.
-bool MWRequestAllowed()
-{
-	time_t rawtime;
-	struct tm * timeinfo;
-	time(&rawtime);
-	timeinfo = localtime(&rawtime);
-	int day = timeinfo->tm_year * 365 + timeinfo->tm_yday;
-	int numRequests = 0, lastDay, lastNumRequests;
-	FILE *MWRequestToday = lp_wfopen(u"MWCheck", "r");
-	if (MWRequestToday)
-	{
-		fscanf(MWRequestToday, "%d %d", &lastDay, &lastNumRequests);
-		fclose(MWRequestToday);
-		if (lastDay == day)
-			numRequests = lastNumRequests;
-	}
-	numRequests++;
-	MWRequestToday = lp_wfopen(u"MWCheck", "w");
-	if (MWRequestToday)
-	{
-		lp_fwprintf(MWRequestToday, u"%d %d", day, numRequests);
-		fclose(MWRequestToday);
-	}
-	else
-		lplog(LOG_ERROR, u"MWRequestAllowed: cannot open MWCheck for write.");
-	websterQueriedToday= numRequests;
-	return numRequests < 2000;
-}
-
-
-bool getMerriamWebsterDictionaryAPIForms(lpwstring sWord, set <int> &posSet, bool &plural, bool &networkAccessed, bool logEverything);
 bool existsInDictionaryDotCom(MYSQL *mysql,lpwstring word, bool &networkAccessed);
 bool detectNonEuropeanWord(lpwstring word);
 int cacheWebPath(lpwstring webAddress, lpwstring &buffer, lpwstring epath, lpwstring cacheTypePath, bool forceWebReread, bool &networkAccessed);
-string lookForPOS(string originalWord, yajl_val node, bool logEverything,int &inflection, string &referWord);
 int discoverInflections(set <int> posSet, bool plural, lpwstring word);
 
-// Dictionary.com existence + Webster API forms + discoverInflections.
-// Returns 0 always.  print is unused.  Non-European words skip both lookups.
-int getWordPOS(MYSQL *mysql,lpwstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted,bool logEverything)
+// Dictionary.com existence check only.  Returns 0 always.  print is unused.
+// Non-European words skip the lookup.
+//
+// NOTE: this no longer produces a part-of-speech set.  It used to fill posSet from
+// the Merriam-Webster Collegiate API, which has been removed; posSet is now left
+// as the caller supplied it and `inflections` is untouched.  Callers that depend
+// on POS discovery need a replacement dictionary source wired in here.
+int getWordPOS(MYSQL *mysql,lpwstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool logEverything)
 {
 	LFS
+	(void)posSet; (void)inflections; (void)print; (void)logEverything;
 	if (isNonEuropean = detectNonEuropeanWord(word))
 		return 0;
-	bool networkAccessed, existsDM = existsInDictionaryDotCom(mysql, word, networkAccessed);
+	bool networkAccessed;
+	existsInDictionaryDotCom(mysql, word, networkAccessed);
 	if (networkAccessed)
 		dictionaryComQueried++;
 	else
 		dictionaryComCacheQueried++;
-	if (!existsDM || websterAPIRequestsExhausted)
-		return 0;
-	networkAccessed = false;
-	bool plural;
-	getMerriamWebsterDictionaryAPIForms(word, posSet, plural, networkAccessed,logEverything);
-	inflections = discoverInflections(posSet, plural, word);
-	if (networkAccessed && !MWRequestAllowed())
-	{
-		websterAPIRequestsExhausted = true;
-	}
 	return 0;
 }
 
-// If the token is >95% capitalized, treat as noun and set queryOnLowerCase;
-// else Webster.  If disinclination/splitting failed and the word contains a
-// hyphen, retry disinclination on the hyphen-stripped form.  Returns posSet.size().
-int testDisInclineAndSplit(MYSQL *mysql, cSource &source, int sourceId, cWordMatch &word, bool capitalized, int totalFrequency, int capitalizedFrequency, int allCapsFrequency, set <int> &posSet,
-	int &inflections, bool &isNonEuropean, bool &queryOnLowerCase, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool &websterAPIRequestsExhausted)
-{
-	if (queryOnLowerCase = (totalFrequency > 5 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
-		posSet.insert(cForms::gFindForm(u"noun"));
-	else
-		getWordPOS(mysql,word.word->first, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,false);
-	bool caps = word.queryForm(PROPER_NOUN_FORM_NUM) >= 0 || (word.flags&cWordMatch::flagFirstLetterCapitalized) || (word.flags&cWordMatch::flagAllCaps);
-	if (posSet.empty())
-	{
-		tIWMM iWord = Words.end();
-		int ret;
-		if (capitalized || (ret = Words.attemptDisInclination(mysql, iWord, word.word->first, sourceId,false)))
-		{
-			if ((ret = Words.splitWord(mysql, iWord, word.word->first, sourceId,false)) && word.word->first.find(u'-')!=lpwstring::npos)
-			{
-				lpwstring sWord= word.word->first;
-				sWord.erase(std::remove(sWord.begin(), sWord.end(), u'-') , sWord.end());
-				if ((iWord=Words.query(sWord))==Words.end())
-					ret = Words.attemptDisInclination(mysql, iWord, sWord, sourceId,false);
-			}
-		}
-		if (iWord!=Words.end())
-		{
-			for (unsigned int f=0; f<iWord->second.formsSize(); f++)
-			{
-				posSet.insert(iWord->second.forms()[f]);
-			}
-		}
-	}
-	return posSet.size();
-}
 
 // SELECT/INSERT words.  MYSQL is passed by value (copies the connection).
 // word is interpolated in quotes.  Returns 0 if existed, 1 if inserted, -1 on error.
@@ -553,7 +480,7 @@ int	analyzeFormsUsageVSNewForms(MYSQL mysql, int wordId, lpwstring word, bool pr
 				continue;
 			}
 			bool formUnknownCombinationOrOpen = (formId == (UNDEFINED_FORM_NUM + 1) || formId == (nounForm + 1) || formId == (adjectiveForm + 1) || formId == (verbForm+1) || formId == (adverbForm+1) || formId == (COMBINATION_FORM_NUM + 1));
-			// forms to be set (in posSetDB) are assumed to be only open classes (noun,verb,adjective,adverb) or classes returned from the webster API
+			// forms to be set (in posSetDB) are assumed to be only open classes (noun,verb,adjective,adverb) or classes returned from a dictionary lookup
 			// form to keep in DB - that is not unknown, and not combination and not open, and needs to be set
 			bool formToKeepInDB = posSetDB.find(formId) != posSetDB.end() || !formUnknownCombinationOrOpen;
 			// don't print unknown, combination, open forms or abbreviations or proper nouns, if this current word has been determined to be a proper noun
@@ -730,91 +657,8 @@ ERROR:Word baiocco was not found
 ERROR:Suffix rule #369 with word présence (root prés) has no suffix form.
 modified stemmer code and rules using 
 */
-// Empty stub; the stemmer cases in the comment above were one-off tests.
-void testDisinclination()
-{
 
-}
 
-// this is to accumulate how webster describes word forms in its "fl" field, to properly map to lp forms.
-	/* test webster
-	unordered_set<lpwstring> pos;
-	int numFilesProcessed = 0;
-	scanAllWebsterEntries(u"J:\\caches\\webster", pos, numFilesProcessed);
-	for (lpwstring psi : pos)
-	{
-		bool plural = false;
-		set <int> posSet;
-		lpwstring forms;
-		identifyFormClass(posSet, psi, plural);
-		for (int form : posSet)
-			forms += Forms[form]->name + u" ";
-		printf("%S:%S %S\n", psi.c_str(), forms.c_str(), (plural) ? u"PLURAL" : u"");
-	}
-	 end test webster
-	*/
-// Recurse J:\caches\webster (or basepath), yajl-parse each file, collect fl POS
-// strings.  Treats the file bytes as lpchar_t* (Webster JSON is UTF-8).
-void scanAllWebsterEntries(lpchar_t *basepath, unordered_set<lpwstring> &pos, int &numFilesProcessed)
-{
-	// Batch B4b: lpDirectoryEntries replaces FindFirstFile/FindNextFile/FindClose.
-	lpwstring base(basepath);
-	for (const lpwstring &entry : lpDirectoryEntries(base, u"*"))
-	{
-		if (entry.empty() || entry[0] == u'.') continue;
-		lpchar_t completePath[1024];
-		lp_wsprintf(completePath, u"%s/%s", basepath, entry.c_str());
-		if (lp_wIsDirectory(completePath))
-			scanAllWebsterEntries(completePath, pos, numFilesProcessed);
-		else
-		{
-			printf("%d:%100S\r", numFilesProcessed, completePath);
-			int fd;
-			if ((fd = lp_wopen(completePath, O_RDWR | O_BINARY)) < 0)
-				printf("cacheWebPath:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
-			else
-			{
-				numFilesProcessed++;
-				int bufferlen = lp_filelength(fd);
-				void *tbuffer = (void *)tcalloc(bufferlen + 10, 1);
-				::read(fd, tbuffer, bufferlen);
-				::close(fd);
-				lpwstring buffer = (lpchar_t *)tbuffer;
-				tfree(bufferlen + 10, tbuffer);
-				char errbuf[1024];
-				errbuf[0] = 0;
-				string jsonBuffer;
-				wTM(buffer, jsonBuffer);
-				yajl_val node = yajl_tree_parse((const char *)jsonBuffer.c_str(), errbuf, sizeof(errbuf));
-				/* parse error handling */
-				if (node == NULL) {
-					lplog(LOG_ERROR, u"Parse error:%s\n %S\n", jsonBuffer.c_str(), errbuf);
-					return;
-				}
-				if (node->type == yajl_t_array)
-					for (unsigned int docNum = 0; docNum < node->u.array.len; docNum++)
-					{
-						yajl_val doc = node->u.array.values[docNum];
-						lpwstring temppos;
-						int inflection;
-						string referWord;
-						mTW(lookForPOS("", doc, true,inflection, referWord), temppos);
-						if (temppos.length() > 0)
-						{
-							pos.insert(temppos);
-						}
-					}
-
-			}
-		}
-	}
-	return;
-}
-
-// Empty stub; callers inlined the remove logic into scanAllRDFTypes instead.
-void eraseOldRDFTypeFiles(lpwstring completePath, int &removeErrors)
-{
-}
 
 // Walk dbPediaCache: empty .rdfTypes/.erdfTypes become noRDFTypes/noERDFTypes
 // rows and are deleted; old version files are removed.  startPath/startHit
@@ -1148,14 +992,13 @@ int analyzeEnd(cSource source, int sourceId, lpwstring path, lpwstring etext, lp
 	return 0;
 }
 
-// Step 2: words in wordfrequencymemory that are >95% unknown get Webster/DB forms.
+// Step 2: words in wordfrequencymemory that are >95% unknown get DB forms.
 // First SUM() result is not freed before the second SELECT.  LOCK TABLES words
 // after the SELECT implicitly unlocks wordfrequencymemory while result is still open.
 int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainstDB)
 {
 	int definedUnknownWord = 0, dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
 	int I = 0, sumTotalFrequency = 0, sumProcessedTotalFrequency = 0;
-	bool websterAPIRequestsExhausted = false;
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
 	lpwstring word;
@@ -1193,7 +1036,7 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		sourceId = atoi(sqlrow[5]);
 		if (word.find_first_of(u"ãâäáàæçêéèêëîíïñôóòöõôûüùú\'") != lpwstring::npos && (totalFrequency < 25 || capitalizedFrequency * 100 / totalFrequency < 99))
 			continue;
-		// find definition in webster.
+		// find a definition for the word.
 		// if exists, erase all forms associated with this word and write the new forms (return true)
 		// else definition could not be found (return false)
 		set <int> posSet;
@@ -1202,7 +1045,7 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		if (setProperNoun = (totalFrequency > 4 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
 			posSet.insert(cForms::gFindForm(u"noun"));
 		else
-			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried, websterAPIRequestsExhausted,true);
+			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried,true);
 		if (posSet.size() > 0)
 		{
 			int wordId;
@@ -1226,8 +1069,8 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		}
 		numWordsProcessed++;
 		// remember word for further sources
-		lp_wprintf(u"%03I64d:%15.15s:unknown=%06d/%06d webster=%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] [totalFormsDeleted=%08I64d] frequency %I64d%% done\r",
-			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed, websterQueriedToday, dictionaryComQueried, dictionaryComCacheQueried,
+		lp_wprintf(u"%03I64d:%15.15s:unknown=%06d/%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] [totalFormsDeleted=%08I64d] frequency %I64d%% done\r",
+			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed, dictionaryComQueried, dictionaryComCacheQueried,
 			((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), totalFormsDeleted, ((int64_t)sumProcessedTotalFrequency)*100/ sumTotalFrequency);
 	}
 	mysql_free_result(result);
@@ -1671,83 +1514,6 @@ int populateWordFrequencyTableFromSource(cSource &source, int sourceId, lpwstrin
 	return (numIllegalWords == 0) ? 2 : -(numIllegalWords + 10);
 }
 
-// Claim one proc2==1 source at a time (FOR UPDATE SKIP LOCKED) and harvest
-// frequencies.  START TRANSACTION is then broken by LOCK TABLES inside the
-// per-source helper.  Break at empty claim leaves the transaction open.
-int populateWordFrequencyTableMP(cSource source, lpwstring specialExtension)
-{
-	int step = 1;
-	MYSQL_RES * result;
-	MYSQL_ROW sqlrow = NULL;
-	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
-	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**'", st);
-	int64_t totalSource;
-	if (myquery(&source.mysql, qt, result))
-	{
-		sqlrow = mysql_fetch_row(result);
-		totalSource = atoi(sqlrow[0]);
-		mysql_free_result(result);
-	}
-	bool websterAPIRequestsExhausted = false;
-	int startTime = clock();
-	while (true)
-	{
-		int sourcesLeft = 0;
-		lp_snprintf(qt, QUERY_BUFFER_LEN, u"select COUNT(*) from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d", st, step);
-		if (myquery(&source.mysql, qt, result))
-		{
-			sqlrow = mysql_fetch_row(result);
-			sourcesLeft = atoi(sqlrow[0]);
-			mysql_free_result(result);
-		}
-		if (!myquery(&source.mysql, u"START TRANSACTION"))
-			return -1;
-		lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id limit 1 FOR UPDATE SKIP LOCKED", st, step);
-		if (!myquery(&source.mysql, qt, result) || mysql_num_rows(result) != 1)
-			break;
-		lpwstring path, etext, title;
-		sqlrow = mysql_fetch_row(result);
-		int sourceId = atoi(sqlrow[0]);
-		if (sqlrow[1] == NULL)
-			etext = u"NULL";
-		else
-			mTW(sqlrow[1], etext);
-		mTW(sqlrow[2], path);
-		mTW(sqlrow[3], title);
-		mysql_free_result(result);
-		path.insert(0, u"\\").insert(0, CACHEDIR);
-		/*
-		bool reprocess = false, nosource = false;
-		if (analyzeEnd(source, sourceId, path, etext,title,reprocess,nosource) >= 0)
-		{
-			int setStep = step + 1;
-			if (reprocess)
-				setStep = step - 1;
-			if (nosource)
-				setStep = 0;
-			lp_snprintf(qt, QUERY_BUFFER_LEN, u"update sources set proc2=%d where id=%d", setStep, sourceId);
-			if (!myquery(&source.mysql, qt))
-				break;
-		}
-		*/
-		int setStep = populateWordFrequencyTableFromSource(source, sourceId, path, etext,specialExtension);
-		lp_snprintf(qt, QUERY_BUFFER_LEN, u"update sources set proc2=%d where id=%d", setStep, sourceId);
-		if (!myquery(&source.mysql, qt))
-			break;
-		if (!myquery(&source.mysql, u"COMMIT"))
-			return -1;
-		source.clearSource();
-		lpchar_t buffer[1024];
-		int64_t processingSeconds = (clock() - startTime) / CLOCKS_PER_SEC;
-		int numSourcesProcessedNow = (int)(totalSource - (sourcesLeft - 1));
-		if (processingSeconds)
-			lp_wsprintf(buffer, u"%%%03I64d:%5d out of %05I64d source in %02I64d:%02I64d:%02I64d [%d sources/hour] (%-35.35s... finished)", numSourcesProcessedNow * 100 / totalSource, numSourcesProcessedNow - 1, totalSource,
-				processingSeconds / 3600, (processingSeconds % 3600) / 60, processingSeconds % 60, numSourcesProcessedNow * 3600 / processingSeconds, title.c_str());
-		lpReportProgress(buffer);
-	}
-	return 0;
-}
 
 // Serial harvest of every source with proc2==step (used for steps 10..19).
 int populateWordFrequencyTable(cSource source, int step, lpwstring specialExtension)
@@ -1756,7 +1522,6 @@ int populateWordFrequencyTable(cSource source, int step, lpwstring specialExtens
 	MYSQL_ROW sqlrow = NULL;
 	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
 	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
 	if (!myquery(&source.mysql, qt, result))
@@ -1797,7 +1562,6 @@ int printUnknowns(cSource source, int step, lpwstring specialExtension)
 	MYSQL_ROW sqlrow = NULL;
 	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
 	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
 	if (!myquery(&source.mysql, qt, result))
@@ -1839,7 +1603,6 @@ int patternOrWordAnalysis(cSource source, int step, lpwstring primaryPatternOrWo
 	MYSQL_ROW sqlrow = NULL;
 	if (!myquery(&source.mysql, u"LOCK TABLES sources WRITE")) return -1;
 	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
 	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
 	if (!myquery(&source.mysql, qt, result))
@@ -1896,7 +1659,6 @@ int syntaxCheck(cSource source, int step, lpwstring specialExtension,bool test)
 	MYSQL_ROW sqlrow = NULL;
 	enum cSource::sourceTypeEnum st = (test) ? cSource::TEST_SOURCE_TYPE : cSource::GUTENBERG_SOURCE_TYPE;
 	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
 	lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id, etext, path, title from sources where sourceType=%d and processed is not NULL and processing is NULL and start!='**SKIP**' and start!='**START NOT FOUND**' and proc2=%d order by id", st, step);
 	if (!myquery(&source.mysql, qt, result))
@@ -5795,7 +5557,6 @@ int stanfordCheck(cSource source, int step, bool pcfg, lpwstring specialExtensio
 	MYSQL_ROW sqlrow = NULL;
 	enum cSource::sourceTypeEnum st = cSource::GUTENBERG_SOURCE_TYPE;
 	lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-	bool websterAPIRequestsExhausted = false;
 	int startTime = clock(), numSourcesProcessedNow = 0;
 	lpchar_t buffer[1024];
 	lp_wsprintf(buffer, u"stanfordCheck %d", step);
@@ -6204,7 +5965,6 @@ int lpSpecialsMain(int argc,lpchar_t *argv[])
 	if (!myquery(&source.mysql, u"LOCK TABLES sources READ"))
 		return -1;
 	lpwstring specialExtension = u"";
-	//testDisinclination();
 	//writeFrequenciesToDB(source);
 	//if (true)
 	//	return;
@@ -6331,47 +6091,7 @@ int lpSpecialsMain(int argc,lpchar_t *argv[])
 	case 70:
 		stanfordCheckTest(source, u"F:\\lp\\tests\\thatParsing.txt", 27568, true,u"",50,specialExtension);
 		break;
-	case 71:
-	// Webster plural-word probe (advertising/wishing/writing/yachting/yellowing).
-	{
-		vector <lpwstring> words = { u"advertising",u"wishing",u"writing",u"yachting",u"yellowing" };
-		if (!myquery(&source.mysql, u"LOCK TABLES words WRITE"))
-			return -1;
-		for (lpwstring sWord : words)
-		{
-			set <int> posSet;
-			bool plural, networkAccessed, logEverything = true;
-			getMerriamWebsterDictionaryAPIForms(sWord, posSet, plural, networkAccessed, logEverything);
-			lpwstring sForms;
-			bool hasNoun = false;
-			for (int form : posSet)
-			{
-				sForms += Forms[form]->name + u" ";
-				if (Forms[form]->name == u"noun")
-					hasNoun = true;
-			}
-			if (!hasNoun)
-				lplog(LOG_INFO, u"***%s: %s", sWord.c_str(), sForms.c_str());
-			lpwstring pluralWord = sWord + u"s";
-			lpchar_t qt[QUERY_BUFFER_LEN_OVERFLOW];
-			int startTime = clock(), numWordsInserted = 0;
-			MYSQL_RES * result;
-			MYSQL_ROW sqlrow = NULL;
-			lp_snprintf(qt, QUERY_BUFFER_LEN, u"select id from words where word=\"%s\"", pluralWord.c_str());
-			int wordId = -1;
-			if (myquery(&source.mysql, qt, result)) // if result is null, also returns false
-			{
-				if (sqlrow = mysql_fetch_row(result))
-				{
-					wordId = atoi(sqlrow[0]);
-					mysql_free_result(result);
-				}
-			}
-			if (wordId < 0)
-				lplog(LOG_INFO, u"***%s: plural %s not found.", sWord.c_str(), pluralWord.c_str());
-		}
-		break;
-	}
+	// (Step 71 removed: it was a Merriam-Webster plural-word probe.)
 	case 100:
 		stanfordCheckMP(source, step, true,12);
 		break;

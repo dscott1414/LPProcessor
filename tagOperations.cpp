@@ -20,7 +20,6 @@
 		- replicate - cartesian-product a child's tagSets onto the parent
 		- getVerb / getIVerb / resolveTag / resolveObjectTagBeforeObjectResolution
 		- resolveToClass / fullyResolveToClass - map a position to a class token
-		- properNounCheck - COST_OF_INCORRECT_PROPER_NOUN unless DET+…+PN
 
 	Key data structures / globals:
 		- desiredTagSetNum, blocking, focused, exitTags, beginTime, timerForExit -
@@ -296,18 +295,6 @@ bool cSource::getVerb(vector <cTagLocation>& tagSet, int& tag)
 	return true;
 }
 
-// Like getVerb but only looks for V_OBJECT (infinitive / object-verb). Returns false if none.
-bool cSource::getIVerb(vector <cTagLocation>& tagSet, int& tag)
-{
-	LFS
-		int nextVObjectTag = -1;
-	int whereVObjectTag = findTag(tagSet, u"V_OBJECT", nextVObjectTag);
-	// if there is no vobject, take last vagree, otherwise, take last vobject.
-	if (nextVObjectTag >= 0) tag = nextVObjectTag;
-	else if (whereVObjectTag >= 0) tag = whereVObjectTag;
-	else return false;
-	return true;
-}
 
 // True unless this is a BNC-pre-tagged source and the form at position is flagged uncertain.
 bool cSource::tagIsCertain(int position)
@@ -345,121 +332,9 @@ bool cSource::resolveObjectTagBeforeObjectResolution(vector <cTagLocation>& tagS
 	return true;
 }
 
-// Proper Noun agreement check
-// If the noun has any proper nouns but is not all proper nouns:
-// IF there is a determiner, followed by a lowest cost adjective (optional), and a Proper Noun, OK.
-// otherwise, add 10.
-// 16953:the practical Tommy[16953-16956][16955][name  ][NEUTER]**[A:tommy [193]]**
-// 37780:this young Tommy[37780-37783][37782][name  ][MALE  ]**[A:tommy [193]]**
-// REJECT:
-// 60073:a flash Tommy[60073-60076][60075][name  ][NEUTER]**[A:tommy [193]]**
-// 21396:the stairs Tommy[21396-21399][21398][name  ][NEUTER]**[A:tommy [193]]**
-// 60328:Tommy stopped Conrad[60328-60331][60330][name  ][MALE  ][OGEN]**[A:conrad [51]]**[ambiguous]
-// 62307:Tommy , Julius's eyes[62307-62311][62310][nongen][OGEN]
-// 65396:added Tommy[65396-65398][65397][name  ][MALE  ]**[A:tommy [193]]**[ambiguous]
-// ALSO:
-// 87682:Tommy boy[87682-87684][87683][gender][MALE  ][OGEN]
-// Cost for a mixed proper-noun span: 0 if all-PN, no-PN, or PN used as adjective (last token
-// not PN). Otherwise COST_OF_INCORRECT_PROPER_NOUN unless the span starts at whereDet
-// (determiner + optional words + trailing PN). Writes gTraceSource into traceSource when logging.
-int cSource::properNounCheck(int& traceSource, int begin, int end, int whereDet)
-{
-	LFS
-		int howManyProperNouns = 0, lastProperNoun = -1;
-	for (int I = begin; I < end; I++)
-		if (m[I].forms.isSet(PROPER_NOUN_FORM_NUM))
-		{
-			howManyProperNouns++;
-			lastProperNoun = I;
-		}
-		else
-			lastProperNoun = -1; // proper noun is used as an adjective?  Government job
-	if (howManyProperNouns == end - begin || !howManyProperNouns || lastProperNoun == -1)
-		return 0;
-	// proper noun is > 4 in length, does not begin with a determiner or does not end with a proper noun.
-	// because this is called from evaluateNounDeterminer, this routine cannot be given
-	// only a NAME, but a NAME that is part of another larger structure.  At this point, the
-	// structure has the proper noun as the last point in the structure.
-	// the Savoy to the War Office! is > 4 in length, yet is legal.
-	if (whereDet != begin)
-	{
-		if (debugTrace.traceDeterminer)
-		{
-			lpwstring tmpName;
-			for (int I = begin; I < end; I++) tmpName += m[I].word->first + lpwstring(u" ");
-			lplog(u"%d:PNC name %s is an incorrectly configured proper noun %d %d %d [SOURCE=%06d].", begin, tmpName.c_str(), end - begin, whereDet, lastProperNoun, traceSource = gTraceSource);
-		}
-		return cSourceWordInfo::COST_OF_INCORRECT_PROPER_NOUN;
-	}
-	return 0;
-	// SKIP
-	/*
-	// the Savoy to the War Office! has gaps, yet is legal.
-	// no non-capitalized gaps allowed in proper noun
-	for (int I=begin+1; I<lastProperNoun; I++)
-	{
-	if (m[I].forms.isSet(PROPER_NOUN_FORM_NUM))
-	{
-	if (t.traceDeterminer)
-	lplog(u"%d:PNC name %s has a gap in proper noun at %d %d [SOURCE=%06d].",begin,tmpName.c_str(),I,lastProperNoun,traceSource=gTraceSource);
-	return cSourceWordInfo::COST_OF_INCORRECT_PROPER_NOUN;
-	}
-	}
-	return 0;
-	*/
-}
 
-// Strict weak order for sort(): shorter first, then first differing cTagLocation.
-bool tlcompare(const vector <cTagLocation>& lhs, const vector <cTagLocation>& rhs)
-{
-	LFS
-		if (lhs.size() < rhs.size()) return true;
-	if (lhs.size() > rhs.size()) return false;
-	for (unsigned int I = 0; I < lhs.size(); I++)
-	{
-		if (((cTagLocation)lhs[I]) != ((cTagLocation)rhs[I]))
-			return (((cTagLocation)lhs[I]) < ((cTagLocation)rhs[I]));
-	}
-	return false;
-}
 
-// Dumps unique consecutive ORIGINAL vs NEW tagSets then LOG_FATAL_ERROR. Debug-only helper.
-void showDiffTagSets(vector < vector <cTagLocation> >& tagSets, vector < vector <cTagLocation> >& tagSetsNew)
-{
-	LFS
-		for (unsigned int I = 0; I < tagSets.size(); I++)
-			if (!I || !tagSetSame(tagSets[I - 1], tagSets[I]))
-				printTagSet(LOG_INFO, u"ORIGINAL", I, tagSets[I]);
-	for (unsigned int I = 0; I < tagSetsNew.size(); I++)
-		if (!I || !tagSetSame(tagSetsNew[I - 1], tagSetsNew[I]))
-			printTagSet(LOG_INFO, u"NEW", I, tagSetsNew[I]);
-	lplog(LOG_FATAL_ERROR, u"ERROR!");
-}
 
-// Sorts copies of both collections (by-value parameters) and fatal-errors if the unique
-// non-empty sequences differ. Used to verify a rewritten collector against the old one.
-void compareTagSets(vector < vector <cTagLocation> > tagSets, vector < vector <cTagLocation> > tagSetsNew)
-{
-	LFS
-		sort(tagSets.begin(), tagSets.end(), tlcompare);
-	sort(tagSetsNew.begin(), tagSetsNew.end(), tlcompare);
-	unsigned int I = 0, J = 0;
-	while (J < tagSetsNew.size() && !tagSetsNew[J].size()) J++;
-	while (I < tagSets.size() && !tagSets[I].size()) I++;
-	if ((J == tagSetsNew.size() && I != tagSets.size()) || (J != tagSetsNew.size() && I == tagSets.size()))
-		lplog(LOG_FATAL_ERROR, u"New and old have differing data.");
-	for (; I < tagSets.size() && J < tagSetsNew.size(); I++, J++)
-	{
-		while (I < tagSets.size() - 1 && tagSetSame(tagSets[I], tagSets[I + 1])) I++;
-		while (J < tagSetsNew.size() - 1 && tagSetSame(tagSetsNew[J], tagSetsNew[J + 1])) J++;
-		if (I == tagSets.size() && J == tagSetsNew.size()) break;
-		if (I == tagSets.size() || J == tagSetsNew.size() || !tagSetSame(tagSets[I], tagSetsNew[J]))
-		{
-			lplog(LOG_INFO, u"Difference at %d (new) and %d (old).", J, I);
-			showDiffTagSets(tagSets, tagSetsNew);
-		}
-	}
-}
 
 // Collects tagSet starting from an existing cTagLocation (pattern/position/len/PEMAOffset).
 // If PEMAOffset < 0, searches root-pattern PMA rows of that span (skipping rejectTag).

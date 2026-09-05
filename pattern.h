@@ -196,7 +196,6 @@ public:
     bool matchRange(cSource &source,int begin,int end,vector <cMatchElement> &whatMatched, sTrace &t);
     bool matchFirst(cSource &source,int sourcePosition,vector <cMatchElement> &whatMatched, sTrace &t);
     bool inflectionMatch(int inflectionFlags,int64_t flags,lpwstring formStr, sTrace &t);
-    lpwstring formsStr(void);
 	// True if this element's OR-list of child patterns includes pattern number pn.
     bool contains(int pn)
     {
@@ -548,7 +547,6 @@ public:
     void establishMandatoryChildPatterns(void);
     void setMandatoryAncestorPatterns(int childPattern);
     bool similarSets(set <unsigned int> &tags,set <unsigned int> &tags2);
-    bool equivalentTagSet(vector <cTagLocation> &tagSet,vector <cTagLocation> &tagSet2);
 	// Element I of this pattern.  No bounds check; I must be in [0, numElements()).
 		cPatternElement *getElement(int I)
 		{
@@ -561,10 +559,6 @@ private:
     vector <cPatternElement *> elements;
 //    static vector <cMatchElement> whatMatched;
     void static processForm(lpwstring &form,lpwstring &specificWord,int &cost,set <unsigned int> &tags,bool &explicitFutureReference,bool &blockDescendants, bool &allowRecursiveMatch);
-    void firstForm(void);
-    void lastForm(void);
-    void firstNonMandatoryForm(void);
-    void lastNonMandatoryForm(void);
 };
 
 class cPatternReference
