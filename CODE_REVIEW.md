@@ -163,21 +163,42 @@ it was for -- most consequentially a tokenizer that scanned past the end of the
 decoded text into uninitialized memory, which is why the same document used to
 give six different answers.
 
-That is coverage, not correctness. `tests/` is a corpus, not a test suite:
-nothing asserts what a document *should* score, and no result has been compared
-against the same document's score on the Windows build. A regression that lowered
-match rates without crashing would still pass unnoticed. What has changed is that
-the numbers are now stable enough to diff against.
+That is coverage, not correctness, and I overstated the reason in an earlier
+version of this file. It is not that the corpus has no oracle -- **the documents
+carry one and no code consults it.** `syntaxRelationFields.txt` states the
+expected relSubject/relVerb/relObject for 1,883 words and enables
+`~~traceTestSyntacticRelations`, a flag that is parsed, stored and serialized but
+never read to gate anything: that test mode is unimplemented.
+`agreement.txt` names the pattern that should match each group of sentences
+(`~~P_VERB[3]`, and `_VERB` really is defined with those differentiators); the
+engine logs the expected value as a marker but never logs the actual winning
+pattern, so half the comparison is missing. See `MAC_PORT.md`, "The corpus
+documents carry expectations".
+
+I ran the corpus on the aggregate "Matched sentences=%" alone, which says only
+that every sentence got *a* full-span parse -- not the right one. Nothing has been
+compared against the Windows build either. A regression that lowered match
+quality without crashing would still pass unnoticed.
 
 **Not every finding was individually re-verified.** A broad sample across every
 category was checked against the source and found correct; the remainder rests on
 that hit rate. Treat the code, not any document, as authoritative.
 
-The single highest-value thing anyone can do next is capture the Windows scores
-for these same 23 documents. The macOS numbers are stable now, so a stored
-expected-value file would turn `tests/` from a smoke test into a real regression
-suite -- and it is the only way to tell whether this parse is *equivalent* to the
-Windows one rather than merely successful and self-consistent.
+The single highest-value thing anyone can do next is **consult the oracle the
+corpus already contains**. Two concrete pieces of work, in order of value per
+effort:
+
+1. **Log the winning pattern beside the expectation.** `agreement.txt`'s 91
+   `~~P<pattern>[<diff>]` headers are already echoed into main.lplog by
+   agreement.cpp:4083. Logging the pattern that actually won at that position
+   makes 91 assertions checkable by diffing one file, with no new test harness.
+2. **Implement `traceTestSyntacticRelations`.** `syntaxRelationFields.txt` has
+   1,883 per-word expected relations waiting for it. This is the richest
+   correctness signal in the tree and currently costs nothing to ignore.
+
+Capturing the Windows scores for the same 23 documents remains worthwhile -- the
+macOS numbers are stable enough to diff now -- but it answers "is this the same
+as Windows", where the two items above answer "is this right".
 
 One smaller item, and it is data rather than code: `Adversary.txt` has no
 `sources` row, so `findStart` derives a start marker for it rather than using the

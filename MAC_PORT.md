@@ -246,9 +246,43 @@ looks current. Per-source `tests/*.wordCacheFile` can be stale too; one was from
 2010 and declared 196 forms against a database that has 209, which surfaces as
 `illegal form #N (out of max M)`.
 
-**Still no oracle.** `tests/` is a corpus, not a test suite: nothing asserts what
-a document *should* score, and no result has been compared against the same
-document's score on Windows. The numbers above are now stable enough to diff
+**The corpus documents carry expectations, and nothing checks them.** This is
+worth more attention than it has had -- I ran the corpus on the aggregate
+"Matched sentences=%" alone, which only says every sentence got *a* full-span
+parse, not the *right* one. What the files actually record:
+
+| File | Expectations | Form | Checkable today |
+|---|---|---|---|
+| `syntaxRelationFields.txt` | 1,883 | `~~~ he: relVerb='wanted' relObject='you'` -- per-word expected relations | **no** -- see below |
+| `agreement.txt` | 91 | `~~P_VERB[3]` header over the sentences that pattern should match | **no** -- see below |
+| `pattern matching.txt` | 30 | inline Quirk clause types (`~~~ SVOdCo`) | no -- prose |
+| `time.txt`, `timeExpressions.txt`, `verb object.txt`, `modification.txt` | ~80 | inline notes, mostly Quirk section and page citations | no -- prose |
+
+Two of these are real, precise, machine-checkable specifications that the engine
+declines to check:
+
+- **`agreement.txt`.** Its `~~P<pattern>[<differentiator>]` headers name real
+  patterns -- `_VERB` is defined with exactly the differentiators 1, 3, 4, 5, 6,
+  8, 9 and A that the file uses. The engine echoes each header into main.lplog as
+  `*****  VERB[3]  *****` (agreement.cpp:4083, under
+  `~~traceTestSubjectVerbAgreement`), so the *expected* value is logged -- but the
+  *actual* winning pattern for those sentences is never logged, under
+  `-parseOnly` or a full run with `-logMatchedSentences`. Half the comparison is
+  missing.
+- **`syntaxRelationFields.txt`.** It enables `~~traceTestSyntacticRelations` and
+  then states, for 1,883 words, the relSubject / relVerb / relObject / relPrep it
+  expects. That flag is parsed (word.cpp:2126), stored, serialized with the other
+  trace flags and copied between sTrace objects -- and **never read to gate
+  anything**. The test mode it names does not exist.
+
+So `tests/` is a corpus with an oracle written into it that no code consults.
+Wiring either one up would turn the suite from "did it crash" into "did it parse
+correctly", and the agreement case needs only that the winning pattern be logged
+next to the marker that already names the expected one.
+
+**No Windows comparison either.** Separately from the unchecked expectations
+above, no result has been compared against the same document's score on the
+Windows build. The numbers above are now stable enough to diff
 against, which they were not before, so capturing the Windows scores is the
 obvious next step. AddressSanitizer is clean on a full parse.
 
