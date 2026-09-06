@@ -876,9 +876,9 @@ void cSource::evaluateSubjectRoleTag(int where, int which, vector <int> whereSub
 bool cSource::skipQuote(int& where)
 {
 	LFS
-		if (m[where].word->first != u"�") return true;
+		if (m[where].word->first != u"”") return true;
 	int maxEnd, maxLen, quoteCheck = queryPattern(where, u"__NOUN", maxEnd);
-	if (quoteCheck == -1 || where < (maxLen = pema[quoteCheck].end - pema[quoteCheck].begin) || m[where - maxLen + 1].word->first != u"�") return false;
+	if (quoteCheck == -1 || where < (maxLen = pema[quoteCheck].end - pema[quoteCheck].begin) || m[where - maxLen + 1].word->first != u"“") return false;
 	if (debugTrace.traceSpeakerResolution)
 		lplog(LOG_RESOLUTION, u"%d:Skipping quoted string (%d-%d) when scanning for subjects backwards.", where, where - maxLen + 1, where);
 	where -= maxLen; // go past the quote
@@ -902,7 +902,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 	// designatedAsInternalSubject in the following example is 'him' for the search of the subject of the verb 'rap'
 	// From the shelter of the doorway ESTABhe[tommy] watched him[boris] EXITgo up the steps of a particularly evil - looking house and MOVErap sharply , with a peculiar rhythm , on the door
 	int whereDesignatedAsInternalSubject = -1;
-	while (I > 0 && skipQuote(I) && !isEOS(I) && m[I].word->first != u"�" && m[I].word != Words.sectionWord && m[I].word->first != u":" && m[I].word->first != u"--" &&
+	while (I > 0 && skipQuote(I) && !isEOS(I) && m[I].word->first != u"’" && m[I].word != Words.sectionWord && m[I].word->first != u":" && m[I].word->first != u"--" &&
 		(!(m[I].objectRole & SUBJECT_ROLE) || (m[I].objectRole & PASSIVE_SUBJECT_ROLE) || m[I].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT) && I != whereDesignatedAsInternalSubject)
 	{
 		if (m[I].verbSense >= 0 && m[I].relSubject >= 0 && !(m[m[I].relSubject].objectRole & SUBJECT_ROLE) && !(m[m[I].relSubject].objectRole & PASSIVE_SUBJECT_ROLE))
@@ -925,7 +925,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 		{
 			// if there is another subject, that is not the same subject, return.
 			int J = I - 1, element;
-			while (J >= 0 && !isEOS(J) && m[J].word->first != u"�" && m[J].word->first != u"�" && m[J].word != Words.sectionWord && m[J].word->first != u":" && m[J].queryWinnerForm(coordinatorForm) < 0 &&
+			while (J >= 0 && !isEOS(J) && m[J].word->first != u"”" && m[J].word->first != u"’" && m[J].word != Words.sectionWord && m[J].word->first != u":" && m[J].queryWinnerForm(coordinatorForm) < 0 &&
 				(!(m[J].objectRole & SUBJECT_ROLE) || m[J].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT || (m[J].flags & cWordMatch::flagAdjectivalObject))) J--;
 			if (multiSubject = (J >= 0 && m[J].objectRole & SUBJECT_ROLE) && m[J].getObject() != cObject::eOBJECTS::UNKNOWN_OBJECT && m[J].getObject() != m[I].getObject() && m[J].word != m[I].word && m[J].pma.queryPatternDiff(u"__S1", u"5") == -1)
 			{
@@ -962,7 +962,7 @@ void cSource::scanForSubjectsBackwardsInSentence(int where, int whereVerb, bool 
 							{
 								// try really really hard to find that infinitive subject
 								K = J - 1;
-								while (K >= 0 && !isEOS(J) && m[K].word->first != u"�" && m[K].word->first != u"�" && m[K].word != Words.sectionWord && m[K].word->first != u":" && m[K].queryWinnerForm(coordinatorForm) < 0 &&
+								while (K >= 0 && !isEOS(J) && m[K].word->first != u"”" && m[K].word->first != u"’" && m[K].word != Words.sectionWord && m[K].word->first != u":" && m[K].queryWinnerForm(coordinatorForm) < 0 &&
 									(!(m[K].objectRole & (SUBJECT_ROLE | PREP_OBJECT_ROLE)) || m[K].getObject() == cObject::eOBJECTS::UNKNOWN_OBJECT || (m[K].flags & cWordMatch::flagAdjectivalObject))) K--;
 								if (K >= 0 && m[K].getRelVerb() >= 0 && m[m[K].getRelVerb()].getRelVerb() >= 0) I = K;
 								else return;
@@ -1662,7 +1662,7 @@ void cSource::evaluateSubjects(int where, vector <cTagLocation>& tagSet,
 	// also mark objects of prepositional phrases
 	// make sure that this is not a quoted subject followed by a 'reply' verb and an object: this is probably not a sentence
 	if (whereSubjects.size() == 1 && (tsSense & VT_PAST) == VT_PAST && inPrimaryQuote && !inSecondaryQuote && !noObjects && whereVerb >= 0 && subjectTag >= 0 &&
-		m[tagSet[subjectTag].sourcePosition].word->first == u"�" && m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first == u"�" &&
+		m[tagSet[subjectTag].sourcePosition].word->first == u"“" && m[tagSet[subjectTag].sourcePosition + tagSet[subjectTag].len - 1].word->first == u"”" &&
 		(m[whereVerb].queryForm(thinkForm) >= 0 || m[whereVerb].queryForm(internalStateForm) >= 0))
 		whereSubjects.clear();
 }
@@ -1837,7 +1837,7 @@ void cSource::processObjects(int where, vector <cTagLocation>& tagSet, int first
 		if (m[whereObject].flags & cWordMatch::flagInQuestion)
 			m[whereVerb].flags |= cWordMatch::flagInQuestion;
 		// attachAdjectiveRelation(tagSet,whereObject); see dynamicallyUpdateWordRelations.cpp
-		if (whereVerb > 0 && (!(m[whereObject].objectRole & (IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb - 1].word->first == u"�" &&
+		if (whereVerb > 0 && (!(m[whereObject].objectRole & (IN_PRIMARY_QUOTE_ROLE | IN_SECONDARY_QUOTE_ROLE)) && m[whereVerb - 1].word->first == u"”" &&
 			((tsSense & VT_TENSE_MASK) == VT_PAST) && m[whereVerb].pma.queryPattern(u"_VERBREL1") != -1 && m[whereObject].getObject() >= 0 && objects[m[whereObject].getObject()].isAgent(true)))
 		{
 			if (debugTrace.traceRole)
@@ -2462,7 +2462,7 @@ void cSource::adjustToHailRole(int where)
 	if (!(objectRole & (HAIL_ROLE | MPLURAL_ROLE)) &&
 		im->beginObjectPosition > 1 && im->getObject() >= 0 &&
 		// Ever heard of the word �QS graft , � sir ?
-		(m[im->beginObjectPosition - 1].word->first == u"," || (m[im->beginObjectPosition - 1].word->first == u"�" && m[im->beginObjectPosition - 2].word->first == u",")) &&
+		(m[im->beginObjectPosition - 1].word->first == u"," || (m[im->beginObjectPosition - 1].word->first == u"’" && m[im->beginObjectPosition - 2].word->first == u",")) &&
 		// You are a clever woman, Rita;
 		im->endObjectPosition < (signed)m.size() && (m[im->endObjectPosition].word->first == u"," || m[im->endObjectPosition].word->first == u";" || m[im->endObjectPosition].word->first == u"." || m[im->endObjectPosition].word->first == u"?") &&
 		objects[im->getObject()].getSubType() < 0 &&
@@ -2794,7 +2794,7 @@ bool cSource::setAdditionalRoleTags(int where, int& firstFreePrep, vector <int>&
 				// current position and whereLastVerb must belong to the same sentence
 				bool differenceSentence = false;
 				for (int s1 = whereLastVerb - 1; s1 < where && !differenceSentence; s1++)
-					differenceSentence = (isEOS(s1) || m[s1].word->first == u"�" || m[s1].word->first == u"�" || m[s1].word == Words.sectionWord);
+					differenceSentence = (isEOS(s1) || m[s1].word->first == u"”" || m[s1].word->first == u"’" || m[s1].word == Words.sectionWord);
 				if (!differenceSentence)
 					firstFreePrep = whereLastVerb - 1; // whereLastVerb is actually set to the last verb +1
 			}
@@ -3021,7 +3021,7 @@ void cSource::syntacticRelationsEOS(int I, int &lastBeginS1, int& lastRelativePh
 // convention used by the rest of the pipeline).
 void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const int I, bool &inPrimaryQuote, bool &inSecondaryQuote, bool &inQuotedString,	int &lastVerb, int &firstFreePrep)
 {
-	if (im->word->first == u"�")
+	if (im->word->first == u"“")
 	{
 		inPrimaryQuote = true;
 		lastVerb = firstFreePrep = -1;
@@ -3035,7 +3035,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 				lplog(u"set lastSense to %d (BQ).", lastSense);
 		}
 	}
-	if (im->word->first == u"�")
+	if (im->word->first == u"”")
 	{
 		inPrimaryQuote = false;
 		lastVerb = firstFreePrep = -1;
@@ -3049,7 +3049,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 				lplog(u"set lastSense to %d (EQ).", lastSense);
 		}
 	}
-	if (im->word->first == u"�")
+	if (im->word->first == u"‘")
 	{
 		if (im->flags & cWordMatch::flagQuotedString)
 			inQuotedString = true;
@@ -3060,7 +3060,7 @@ void cSource::syntacticRelationsQuotes(vector <cWordMatch>::iterator im, const i
 			lastVerb = firstFreePrep = -1;
 		}
 	}
-	else if (im->word->first == u"�")
+	else if (im->word->first == u"’")
 	{
 		if (inQuotedString)
 			inQuotedString = false;

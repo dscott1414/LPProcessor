@@ -284,9 +284,9 @@ bool cSource::resolveMetaGroupSpecifiedOther(int where, int latestOwnerWhere, bo
 	lpwstring tmpstr, tmpstr2, tmpstr3;
 	for (int I = where - 1; I >= 0; I--)
 	{
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"“")
 			inBQuote = false;
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"”")
 			inBQuote = true;
 		if (inBQuote != inQuote) continue;
 		if (wordsTraversed++ > MAX_WORD_ORDER_SEARCH) break;
@@ -495,12 +495,12 @@ bool cSource::resolveMetaGroupGenericBackwardsMatch(const int where, int latestO
 	int wordsTraversed = 0;
 	for (int I = where - 1; I >= 0 && objectMatches.empty(); I--)
 	{
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"“")
 		{
 			inBQuote = false;
 			crossQuotes = true;
 		}
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"”")
 		{
 			inBQuote = true;
 			crossQuotes = true;

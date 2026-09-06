@@ -295,6 +295,22 @@ bool cSource::getVerb(vector <cTagLocation>& tagSet, int& tag)
 	return true;
 }
 
+// Like getVerb but only looks for V_OBJECT (infinitive / object-verb). Returns false if none.
+// Restored: the 2026-09-05 uncalled-code sweep removed this and its only call site
+// (the `(infinitive) ? !getIVerb(...) : !getVerb(...)` ternary in
+// cSource::evaluateVerbObjects), which left verbTagIndex read uninitialized there.
+bool cSource::getIVerb(vector <cTagLocation>& tagSet, int& tag)
+{
+	LFS
+		int nextVObjectTag = -1;
+	int whereVObjectTag = findTag(tagSet, u"V_OBJECT", nextVObjectTag);
+	// if there is no vobject, take last vagree, otherwise, take last vobject.
+	if (nextVObjectTag >= 0) tag = nextVObjectTag;
+	else if (whereVObjectTag >= 0) tag = whereVObjectTag;
+	else return false;
+	return true;
+}
+
 
 // True unless this is a BNC-pre-tagged source and the form at position is flagged uncertain.
 bool cSource::tagIsCertain(int position)

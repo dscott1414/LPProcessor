@@ -1015,7 +1015,7 @@ void cPatternElement::readABNFElementTag(lpwstring patternName, lpwstring differ
 	else
 	{
 		if ((f = cForms::findForm(form)) < 0)
-			::lplog(LOG_FATAL_ERROR | LOG_ERROR, "FATAL_ERROR:Pattern %s[%s] uses an undefined form %s.", patternName.c_str(), differentiator.c_str(), form.c_str());
+			::lplog(LOG_FATAL_ERROR | LOG_ERROR, u"FATAL_ERROR:Pattern %s[%s] uses an undefined form %s.", patternName.c_str(), differentiator.c_str(), form.c_str());
 		formStr.push_back(form);
 		costs.push_back(cost);
 		indexes.push_back(f);

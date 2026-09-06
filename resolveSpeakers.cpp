@@ -460,7 +460,7 @@ lpwstring cSource::whereString(int where,lpwstring &logres,bool shortFormat,int 
 		if (m[I].getObject()>0)
 			I=m[I].endObjectPosition-1; // skip objects and periods associated with abbreviations and names
 	}
-	while (I < (signed)m.size() && start<I && (m[I-1].queryWinnerForm(prepositionForm)>=0 || m[I].queryWinnerForm(coordinatorForm)>=0 || m[I].queryWinnerForm(determinerForm)>=0 || (!iswalpha(m[I].word->first[0]) && m[I].word->first!=u"�")))
+	while (I < (signed)m.size() && start<I && (m[I-1].queryWinnerForm(prepositionForm)>=0 || m[I].queryWinnerForm(coordinatorForm)>=0 || m[I].queryWinnerForm(determinerForm)>=0 || (!iswalpha(m[I].word->first[0]) && m[I].word->first!=u"”")))
 		I--;
 	if (start!=I)
 	{
@@ -6428,7 +6428,7 @@ void cSource::getMostLikelySpeakers(unsigned int beginQuote,unsigned int endQuot
                                    bool previousSpeakersUncertain,int wherePreviousLastSubjects,vector <int> &previousLastSubjects,
 																	 int rejectObjectPosition,int lastBeginS1,int lastRelativePhrase,int lastQ2,int lastVerb)
 { LFS
-	tIWMM secondaryQuoteOpenWord=Words.gquery(u"�"),secondaryQuoteCloseWord=Words.gquery(u"�");
+	tIWMM secondaryQuoteOpenWord=Words.gquery(u"‘"),secondaryQuoteCloseWord=Words.gquery(u"’");
 	// if there are more than two speakers in the current speakerGroup, and
 	// (all previousSpeakers were not groupedSpeakers, and beforePreviousSpeakers also were not in groupedSpeakers, OR
   //  all previousSpeakers were in groupedSpeakers, and beforePreviousSpeakers also were all in groupedSpeakers)
@@ -6508,7 +6508,7 @@ int cSource::scanForSpeakers(int begin,int end,int lastBeginS1,int lastRelativeP
   for (s=0; s<localObjects.size() && !localObjects[s].numIdentifiedAsSpeaker; s++);
   if (s==localObjects.size()) return -1;
   int inQuoteSpeakerFound=-1,o;
-	tIWMM secondaryQuoteOpenWord=Words.gquery(u"�"),secondaryQuoteCloseWord=Words.gquery(u"�");
+	tIWMM secondaryQuoteOpenWord=Words.gquery(u"‘"),secondaryQuoteCloseWord=Words.gquery(u"’");
   for (int I=begin+1; I<end; I++)
   {
 		if (m[I].word==secondaryQuoteOpenWord) 
@@ -7051,7 +7051,7 @@ void cSource::resolvePreviousSpeakerAudience(const int beginQuote, const int end
 				bodyObjects.push_back(o);
 		// name intro "Tuppence," asked Bill - making this HAIL is too expansive, resulting in many mistakes
 		if (find(previousSpeakers.begin(), previousSpeakers.end(), m[beginQuote + 1].getObject()) != previousSpeakers.end() &&
-			m[m[beginQuote + 1].endObjectPosition].word->first == u"," && m[m[beginQuote + 1].endObjectPosition + 1].word->first == u"�")
+			m[m[beginQuote + 1].endObjectPosition].word->first == u"," && m[m[beginQuote + 1].endObjectPosition + 1].word->first == u"”")
 		{
 			if (m[beginQuote + 1].objectRole & HAIL_ROLE)
 			{
@@ -8989,7 +8989,7 @@ void createLetterIntroPatterns(void)
 // to the quote start.
 int cSource::letterDetectionBegin(int where,int &whereLetterTo,int &lastLetterBegin)
 { LFS
-	if (m[where].word->first!=u"�") return -1;
+	if (m[where].word->first!=u"“") return -1;
 	if (m[where].speakerPosition>=0 && m[m[where].speakerPosition].getRelVerb()>=0)
 	{
 		const lpchar_t *readWords[]={ u"read", NULL };
@@ -9060,16 +9060,16 @@ bool cSource::letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin
 			}
 	}
 	int maxLen=-1,setSpeakers=-1; // element=-1,
-	if (whereLetterTo>=0 && m[where].word->first==u"�" && m[where+1].pma.queryPattern(u"_NAME",maxLen)!=-1 && 
-		  ((m[where+1+maxLen].word->first==u"." && m[where+2+maxLen].word->first==u"�") || m[where+1+maxLen].word->first==u"�"))
+	if (whereLetterTo>=0 && m[where].word->first==u"“" && m[where+1].pma.queryPattern(u"_NAME",maxLen)!=-1 && 
+		  ((m[where+1+maxLen].word->first==u"." && m[where+2+maxLen].word->first==u"”") || m[where+1+maxLen].word->first==u"”"))
 	{
 		endType=3;
 		setSpeakers=where+1;
 	}
 	// twopence is not a recognized name (it was not seen before or after in the text)
 	// 	END: Yours , �Unresolved[tommy:tommy,carter] TWOPENCE . � 
-	if (whereLetterTo>=0 && m[where].word->first==u"�" && (m[where+1].flags&cWordMatch::flagAllCaps) &&
-		  ((m[where+2].word->first==u"." && m[where+3].word->first==u"�") || m[where+2].word->first==u"�"))
+	if (whereLetterTo>=0 && m[where].word->first==u"“" && (m[where+1].flags&cWordMatch::flagAllCaps) &&
+		  ((m[where+2].word->first==u"." && m[where+3].word->first==u"”") || m[where+2].word->first==u"”"))
 	{
 		// leads to doubles - future investigation
 		//if (m[where+1].getObject()>=0)
@@ -9099,7 +9099,7 @@ bool cSource::letterDetectionEnd(int where,int whereLetterTo,int lastLetterBegin
 		int letterFrom=m[where+1].getObject(),letterTo=-1;
 		// Your sincere friend, Mr. Carter
 		int closingResolution=where-1;
-		if (m[closingResolution].word->first==u"�") closingResolution--;
+		if (m[closingResolution].word->first==u"“") closingResolution--;
 		if (m[closingResolution].word->first==u"," && m[closingResolution-1].queryForm(friendForm)>=0 && 
 			  m[closingResolution-1].getObject()>=0 && m[closingResolution-1].objectMatches.size()>0)
 		{
@@ -9315,7 +9315,7 @@ void cSource::printResolutionCheck(vector <int> &badSpeakers)
 			}
 			else if (m[I].objectMatches.size() || m[I].audienceObjectMatches.size())
 				lplog(LOG_RESCHECK, u"%06d:(%s//%s)", I, objectSortedString(m[I].objectMatches, tmpstr2).c_str(), objectSortedString(m[I].audienceObjectMatches, tmpstr3).c_str());
-			if (m[I].word->first == u"�" && !(m[I].flags&cWordMatch::flagQuotedString))
+			if (m[I].word->first == u"“" && !(m[I].flags&cWordMatch::flagQuotedString))
 			{
 				if (m[I].objectMatches.size() != 1)
 					lplog(LOG_RESCHECK, u"%06d:Invalid Speaker", I);
@@ -9661,7 +9661,7 @@ void cSource::ageEmbeddedSpeakerGroups(int where, bool inPrimaryQuote)
 			{
 				// find next ending secondaryquote after last Where 
 				int J = lsi->lastWhere, begin = speakerGroups[currentSpeakerGroup].embeddedSpeakerGroups[currentEmbeddedSpeakerGroup].sgBegin;
-				for (; J >= begin && (m[J].word->first != u"�" || m[J].nextQuote < 0); J--);
+				for (; J >= begin && (m[J].word->first != u"“" || m[J].nextQuote < 0); J--);
 				if (J >= begin && (m[m[J].nextQuote].flags & (cWordMatch::flagEmbeddedStoryResolveSpeakers | cWordMatch::flagEmbeddedStoryResolveSpeakersGap)))
 				{
 					int getForwardLinkedEnd = J;
@@ -9750,7 +9750,7 @@ void cSource::processEndOfSentenceRS(int where,
 			lplog(LOG_SG | LOG_RESOLUTION, u"%06d:%02d Cancelling subjectsInPreviousUnquotedSectionUsableForImmediateResolution", where, section);
 	}
 	// use questions to enhance the identification of speakers
-	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == u"�"))
+	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == u"’"))
 		setQuestion(m.begin() + where, inPrimaryQuote, questionSpeakerLastSentence, questionSpeaker, currentIsQuestion);
 	else
 		setSecondaryQuestion(m.begin() + where);
@@ -10260,25 +10260,25 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 				lplog(LOG_RESOLUTION, u"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
 		// CMREADME33
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"“")
 		{
 			if (setOpeningDoubleQuote(I, inPrimaryQuote, quotesSeen, quotesSeenSinceLastSentence, lastQuotedString, lastSentenceEndBeforeAndNotIncludingCurrentQuote, 
 				lastSentenceEnd, lastSentenceMetaSpeakerQuery))
 				continue;
 		}
-		else if (m[I].word->first == u"�" && lastOpeningPrimaryQuote >= 0 && !inPrimaryQuote)
+		else if (m[I].word->first == u"”" && lastOpeningPrimaryQuote >= 0 && !inPrimaryQuote)
 		{
 			if (debugTrace.traceSpeakerResolution)
 				lplog(LOG_RESOLUTION, u"%06d:End of quoted string", I);
 		}
-		else if (m[I].word->first == u"�" && lastOpeningPrimaryQuote >= 0)
+		else if (m[I].word->first == u"”" && lastOpeningPrimaryQuote >= 0)
 		{
 			processEndOfPrimaryQuoteRS(I, lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 				lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, lastQuotedString, quotedObjectCounter, lastDefiniteSpeaker, lastClosingPrimaryQuote,
 				paragraphsSinceLastSubjectWasSet, wherePreviousLastSubjects, inPrimaryQuote, immediatelyAfterEndOfParagraph, quotesSeenSinceLastSentence, 
 				previousSpeakersUncertain, previousLastSubjects);
 		}
-		else if (m[I].word->first == u"�")
+		else if (m[I].word->first == u"‘")
 		{
 			lastOpeningSecondaryQuote = I;
 			if (!(m[I].flags&cWordMatch::flagQuotedString))
@@ -10287,7 +10287,7 @@ void cSource::resolveSpeakers(vector <int> &secondaryQuotesResolutions)
 				inPrimaryQuote = false;
 			}
 		}
-		else if (m[I].word->first == u"�" && inSecondaryQuote)
+		else if (m[I].word->first == u"’" && inSecondaryQuote)
 		{
 			inSecondaryQuote = false;
 			inPrimaryQuote = (lastOpeningPrimaryQuote >= 0);

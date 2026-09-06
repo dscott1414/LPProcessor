@@ -3376,6 +3376,7 @@ private:
 	// relations
 	bool tagIsCertain(int position);
 	bool getVerb(vector <cTagLocation> &tagSet,int &tag);
+	bool getIVerb(vector <cTagLocation> &tagSet,int &tag);
 	bool checkAmbiguousVerbTense(int whereVerb,int &sense,bool inQuote,tIWMM masterVerbWord);
 	int getSimplifiedTense(int tense);
 	char *tagSetTimeArray;

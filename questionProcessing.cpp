@@ -550,7 +550,7 @@ cPattern::create(u"_Q3{_FINAL_IF_ALONE}",u"1",
 // what salary do you think I get?
 	cPattern::create(u"_DISPLACED_OBJECT{_FINAL:_ONLY_BEGIN_MATCH:_QUESTION}", u"1",
 		1, u"__ALLOBJECTS_1", 0, 1, 1,
-		1, ",", 0, 0, 1,
+		1, u",", 0, 0, 1,
 		1, u"_ADVERB", 0, 0, 1,
 		1, u"_DO{imp}", 0, 1, 1,
 		1, u"__NOUN[*]{SUBJECT}", 0, 1, 1,
@@ -646,10 +646,10 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 	for (imEOS = im, imEOS++; imEOS != m.end(); imEOS++)
 	{
 		// skip secondary quotes
-		if (imEOS->word->first == u"�")
+		if (imEOS->word->first == u"‘")
 		{
-			for (imEOS++; imEOS != m.end() && imEOS->word->first != u"�" && imEOS->word->first != u"�"; imEOS++);
-			if (imEOS == m.end() || imEOS->word->first == u"�")
+			for (imEOS++; imEOS != m.end() && imEOS->word->first != u"’" && imEOS->word->first != u"”"; imEOS++);
+			if (imEOS == m.end() || imEOS->word->first == u"”")
 			{
 				if (forwardInQuote)
 				{
@@ -663,7 +663,7 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 			imEOS++;
 		}
 		if (imEOS == m.end()) break;
-		if (imEOS->word->first == u"�" && !(imEOS->flags & cWordMatch::flagQuotedString))
+		if (imEOS->word->first == u"“" && !(imEOS->flags & cWordMatch::flagQuotedString))
 		{
 			openingQuote = (int)(imEOS - m.begin());
 			forwardInQuote = true;
@@ -704,7 +704,7 @@ void cSource::setQuestion(vector <cWordMatch>::iterator im, bool inQuote, int& q
 void cSource::setSecondaryQuestion(vector <cWordMatch>::iterator im)
 {
 	LFS
-		for (vector <cWordMatch>::iterator imEOS = ++im; imEOS != m.end() && (imEOS->word->first != u"�"); imEOS++)
+		for (vector <cWordMatch>::iterator imEOS = ++im; imEOS != m.end() && (imEOS->word->first != u"’"); imEOS++)
 		{
 			// checking for the sectionWord makes it more likely ':' is not in the middle of a sentence.
 			// The purpose is to detect the end of a sentence, not an utterance, because this section only

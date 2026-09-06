@@ -2591,7 +2591,7 @@ void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativ
 		uqPreviousToLastSentenceEnd = uqLastSentenceEnd;
 		uqLastSentenceEnd = where;
 	}
-	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == u"�"))
+	if (!inSecondaryQuote || (where + 1 < (signed)m.size() && m[where + 1].word->first == u"’"))
 		setQuestion(m.begin() + where, inPrimaryQuote, questionSpeakerLastSentence, questionSpeaker, currentIsQuestion);
 	else
 		setSecondaryQuestion(m.begin() + where);
@@ -2621,12 +2621,12 @@ void cSource::processEndOfSentence(int where, int& lastBeginS1, int& lastRelativ
 	// the sentence ends with a period, or a period and a quote.
 	if (where + 3 < (signed)m.size() &&
 		m[where + 1].word != Words.sectionWord && // period
-		!(m[where + 1].word->first == u"�" && m[where + 2].word == Words.sectionWord) && // period and quote
-		!(m[where + 1].word->first == u"�" && m[where + 2].word->first == u"�" && m[where + 3].word == Words.sectionWord)) // period, single quote and double quote
+		!(m[where + 1].word->first == u"”" && m[where + 2].word == Words.sectionWord) && // period and quote
+		!(m[where + 1].word->first == u"’" && m[where + 2].word->first == u"”" && m[where + 3].word == Words.sectionWord)) // period, single quote and double quote
 	{
 		// is the period in the middle of a quote?  if then, set to true.
 		// is the period not in a quote, or at the end of a quote? then set to false.
-		quotesSeenSinceLastSentence = inPrimaryQuote && (m[where + 1].word->first != u"�" || (m[where + 1].word->first != u"�" && m[where + 2].word->first != u"�"));
+		quotesSeenSinceLastSentence = inPrimaryQuote && (m[where + 1].word->first != u"”" || (m[where + 1].word->first != u"’" && m[where + 2].word->first != u"”"));
 		// in the case where a .?! is followed by a quote and a speaker designation,
 		// the speaker designation does not count as a sentence.
 		if (debugTrace.traceSpeakerResolution)

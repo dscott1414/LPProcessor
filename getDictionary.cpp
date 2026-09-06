@@ -952,7 +952,7 @@ bool cWord::illegalWord(MYSQL* mysql, lpwstring sWord)
 	// its signature is a separate decision from removing the integration.
 	(void)mysql;
 	// non English word?
-	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(u"��������������������������") != lpwstring::npos)
+	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(u"ãâäáàæçêéèêëîíïñôóòöõôûüùú") != lpwstring::npos)
 		return true;
 	// embedded quote?
 	size_t whereQuote = sWord.find('\'');

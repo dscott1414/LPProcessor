@@ -1387,7 +1387,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 	}
 	// this does not actually include another more thorough way - is the speaker specified after the quote?
 	// if there are less than 2 speakers, there were subjects in the previous unquoted section and the section ended with an open double quote
-	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == u"�")
+	if (tempSpeakerGroup.speakers.size() < 2 && subjectsInPreviousUnquotedSection.size() >= 1 && end + 1 < (signed)m.size() && m[end + 1].word->first == u"“")
 	{
 		// bool BF=(tempSpeakerGroup.begin+1<m.size() && m[tempSpeakerGroup.begin+1].forms.isSet(quoteForm)); all speaker groups at this point start with an unquoted paragraph
 		if (determineIfSpeakerMoved(begin, end, endOfSection) < 0)
@@ -1409,7 +1409,7 @@ bool cSource::createSpeakerGroup(int begin, int end, bool endOfSection, int& las
 		}
 		// if lastSG is not composed of a single quoted paragraph
 		bool lastSGNotClosable = false;
-		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == u"�")
+		if (lastSG != speakerGroups.end() && m[lastSG->sgBegin + 1].word->first == u"“")
 		{
 			int q = lastSG->sgBegin + 1;
 			while (m[q].getQuoteForwardLink() >= 0) q = m[q].getQuoteForwardLink();
@@ -1902,7 +1902,7 @@ bool cSource::isEOS(int where)
 	return (im->word->first == u"?" || im->word->first == u"!" || im->word->first == u";" || (im->word->first == u"." && !im->PEMACount) ||
 		(im->word->first == u":" && (im + 1)->word == Words.sectionWord) ||
 		(where + 1 < (signed)m.size() && (im->queryForm(dashForm) >= 0 || im->word->first == u"--"/*BUG*/ || im->word->first == u".") &&
-			(m[where + 1].word->first == u"�" || m[where + 1].word->first == u"�")));
+			(m[where + 1].word->first == u"”" || m[where + 1].word->first == u"’")));
 }
 
 // True for dummy/existential subjects "what" / "where" / "there" / "here"
@@ -2030,7 +2030,7 @@ int cSource::detectMetaResponse(int I, int element)
 	// Boris asked a question:
 	if (m[whereVerb].getRelObject() >= 0 && m[m[whereVerb].getRelObject()].word->first != u"question") return -1;
 	// �Unresolved I am not sure where she[jane] is at the present moment[moment] , � she[jane] replied .
-	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == u"�") return -1;
+	if (m[whereVerb].relSubject > 1 && m[m[whereVerb].relSubject - 1].word->first == u"”") return -1;
 	// the Sinn feiner[irish] was speaking . his[irish] rich Irish voice[irish] was unmistakable :
 	// another voice[number] , which Tommy fancied was that[number] of the tall , commanding - looking man[number] whose face[number] had seemed familiar to him[number,tommy] , said :
 	// the Russian[boris] seemed to consider :
@@ -3079,7 +3079,7 @@ void cSource::adjustHailRoleDuringScan(int where)
 	// dereferenced below once im->getObject()>=0 is confirmed.
 	vector <cObject>::iterator o = objects.begin() + ((im->getObject() >= 0) ? im->getObject() : 0);
 	if (im->getObject() >= 0 && !(im->objectRole & HAIL_ROLE) && o->objectClass == NAME_OBJECT_CLASS && (im->objectRole & IN_PRIMARY_QUOTE_ROLE) &&
-		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == u"�" && m[im->endObjectPosition].word->first == u"," && m[im->endObjectPosition + 1].word->first == u"�" &&
+		im->beginObjectPosition && m[im->beginObjectPosition - 1].word->first == u"“" && m[im->endObjectPosition].word->first == u"," && m[im->endObjectPosition + 1].word->first == u"”" &&
 		(o->PISDefinite || o->PISHail > 1 || (o->name.hon != wNULL && !o->name.justHonorific() && o->numEncountersInSection > 1))) // encounters already at least one because of resolveObject
 	{
 		vector <cLocalFocus>::iterator lsi = in(im->getObject());
@@ -3146,15 +3146,15 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 		bool block = false;
 	if (quotesSeenSinceLastSentence) // if the previous paragraph was a quote
 	{
-		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == u"�"); // in the middle of a conversation
+		block = (nsAfter < (int)m.size() && m[nsAfter].word->first == u"“"); // in the middle of a conversation
 		// also block if the present paragraph's only sentence is a speaker attribution
 		if (!block)
 		{
 			// (search for next quote)
 			int beginQuote = nsAfter;
-			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != u"�" &&
+			for (; beginQuote < (int)m.size() && m[beginQuote].word->first != u"“" &&
 				m[beginQuote].word->first != u"?" && m[beginQuote].word->first != u"!" && (m[beginQuote].word->first != u"." || m[beginQuote].PEMACount); beginQuote++);
-			if (beginQuote < (int)m.size() && m[beginQuote].word->first == u"�")
+			if (beginQuote < (int)m.size() && m[beginQuote].word->first == u"“")
 			{
 				// (search for the speaker position)
 				bool definitelySpeaker = true, previousParagraph = false, crossedSectionBoundary = false; // checkCataSpeaker=false,
@@ -3169,7 +3169,7 @@ bool cSource::blockSpeakerGroupCreation(int endSection, bool quotesSeenSinceLast
 			if (!block && speakerGroups.size() && lastOpeningPrimaryQuote >= 0 && m[lastOpeningPrimaryQuote].endQuote + 1 == endSection)
 			{
 				int firstQuoteAfter = speakerGroups[speakerGroups.size() - 1].sgBegin + 1;
-				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != u"�"; firstQuoteAfter++);
+				for (; firstQuoteAfter < lastOpeningPrimaryQuote && m[firstQuoteAfter].word->first != u"“"; firstQuoteAfter++);
 				while (m[firstQuoteAfter].getQuoteForwardLink() >= 0) firstQuoteAfter = m[firstQuoteAfter].getQuoteForwardLink();
 				block |= firstQuoteAfter == lastOpeningPrimaryQuote;
 			}
@@ -3510,7 +3510,7 @@ void cSource::identifySpeakerGroups()
 		// �[st:dr] Miss Finn , � he said
 		// �[st:julius] Mr . Hersheimmer , � he[st] said at last , �[st:julius] that is a very large sum . � 
 		bool possibleHail = inPrimaryQuote && m[I].getObject() >= 0 && !(m[I].objectRole & HAIL_ROLE) && objects[m[I].getObject()].objectClass == NAME_OBJECT_CLASS &&
-			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == u"�" && m[m[I].endObjectPosition].word->first == u"," && m[m[I].endObjectPosition + 1].word->first == u"�";
+			m[I].beginObjectPosition && m[m[I].beginObjectPosition - 1].word->first == u"“" && m[m[I].endObjectPosition].word->first == u"," && m[m[I].endObjectPosition + 1].word->first == u"”";
 		if ((!inPrimaryQuote && !inSecondaryQuote) || (possibleHail && !objects[m[I].getObject()].PISDefinite))
 			resolveObject(I, false, inPrimaryQuote, inSecondaryQuote, lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, false, false, false); // could change object at I!
 		if (m[I].getObject() != cObject::eOBJECTS::UNKNOWN_OBJECT && lastCommand >= 0)
@@ -3551,7 +3551,7 @@ void cSource::identifySpeakerGroups()
 				lplog(LOG_RESOLUTION, u"%06d:cleared local objects (%s)", I, m[I].word->first.c_str());
 		}
 		// CMREADME25
-		if (m[I].word->first == u"�")
+		if (m[I].word->first == u"‘")
 		{
 			if (lastOpeningSecondaryQuote >= 0)
 			{
@@ -3562,7 +3562,7 @@ void cSource::identifySpeakerGroups()
 			inSecondaryQuote = true;
 			inPrimaryQuote = false;
 		}
-		else if (m[I].word->first == u"�")
+		else if (m[I].word->first == u"’")
 		{
 			inSecondaryQuote = false;
 			inPrimaryQuote = true;
@@ -3572,7 +3572,7 @@ void cSource::identifySpeakerGroups()
 				setSecondaryQuoteString(I, secondaryQuotesResolutions);
 			}
 		}
-		else if (m[I].word->first == u"�")
+		else if (m[I].word->first == u"“")
 		{
 			if (immediatelyAfterEndOfParagraph && lastQuote >= 0)
 				embeddedStory(I, numPastSinceLastQuote, numNonPastSinceLastQuote, numSecondInQuote, numFirstInQuote,
@@ -3582,7 +3582,7 @@ void cSource::identifySpeakerGroups()
 			inPrimaryQuote = true;
 			quotesSeen = quotesSeenSinceLastSentence = true;
 		}
-		else if (m[I].word->first == u"�" && lastOpeningPrimaryQuote >= 0)
+		else if (m[I].word->first == u"”" && lastOpeningPrimaryQuote >= 0)
 		{
 			processEndOfPrimaryQuote(I, lastSentenceEndBeforeAndNotIncludingCurrentQuote,
 				lastBeginS1, lastRelativePhrase, lastQ2, lastVerb, lastSpeakerPosition, lastQuotedString, quotedObjectCounter,

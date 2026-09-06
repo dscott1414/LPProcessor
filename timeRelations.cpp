@@ -1675,7 +1675,7 @@ bool cSource::resolveTimeRange(int where, int pmaOffset, vector <cSyntacticRelat
 bool cSource::stopSearch(int I)
 {
 	LFS
-		return isEOS(I) || m[I].word == Words.sectionWord || ((m[I].word->first == u"�" || m[I].word->first == u"�") && !(m[I].flags & cWordMatch::flagQuotedString));
+		return isEOS(I) || m[I].word == Words.sectionWord || ((m[I].word->first == u"“" || m[I].word->first == u"”") && !(m[I].flags & cWordMatch::flagQuotedString));
 }
 
 // Copy or split previousRelation.timeInfo onto csr. conjunctionPassed == -1

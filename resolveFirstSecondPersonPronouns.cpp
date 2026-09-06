@@ -405,7 +405,7 @@ void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bo
 	vector <cWordMatch>::iterator &lastOpeningPrimaryQuoteIM, vector <cWordMatch>::iterator &lastOpeningSecondaryQuoteIM,
 	int & lastEmbeddedStoryBegin)
 {
-	if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
+	if (im->word->first == u"“" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		if (im->flags & cWordMatch::flagEmbeddedStoryBeginResolveSpeakers)
 			lastEmbeddedStoryBegin = where;
@@ -436,21 +436,21 @@ void cSource::handleQuotes(vector <cWordMatch>::iterator im, const int where, bo
 			}
 		}
 	}
-	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"”" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		lastOpeningSecondaryQuoteIM = lastOpeningPrimaryQuoteIM = wmNULL;
 		lastOpeningPrimaryQuote = -1;
 		lastQuote = -1;
 		inSecondaryQuote = inPrimaryQuote = false;
 	}
-	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"‘" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		lastOpeningSecondaryQuoteIM = im;
 		lastOpeningSecondaryQuote = where;
 		inSecondaryQuote = true;
 		inPrimaryQuote = false;
 	}
-	else if (im->word->first == u"�" && !(im->flags & cWordMatch::flagQuotedString))
+	else if (im->word->first == u"’" && !(im->flags & cWordMatch::flagQuotedString))
 	{
 		inSecondaryQuote = false;
 		inPrimaryQuote = (lastOpeningPrimaryQuote >= 0);

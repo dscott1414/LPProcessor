@@ -898,8 +898,8 @@ void cSource::rationalizePrimarySecondaryQuotes()
 {
 	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
 	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
-	tIWMM primaryQuoteOpenWord = Words.gquery(u"�"), primaryQuoteCloseWord = Words.gquery(u"�");
-	tIWMM secondaryQuoteOpenWord = Words.gquery(u"�"), secondaryQuoteCloseWord = Words.gquery(u"�");
+	tIWMM primaryQuoteOpenWord = Words.gquery(u"“"), primaryQuoteCloseWord = Words.gquery(u"”");
+	tIWMM secondaryQuoteOpenWord = Words.gquery(u"‘"), secondaryQuoteCloseWord = Words.gquery(u"’");
 	vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end();
 	int outerPrimaryQuotes = 0, outerSecondaryQuotes = 0;
 	int innerPrimaryQuotes = 0, innerSecondaryQuotes = 0;
@@ -955,8 +955,8 @@ unsigned int cSource::doQuotesOwnershipAndContractions(unsigned int& primaryQuot
 	int lastPrimaryQuote = -1, lastSecondaryQuote = -1;
 	tIWMM primaryQuoteWord = Words.gquery(primaryQuoteType);
 	tIWMM secondaryQuoteWord = Words.gquery(secondaryQuoteType);
-	tIWMM primaryQuoteOpenWord = Words.gquery(u"�"), primaryQuoteCloseWord = Words.gquery(u"�");
-	tIWMM secondaryQuoteOpenWord = Words.gquery(u"�"), secondaryQuoteCloseWord = Words.gquery(u"�");
+	tIWMM primaryQuoteOpenWord = Words.gquery(u"“"), primaryQuoteCloseWord = Words.gquery(u"”");
+	tIWMM secondaryQuoteOpenWord = Words.gquery(u"‘"), secondaryQuoteCloseWord = Words.gquery(u"’");
 	primaryQuotations = 0;
 	lpwstring originalWord;
 	// scan for only single quotations - convert if necessary
