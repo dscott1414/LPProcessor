@@ -295,6 +295,20 @@ inline int lp_wsprintf_at(lpchar_t(&buffer)[N], size_t offset, const lpchar_t* f
 // returns the buffer or NULL at end-of-file with nothing read.
 lpchar_t* lp_fgetws(lpchar_t* buffer, int bufferCount, FILE* stream);
 
+// Reads one line of UTF-16LE code units straight off a binary stream. This is
+// what MSVC's fgetws() does on a stream opened "rb" -- it copies wchar_t units
+// verbatim rather than converting -- and it is what the ~14 `lp_wfopen(..., "rb")
+// // binary mode reads unicode` call sites in initializeDictionary.cpp and
+// paice.cpp have always relied on: 28 of the files under source/lists are
+// UTF-16LE with a BOM.
+//
+// lp_fgetws above is the narrow/UTF-8 reader (fgets + decode) and is correct for
+// the handful of genuinely narrow files (createOntology.cpp's .nt/.ttl RDF
+// dumps). Point each call site at the one matching how the file is encoded; the
+// two are not interchangeable. Callers strip the U+FEFF BOM themselves, as they
+// already did on Windows.
+lpchar_t* lp_fgetws16(lpchar_t* buffer, int bufferCount, FILE* stream);
+
 // lp_fputws matches fputws: writes the string with no added newline. Returns a
 // non-negative value on success, EOF on failure.
 int lp_fputws(const lpchar_t* s, FILE* stream);

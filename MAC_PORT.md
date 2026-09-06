@@ -134,6 +134,26 @@ those reads misses.
 
 **Verify with** `lpfile_smoketest` (below), run from the main directory.
 
+### Running the engine — the environment it needs
+
+Established by actually running it; none of this is optional.
+
+```sh
+cd /Users/davidscott/lp/source          # initialize() does chdir("..") from here
+export LP_DB_PASSWORD=...               # required; envConfig.h aborts without it
+export WNSEARCHDIR=/Users/davidscott/lp/WordNet/2.1/dict
+export WNHOME=/Users/davidscott/lp/WordNet/2.1
+./build/bin/lp -test thatParsing -BC 0 -forceSourceReread -parseOnly
+```
+
+- **`WNSEARCHDIR`** is what `wninit()` reads (`wn/wnutil.c`: `WNSEARCHDIR`, else
+  `WNHOME/dict`, else `DEFAULTPATH`). The Windows build got this from the
+  registry, so nothing in the tree supplies it on macOS and initialization fails
+  with "WordNet failed initialization!" until it is set.
+- **Launch directory** — see "Working directory matters" above.
+- The per-source result lands in `main.lplog` (`Matched sentences=...`), not on
+  stdout; stdout carries only progress lines.
+
 ### What the caches contain, and what reads them
 
 | Directory | Size / files | Layout | Read by |

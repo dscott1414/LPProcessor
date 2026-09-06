@@ -178,7 +178,7 @@ int cStemmer::readStemRules(void)
 	cSuffixRule temp;
 	int line;
 	/* Read a line at a time until eof */
-	for (line = 1; lp_fgetws(s, maxlinelength, fp); line++)
+	for (line = 1; lp_fgetws16(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
 			// Batch B2: wmemmove has no char16_t equivalent; std::memmove works directly
@@ -250,7 +250,7 @@ int cStemmer::readPrefixRules(void)
 	tPrefixRule temp;
 	int line;
 	/* Read a line at a time until eof */
-	for (line = 1; lp_fgetws(s, maxlinelength, fp); line++)
+	for (line = 1; lp_fgetws16(s, maxlinelength, fp); line++)
 	{
 		if (s[0] == 0xFEFF) // detect BOM
 			// Batch B2: wmemmove has no char16_t equivalent; std::memmove works directly

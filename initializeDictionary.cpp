@@ -196,7 +196,7 @@ bool cWord::readVerbClasses(void)
 	}
 	lpchar_t line[1024];
 	// acclaim : 2.10, 2.13.1, 2.13.2, 2.13.3, 33 
-	while (lp_fgetws(line, 1023, tf))
+	while (lp_fgetws16(line, 1023, tf))
 	{
 		if (lp_strchr(line, '/')) continue;
 		lpchar_t* ch = lp_strchr(line, u':'), * ch2, * period;
@@ -248,7 +248,7 @@ bool cWord::readVerbClassNames(void)
 	lpchar_t line[1024];
 	//  01234567890
 	//   01.1.2.1  Causative/Inchoative Alternation
-	while (lp_fgetws(line, 1023, tf))
+	while (lp_fgetws16(line, 1023, tf))
 	{
 		if (lp_strstr(line, u"//")) continue;
 		lpchar_t* ch, * period, * cutoff;
@@ -288,12 +288,12 @@ int cWord::addProperNamesFile(lpwstring path)
 		FILE* fp = lp_wfopen(path.c_str(), "rb");
 	if (!fp) return -1;
 	lpchar_t line[1024];
-	lp_fgetws(line, 1024, fp);
-	lp_fgetws(line, 1024, fp);
-	lp_fgetws(line, 1024, fp);
+	lp_fgetws16(line, 1024, fp);
+	lp_fgetws16(line, 1024, fp);
+	lp_fgetws16(line, 1024, fp);
 	//Rank,Male,Number,Female,Number
 	// 9,Edward,7428,Mildred,5800
-	while (lp_fgetws(line, 1024, fp))
+	while (lp_fgetws16(line, 1024, fp))
 	{
 		int rank;
 		lpchar_t* ch = line;
@@ -548,7 +548,7 @@ int cWord::addGenderedNouns(const lpchar_t* genPath, int defaultInflectionFlags,
 		FILE* fgen = lp_wfopen(genPath, "rb"); // binary mode reads unicode
 	if (!fgen) return -1;
 	lpchar_t noun[101];
-	while (lp_fgetws(noun, 100, fgen))
+	while (lp_fgetws16(noun, 100, fgen))
 	{
 		if (noun[0] == 0xFEFF) // detect BOM
 			memcpy(noun, noun + 1, (lp_strlen(noun + 1) + 1) * sizeof(noun[0]));
@@ -624,7 +624,7 @@ int cWord::addDemonyms(const lpchar_t* demPath)
 		return -1;
 	}
 	lpchar_t demonym[101];
-	while (lp_fgetws(demonym, 100, fdem))
+	while (lp_fgetws16(demonym, 100, fdem))
 	{
 		if (demonym[0] == 0xFEFF) // detect BOM
 			memcpy(demonym, demonym + 1, (lp_strlen(demonym + 1) + 1) * sizeof(demonym[0]));
@@ -692,7 +692,7 @@ bool cWord::addPlaces(lpwstring pPath, vector <tmWS >& objects)
 	if (!fp) return false;
 	int numFirstSense;
 	lpchar_t place[1024];
-	while (lp_fgetws(place, 1020, fp))
+	while (lp_fgetws16(place, 1020, fp))
 	{
 		if (place[0] == 0xFEFF) // detect BOM
 			memcpy(place, place + 1, (lp_strlen(place + 1) + 1) * sizeof(place[0]));
@@ -801,7 +801,7 @@ void cWord::addNickNames(const lpchar_t* filePath)
 	}
 	lpchar_t names[1024];
 	int equivalenceClass = 0;
-	while (lp_fgetws(names, 1024, nf))
+	while (lp_fgetws16(names, 1024, nf))
 	{
 		if (names[0] == 0xFEFF) // detect BOM
 			memcpy(names, names + 1, (lp_strlen(names + 1) + 1) * sizeof(names[0]));

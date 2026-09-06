@@ -688,6 +688,26 @@ lpchar_t* lp_fgetws(lpchar_t* buffer, int bufferCount, FILE* stream)
 	return buffer;
 }
 
+// See lpchar.h. Mirrors fgetws() on an MSVC "rb" stream: the terminating newline
+// is kept in the buffer, the result is NUL-terminated, and NULL is returned only
+// when nothing at all could be read. A trailing odd byte at EOF ends the line.
+lpchar_t* lp_fgetws16(lpchar_t* buffer, int bufferCount, FILE* stream)
+{
+	if (!buffer || bufferCount <= 0 || !stream) return nullptr;
+	int count = 0;
+	while (count < bufferCount - 1)
+	{
+		unsigned char pair[2];
+		if (fread(pair, 1, 2, stream) != 2) break;
+		lpchar_t unit = (lpchar_t)(pair[0] | (pair[1] << 8));   // little-endian
+		buffer[count++] = unit;
+		if (unit == u'\n') break;
+	}
+	if (count == 0) return nullptr;
+	buffer[count] = 0;
+	return buffer;
+}
+
 int lp_fputws(const lpchar_t* s, FILE* stream)
 {
 	if (!s || !stream) return -1;
