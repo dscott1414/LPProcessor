@@ -277,14 +277,22 @@ bool anymoreUnprocessedForUnknown(MYSQL& mysql, int sourceType, int step)
 
 // Like updateSource but only start/repeatStart/sizeInBytes.  start is
 // truncated to the last 255 chars (the column is VARCHAR(256)).
-bool cSource::updateSourceStart(lpwstring& start, int repeatStart, lpwstring& etext, int64_t actualLenInBytes)
+// NOTE: `start` is const on purpose. This used to take it by non-const reference
+// and call escapeStr(start), which escaped the CALLER's string in place -- turning
+// real CR/LF into the two-character sequences \r and \n for SQL, and truncating
+// it to the column's 255 characters. tokenize.cpp calls this between findStart()
+// and scanUntil(), so scanUntil then searched the document for the SQL-escaped
+// marker and never found it: every source that took the "**FIND**" path logged
+// "Unable to find start" and was skipped. That was 9 of the 23 test documents.
+// The escaped, truncated form is what belongs in the query and nowhere else.
+bool cSource::updateSourceStart(const lpwstring& start, int repeatStart, lpwstring& etext, int64_t actualLenInBytes)
 {
 	LFS
 		lpwstring tmp, tmp2, sqlStatement;
-	escapeStr(start);
-	if (start.length() > 255)
-		start = start.substr(start.length() - 255, 255); // start column has a limit of 256 characters
-	sqlStatement = u"update sources set start='" + start + u"', repeatStart=" + itos(repeatStart, tmp) + u", sizeInBytes=" + itos((int)actualLenInBytes, tmp2) + u" where etext='" + escaped(etext) + u"'";
+	lpwstring startForQuery = escaped(start);
+	if (startForQuery.length() > 255)
+		startForQuery = startForQuery.substr(startForQuery.length() - 255, 255); // start column has a limit of 256 characters
+	sqlStatement = u"update sources set start='" + startForQuery + u"', repeatStart=" + itos(repeatStart, tmp) + u", sizeInBytes=" + itos((int)actualLenInBytes, tmp2) + u" where etext='" + escaped(etext) + u"'";
 	return myquery(&mysql, (lpchar_t*)sqlStatement.c_str());
 }
 

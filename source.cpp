@@ -1574,7 +1574,16 @@ bool aloneOnLine(lpchar_t* buffer, lpchar_t* loc, const lpchar_t* pattern, lpcha
 int cSource::scanUntil(const lpchar_t* start, int repeat, bool printError)
 {
 	LFS
-		lpchar_t* loc = bookBuffer - 1;
+		// `repeat` is 1-based: 1 means the first line that is `start` alone. The match
+		// below is `--repeat == 0`, so a repeat of 0 goes straight to -1 and can never
+		// match, and the caller is told the start does not exist. findStart() counts
+		// only the occurrences BEFORE the paragraph it picked, so it hands back 0
+		// whenever that paragraph is the first occurrence -- which is why
+		// tests/Usage.txt and tests/date-time-number.txt were reported as having no
+		// start even though findStart had just located one. Normalizing here rather
+		// than in findStart also protects against a 0 stored in sources.repeatStart.
+		if (repeat < 1) repeat = 1;
+	lpchar_t* loc = bookBuffer - 1;
 	while ((loc - bookBuffer) < bufferLen)
 	{
 		if (!(loc = lp_strstr(loc + 1, start)))

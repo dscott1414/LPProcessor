@@ -2859,7 +2859,7 @@ public:
 	int insertWordRelationTypes(void);
 	bool signalFinishedProcessingSource(int sourceId);
 	bool updateSourceEncoding(int readBufferType, lpwstring sourceEncoding, lpwstring etext);
-	bool updateSourceStart(lpwstring &start, int repeatStart, lpwstring &etext, int64_t actualLenInBytes);
+	bool updateSourceStart(const lpwstring &start, int repeatStart, lpwstring &etext, int64_t actualLenInBytes);
 	bool resetAllSource(void);
 	bool resetSource(int beginSource,int endSource);
 	void resetProcessingFlags(void);

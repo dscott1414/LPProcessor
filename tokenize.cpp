@@ -1184,7 +1184,26 @@ int cSource::readSourceBuffer(lpwstring title, lpwstring etext, lpwstring path, 
 	if (start == u"**FIND**" || encodingFromDB != sourceEncoding || (readBufferFlags & ENCODING_MATCH_FAILED) != 0)
 	{
 		readBufferFlags += FIND_START;
+		// Keep whatever start we already had. findStart() looks for "the first
+		// paragraph without ignoreWords and with at least two consecutive
+		// sentences", which several of the short documents in tests/ simply do not
+		// contain; it then sets start to "**START NOT FOUND**" and returns false,
+		// and this function used to give up with -1. That threw away a start the
+		// database had already recorded and that works -- for the test sources it is
+		// "~~BEGIN", which scanUntil() treats as "begin at the top of the document".
+		// A failed re-derivation should not be worse than not re-deriving, so the
+		// previous value is restored and parsing continues. Only a source that had
+		// no usable start to begin with still fails.
+		const lpwstring startBeforeFind = start;
 		startSet = findStart(wb, start, repeatStart, title);
+		if (!startSet && !startBeforeFind.empty() && startBeforeFind != u"**FIND**" &&
+			startBeforeFind != u"**START NOT FOUND**")
+		{
+			lplog(LOG_INFO, u"findStart found no paragraph in %s; keeping the recorded start '%s'.",
+				path.c_str(), startBeforeFind.c_str());
+			start = startBeforeFind;
+			startSet = true;
+		}
 		// write path back to DB
 		updateSourceStart(start, repeatStart, etext, bufferLen);
 		updateSourceEncoding(readBufferFlags, sourceEncoding, etext);
