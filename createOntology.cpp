@@ -146,8 +146,7 @@ lpchar_t* readTillEndOfTripleString(lpchar_t* s1, FILE* fp, lpchar_t* buffer, in
 	mapTo = s1 + 1;
 	for (line++; lp_fgetws(buffer, MAX_BUF, fp); line++)
 	{
-		if (buffer[lp_strlen(buffer) - 1] == '\n')
-			buffer[lp_strlen(buffer) - 1] = 0;
+		lp_stripTrailing(buffer, u'\n');
 		s2 = lp_strstr(buffer, u"\"\"\"");
 		if (s2)
 		{
@@ -226,8 +225,7 @@ int readN3TwoPropertyLine(const lpchar_t* path, lpwstring mapFrom, unordered_map
 		for (int I = 0; buffer[I]; I++)
 			if (buffer[I] == u'\t')
 				buffer[I] = u' ';
-		if (buffer[lp_strlen(buffer) - 1] == '\n')
-			buffer[lp_strlen(buffer) - 1] = 0;
+		lp_stripTrailing(buffer, u'\n');
 		if (buffer[0] == 0)
 			continue;
 		if (buffer[0] == '#')
@@ -351,8 +349,7 @@ int readN3FileIntoTripletMap(const lpchar_t* path, unordered_map < lpwstring, un
 			continue;
 		if (buffer[0] == '#')
 			continue;
-		if (buffer[lp_strlen(buffer) - 1] == '\n')
-			buffer[lp_strlen(buffer) - 1] = 0;
+		lp_stripTrailing(buffer, u'\n');
 		if (buffer[0] == 0)
 			continue;
 		for (int I = 0; buffer[I]; I++)
@@ -1167,8 +1164,11 @@ int cOntology::readDbPediaOntology()
 		if (s[eol - 2] == '\r') s[eol - 2] = 0;
 		if (s[0] == 0xFEFF)
 		{// detect BOM
-			memcpy(s, s + 1, lp_strlen(s + 1) * sizeof(*s));
-			s[lp_strlen(s) - 1] = 0;
+			// Copy the NUL too, so the shift re-terminates by itself. The old form
+			// copied strlen(s+1) units and then did s[lp_strlen(s) - 1] = 0 to put
+			// the terminator back, which indexed s[-1] on an empty line. This is
+			// what the other four BOM strips in the tree already do.
+			memmove(s, s + 1, (lp_strlen(s + 1) + 1) * sizeof(*s));
 		}
 		// get entry
 		lpchar_t* space = lp_strstr(s, u"> ");

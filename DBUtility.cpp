@@ -224,7 +224,7 @@ bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qu
 {
 	LFS
 		bool ret = true;
-	if (len > QUERY_BUFFER_LEN_UNDERFLOW || (flush && qt[len - 1] == u','))
+	if (len > QUERY_BUFFER_LEN_UNDERFLOW || (flush && len > 0 && qt[len - 1] == u','))
 	{
 		if (qt[len - 2] == u')')
 			qt[--len] = 0; // must be INSERT strip off extra ,

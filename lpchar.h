@@ -309,6 +309,20 @@ lpchar_t* lp_fgetws(lpchar_t* buffer, int bufferCount, FILE* stream);
 // already did on Windows.
 lpchar_t* lp_fgetws16(lpchar_t* buffer, int bufferCount, FILE* stream);
 
+// Removes one trailing `ch` from s, if present, and returns the new length.
+// Safe on an empty string -- unlike the `s[lp_strlen(s) - 1]` idiom it replaces,
+// which reads (and then writes) s[-1]. AddressSanitizer caught that as a
+// stack-buffer-underflow in cWord::addPlaces, where a run of spaces before the
+// buffer let the loop walk `len` negative and zero its way backwards down the
+// stack; how far it got depended on what happened to be there, which is one way
+// a parse stopped being reproducible. Blank lines in the UTF-16 list files are
+// what make the length zero.
+int lp_stripTrailing(lpchar_t* s, lpchar_t ch);
+
+// Removes every trailing space from s and returns the new length. Same hazard,
+// same guarantee: stops at the start of the string rather than running past it.
+int lp_stripTrailingSpaces(lpchar_t* s);
+
 // lp_fputws matches fputws: writes the string with no added newline. Returns a
 // non-negative value on success, EOF on failure.
 int lp_fputws(const lpchar_t* s, FILE* stream);

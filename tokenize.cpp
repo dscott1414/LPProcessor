@@ -1164,6 +1164,22 @@ int cSource::readSourceBuffer(lpwstring title, lpwstring etext, lpwstring path, 
 		if (explicitNoteDisagreement)
 			readBufferFlags |= ENCODING_EXPLICIT_NOTE_DISAGREEMENT;
 	}
+	// bufferLen still holds the RAW BYTE count from the file (st_size, doubled at the
+	// top of this function), but bookBuffer now holds decoded text, which is shorter:
+	// 19,402 vs 19,316 for tests/VBGVBD incorrect.txt. Every caller below treats
+	// bufferLen as the length of the text -- readWord() scans up to it -- so leaving
+	// it at the byte count let the tokenizer run 86 characters past the terminator.
+	// Those characters sit beyond the original allocation (the trealloc above grows
+	// the buffer and realloc does not initialize the new space), so what the
+	// tokenizer found there varied between runs: the same document produced 3,931,
+	// 3,932, 3,940, 3,952, 3,953 or 3,954 positions, with a tail of garbage "words"
+	// that logged as UNKNOWN with empty text. That was the whole of the parse's
+	// irreproducibility.
+	//
+	// findStart() assigns bufferLen = buffer.length() and so happened to correct this,
+	// but only on the "**FIND**" path below; a source whose start marker and encoding
+	// already agree with the database never reaches it.
+	bufferLen = lp_strlen(bookBuffer);
 	bool startSet = true;
 	if (start == u"**FIND**" || encodingFromDB != sourceEncoding || (readBufferFlags & ENCODING_MATCH_FAILED) != 0)
 	{

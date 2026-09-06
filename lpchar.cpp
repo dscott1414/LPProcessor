@@ -708,6 +708,25 @@ lpchar_t* lp_fgetws16(lpchar_t* buffer, int bufferCount, FILE* stream)
 	return buffer;
 }
 
+// See lpchar.h.
+int lp_stripTrailing(lpchar_t* s, lpchar_t ch)
+{
+	if (!s) return 0;
+	int len = (int)lp_strlen(s);
+	if (len > 0 && s[len - 1] == ch)
+		s[--len] = 0;
+	return len;
+}
+
+int lp_stripTrailingSpaces(lpchar_t* s)
+{
+	if (!s) return 0;
+	int len = (int)lp_strlen(s);
+	while (len > 0 && s[len - 1] == u' ')
+		s[--len] = 0;
+	return len;
+}
+
 int lp_fputws(const lpchar_t* s, FILE* stream)
 {
 	if (!s || !stream) return -1;

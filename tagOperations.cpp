@@ -470,9 +470,15 @@ size_t cSource::startCollectTags(bool inTrace, int tagSet, int position, int PEM
 			tagSets.erase(tagSets.begin() + nt);
 			for (int J = secondaryPEMAPositions.size() - 1; J >= 0; J--)
 			{
+				// `else if`, not a second `if`: the erase above removes element J, so
+				// re-reading secondaryPEMAPositions[J] on the next line read one past
+				// the end whenever J was the last element -- into capacity, where the
+				// leftover value differs from run to run. AddressSanitizer reports it
+				// as a container-overflow. The two tests are mutually exclusive
+				// (== nt vs > nt), so chaining them is also what was meant.
 				if (secondaryPEMAPositions[J].getTagSet() == nt)
 					secondaryPEMAPositions.erase(secondaryPEMAPositions.begin() + J);
-				if (secondaryPEMAPositions[J].getTagSet() > nt)
+				else if (secondaryPEMAPositions[J].getTagSet() > nt)
 					secondaryPEMAPositions[J].setTagSet(secondaryPEMAPositions[J].getTagSet() - 1);
 			}
 			numTagSets--;

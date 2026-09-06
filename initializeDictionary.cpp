@@ -550,10 +550,14 @@ int cWord::addGenderedNouns(const lpchar_t* genPath, int defaultInflectionFlags,
 	lpchar_t noun[101];
 	while (lp_fgetws16(noun, 100, fgen))
 	{
+		// memmove, not memcpy: source and destination overlap by one lpchar_t.
+		// AddressSanitizer flags the memcpy form ("memcpy-param-overlap") and it
+		// is undefined behaviour. paice.cpp's two copies of this same BOM strip
+		// were converted during the port; these four were missed.
 		if (noun[0] == 0xFEFF) // detect BOM
-			memcpy(noun, noun + 1, (lp_strlen(noun + 1) + 1) * sizeof(noun[0]));
-		if (noun[lp_strlen(noun) - 1] == '\n') noun[lp_strlen(noun) - 1] = 0;
-		if (noun[lp_strlen(noun) - 1] == '\r') noun[lp_strlen(noun) - 1] = 0; // in binary mode, cr/lf is not translated
+			memmove(noun, noun + 1, (lp_strlen(noun + 1) + 1) * sizeof(noun[0]));
+		lp_stripTrailing(noun, u'\n');
+		lp_stripTrailing(noun, u'\r'); // in binary mode, cr/lf is not translated
 		bool addWordNetSearch = false, hypo = false;
 		lpchar_t* preferredSense = NULL, * ch;
 		if ((hypo = (ch = lp_strstr(noun, u" +HYPO")) != NULL) || (ch = lp_strstr(noun, u" +COORDS")))
@@ -627,9 +631,9 @@ int cWord::addDemonyms(const lpchar_t* demPath)
 	while (lp_fgetws16(demonym, 100, fdem))
 	{
 		if (demonym[0] == 0xFEFF) // detect BOM
-			memcpy(demonym, demonym + 1, (lp_strlen(demonym + 1) + 1) * sizeof(demonym[0]));
-		if (demonym[lp_strlen(demonym) - 1] == '\n') demonym[lp_strlen(demonym) - 1] = 0;
-		if (demonym[lp_strlen(demonym) - 1] == '\r') demonym[lp_strlen(demonym) - 1] = 0; // in binary mode, cr/lf is not translated
+			memmove(demonym, demonym + 1, (lp_strlen(demonym + 1) + 1) * sizeof(demonym[0]));
+		lp_stripTrailing(demonym, u'\n');
+		lp_stripTrailing(demonym, u'\r'); // in binary mode, cr/lf is not translated
 		lp_towlower_str(demonym);
 		if (demonym[0] == u';') continue;
 		lpchar_t* nounDemonym = lp_strchr(demonym, u',');
@@ -695,12 +699,12 @@ bool cWord::addPlaces(lpwstring pPath, vector <tmWS >& objects)
 	while (lp_fgetws16(place, 1020, fp))
 	{
 		if (place[0] == 0xFEFF) // detect BOM
-			memcpy(place, place + 1, (lp_strlen(place + 1) + 1) * sizeof(place[0]));
+			memmove(place, place + 1, (lp_strlen(place + 1) + 1) * sizeof(place[0]));
 		int len = lp_strlen(place);
 		if (len >= 1 && place[0] == u';') continue;
-		if (place[len - 1] == '\n') place[--len] = 0;
-		if (place[len - 1] == '\r') place[--len] = 0; // in binary mode, cr/lf is not translated
-		while (place[len - 1] == ' ') place[--len] = 0;
+		len = lp_stripTrailing(place, u'\n');
+		len = lp_stripTrailing(place, u'\r'); // in binary mode, cr/lf is not translated
+		len = lp_stripTrailingSpaces(place);
 		set <string> ignoreCategories;
 		bool addWordNetSearch = false;
 		lpchar_t* preferredSense = NULL, * ch, * ch2;
@@ -804,13 +808,13 @@ void cWord::addNickNames(const lpchar_t* filePath)
 	while (lp_fgetws16(names, 1024, nf))
 	{
 		if (names[0] == 0xFEFF) // detect BOM
-			memcpy(names, names + 1, (lp_strlen(names + 1) + 1) * sizeof(names[0]));
+			memmove(names, names + 1, (lp_strlen(names + 1) + 1) * sizeof(names[0]));
 		typedef pair <lpwstring, int> tNickPair;
 		lpchar_t seps[] = u" ,", * token;
 		for (token = lp_wcstok(names, seps); token != NULL; token = lp_wcstok(NULL, seps))
 		{
-			if (token[lp_strlen(token) - 1] == '\n') token[lp_strlen(token) - 1] = 0;
-			if (token[lp_strlen(token) - 1] == '\r') token[lp_strlen(token) - 1] = 0; // in binary mode, cr/lf is not translated
+			lp_stripTrailing(token, u'\n');
+			lp_stripTrailing(token, u'\r'); // in binary mode, cr/lf is not translated
 			if (!token[0]) continue;
 			lp_towlower_str(token);
 			//lplog(u"Inserted %s with class %d.",token,equivalenceClass);
