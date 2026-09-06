@@ -193,63 +193,64 @@ Not errors, but a run touching them will fail rather than silently degrade:
 
 ## Corpus status (2026-09-06)
 
-**The engine parses real documents on macOS.** 14 of the 23 files in `tests/`
-parse end to end -- roughly 26,900 positions -- at 98.15-100% matched sentences.
-
-**These numbers are a snapshot, not a measurement: the parse is not reproducible
-run to run.** Three consecutive runs of `VBGVBD incorrect` on an unchanged binary
-and unchanged inputs gave 3,932 positions twice and 3,953 the third time, with
-unknown words moving 213 -> 223. Matched-sentence percentage held at 98.15% in
-all three, and the two `MS/word` figures that differ across runs are a timing
-metric, but the position and unknown counts are a genuine difference in how the
-text was tokenized. `wordFormCache` was byte-identical before each run, so it is
-not the cause; the per-source `tests/*.wordCacheFile` were never rewritten
-either. The likely class is iteration order over the engine's many
-`unordered_map`s feeding back into decisions, but that is not established -- it
-needs someone to actually chase it. **Until it is understood, treat any
-comparison of these percentages between two runs as noise at the ~0.5% level on
-position counts.**
+**All 23 documents in `tests/` parse, and the parse is reproducible.** Every one
+exits zero and produces a result line; two consecutive full corpus runs are
+byte-identical apart from `MS/word`, which is a timing metric.
 
 | Test | Positions | Matched |
 |---|---|---|
-| VBGVBD incorrect | 3,953 | 98.15% |
-| syntaxRelationFields | 3,460 | 99.09% |
+| VBGVBD incorrect | 3,931 | 98.76% |
+| syntaxRelationFields | 3,459 | 99.54% |
+| timeExpressions | 3,480 | 99.66% |
 | graded_sentences 1-5 | 13,650 | 99.54-100% |
-| timeExpressions | 2,712 | 99.58% |
 | verb object | 1,170 | 100% |
 | time | 1,100 | 99.32% |
+| `pattern matching` | 685 | 100% |
+| modification | 531 | 100% |
 | tokenization | 388 | 84.62% |
+| Roman | 376 | 100% |
+| date-time-number | 371 | 100% |
 | agreement | 338 | 100% |
+| Usage | 205 | 96.30% |
+| resolution | 148 | 100% |
+| lappinl | 107 | 100% |
 | testParsing / thatParsing | 102 | 100% |
 
-Four defects had to be fixed to get here (see the 2026-09-06 commits). Two stale
-caches also had to be deleted, and both regenerate automatically: the 2022
-`wordFormCache` -- its validity check compares the file's mtime against the DB
-rows' timestamps, and the restored dump preserved 2022-era timestamps, so a stale
-cache looks current -- and `tests/timeExpressions.txt.wordCacheFile`, which was
-from 2010 and declared 196 forms where the database now has 209.
+Two of these complete but yield almost nothing, and in both cases that is the
+data rather than the code. `Nameres.txt` is 36 `~~~` trace directives and a
+`~~END` with no prose, so one position and a `nan%` rate is the correct outcome.
+`Adversary.txt` has no `sources` row, so `findStart` derives a marker for it and
+picks one near the end of a 932-character footnote block, leaving two positions;
+giving it a row with `start = ~~BEGIN`, as the other test sources have, would fix
+it.
 
-**The 9 that do not parse all fail the same way**, and none of them crashes: the
-tokenizer cannot find the source's configured start marker, logs `Unable to find
-start in tests/<name>.txt`, and skips the document (`cSource::scanUntil`,
-`source.cpp`). The marker text is demonstrably present -- in `Adversary.txt` it
-sits at character 96 of the decoded file and matches the logged marker exactly,
-`\r\n` included -- so the file is being read correctly and the failure is in the
-match. `scanUntil` requires the marker to be alone on a line (`aloneOnLine`) and
-these markers span two lines, which is the likely cause. Whether the markers or
-the matcher are wrong is an author decision, and the data is untidy either way:
-`Adversary` and `Roman` have no `sources` row at all, and the row for `Usage`
-says `tests\usage.txt` against a file named `Usage.txt`.
+Getting here took seven defects, none of which a compiler or a startup check
+would have found. They are described in the 2026-09-06 commits; the two that
+matter most:
 
-Affected: Adversary, Nameres, Roman, Usage, date-time-number, lappinl,
-modification, `pattern matching`, resolution.
+- **Reproducibility.** `bufferLen` held the file's raw byte count while
+  `bookBuffer` held decoded text, which is shorter, so the tokenizer ran past the
+  terminator into memory `realloc` had never initialized. The same document gave
+  3,931 / 3,932 / 3,940 / 3,952 / 3,953 / 3,954 positions depending on what
+  happened to be there.
+- **The start-marker chain.** `updateSourceStart` took its argument by non-const
+  reference and SQL-escaped it in place, so `scanUntil` searched the document for
+  a marker containing literal `\r\n`; a failed `findStart` threw away a working
+  recorded start instead of keeping it; and `scanUntil`'s `--repeat == 0` could
+  never match the `repeat == 0` that `findStart` returns for a first occurrence.
 
-**No behavioural comparison against the Windows build has been made.** The
-percentages look healthy, but nothing has checked them against what the same
-documents scored on Windows, which is the only way to know the parse is
-equivalent rather than merely successful. `tests/` is a corpus, not an oracle:
-nothing asserts what a document *should* score, so a regression that lowered
-match rates without crashing would pass unnoticed.
+**Two caches must not be trusted when they are old**, and both regenerate when
+deleted. `wordFormCache`'s validity check compares its mtime against the DB rows'
+timestamps, and the restored dump preserved 2022-era timestamps, so a stale cache
+looks current. Per-source `tests/*.wordCacheFile` can be stale too; one was from
+2010 and declared 196 forms against a database that has 209, which surfaces as
+`illegal form #N (out of max M)`.
+
+**Still no oracle.** `tests/` is a corpus, not a test suite: nothing asserts what
+a document *should* score, and no result has been compared against the same
+document's score on Windows. The numbers above are now stable enough to diff
+against, which they were not before, so capturing the Windows scores is the
+obvious next step. AddressSanitizer is clean on a full parse.
 
 ## Batch status
 

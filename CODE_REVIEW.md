@@ -155,29 +155,35 @@ linked translation unit defined, and a long tail of type errors that the untyped
 
 Two limits on that, and they matter:
 
-**The corpus now runs; nothing compares it to Windows.** 14 of the 23 documents in
-`tests/` parse end to end at 98-100% matched sentences (see `MAC_PORT.md`,
-"Corpus status"). Getting there required fixing four defects the run itself
-exposed, which is exactly what it was for. But `tests/` is a corpus, not a test
-suite: nothing asserts what a document *should* score, and no result has been
-compared against the same document's score on Windows. A regression that lowered
-match rates without crashing would still pass unnoticed.
+**The corpus runs, it is reproducible, and nothing compares it to Windows.** All
+23 documents in `tests/` parse and exit zero, and two consecutive full runs are
+byte-identical apart from a timing metric (see `MAC_PORT.md`, "Corpus status").
+Getting there required fixing seven defects the run itself exposed, which is what
+it was for -- most consequentially a tokenizer that scanned past the end of the
+decoded text into uninitialized memory, which is why the same document used to
+give six different answers.
 
-Worse, **the parse is not reproducible run to run** -- the same binary on the same
-input gave 3,932 positions twice and 3,953 the third time (`MAC_PORT.md`, "Corpus
-status"). Until that is understood, the corpus cannot become an oracle: there is
-no stable number to assert against.
+That is coverage, not correctness. `tests/` is a corpus, not a test suite:
+nothing asserts what a document *should* score, and no result has been compared
+against the same document's score on the Windows build. A regression that lowered
+match rates without crashing would still pass unnoticed. What has changed is that
+the numbers are now stable enough to diff against.
 
 **Not every finding was individually re-verified.** A broad sample across every
 category was checked against the source and found correct; the remainder rests on
 that hit rate. Treat the code, not any document, as authoritative.
 
-Two things are worth doing next, in this order:
+The single highest-value thing anyone can do next is capture the Windows scores
+for these same 23 documents. The macOS numbers are stable now, so a stored
+expected-value file would turn `tests/` from a smoke test into a real regression
+suite -- and it is the only way to tell whether this parse is *equivalent* to the
+Windows one rather than merely successful and self-consistent.
 
-1. **Find out why the parse is not reproducible.** It is the more serious of the
-   two: without a stable number, no regression test is possible and no comparison
-   against Windows means anything.
-2. **Decide the start-marker question** in `MAC_PORT.md`'s "Corpus status" -- it
-   is what stops the remaining 9 documents -- and then capture the Windows scores
-   for these same documents, so the corpus becomes an oracle rather than a smoke
-   test.
+One smaller item, and it is data rather than code: `Adversary.txt` has no
+`sources` row, so `findStart` derives a start marker for it rather than using the
+`~~BEGIN` the other test sources carry, and it picks one near the end of a
+932-character footnote block -- leaving two positions parsed. Giving it a row
+would settle it. (`Roman.txt` has no row either and parses fine at 100%, so the
+missing row only bites when `findStart`'s heuristic picks badly.) `Nameres.txt`
+is 36 `~~~` trace directives with no prose, so its single position and `nan%`
+rate are correct and need nothing.
