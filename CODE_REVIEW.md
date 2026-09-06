@@ -163,11 +163,21 @@ suite: nothing asserts what a document *should* score, and no result has been
 compared against the same document's score on Windows. A regression that lowered
 match rates without crashing would still pass unnoticed.
 
+Worse, **the parse is not reproducible run to run** -- the same binary on the same
+input gave 3,932 positions twice and 3,953 the third time (`MAC_PORT.md`, "Corpus
+status"). Until that is understood, the corpus cannot become an oracle: there is
+no stable number to assert against.
+
 **Not every finding was individually re-verified.** A broad sample across every
 category was checked against the source and found correct; the remainder rests on
 that hit rate. Treat the code, not any document, as authoritative.
 
-The single highest-value thing anyone can do next is decide the start-marker
-question in `MAC_PORT.md`'s "Corpus status" -- it is what stops the remaining 9
-documents -- and then capture the Windows scores for these same documents so the
-corpus becomes an oracle rather than a smoke test.
+Two things are worth doing next, in this order:
+
+1. **Find out why the parse is not reproducible.** It is the more serious of the
+   two: without a stable number, no regression test is possible and no comparison
+   against Windows means anything.
+2. **Decide the start-marker question** in `MAC_PORT.md`'s "Corpus status" -- it
+   is what stops the remaining 9 documents -- and then capture the Windows scores
+   for these same documents, so the corpus becomes an oracle rather than a smoke
+   test.

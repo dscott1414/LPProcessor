@@ -194,7 +194,21 @@ Not errors, but a run touching them will fail rather than silently degrade:
 ## Corpus status (2026-09-06)
 
 **The engine parses real documents on macOS.** 14 of the 23 files in `tests/`
-parse end to end -- roughly 26,900 positions -- at 98.15-100% matched sentences:
+parse end to end -- roughly 26,900 positions -- at 98.15-100% matched sentences.
+
+**These numbers are a snapshot, not a measurement: the parse is not reproducible
+run to run.** Three consecutive runs of `VBGVBD incorrect` on an unchanged binary
+and unchanged inputs gave 3,932 positions twice and 3,953 the third time, with
+unknown words moving 213 -> 223. Matched-sentence percentage held at 98.15% in
+all three, and the two `MS/word` figures that differ across runs are a timing
+metric, but the position and unknown counts are a genuine difference in how the
+text was tokenized. `wordFormCache` was byte-identical before each run, so it is
+not the cause; the per-source `tests/*.wordCacheFile` were never rewritten
+either. The likely class is iteration order over the engine's many
+`unordered_map`s feeding back into decisions, but that is not established -- it
+needs someone to actually chase it. **Until it is understood, treat any
+comparison of these percentages between two runs as noise at the ~0.5% level on
+position counts.**
 
 | Test | Positions | Matched |
 |---|---|---|
