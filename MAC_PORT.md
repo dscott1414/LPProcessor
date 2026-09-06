@@ -191,6 +191,52 @@ Not errors, but a run touching them will fail rather than silently degrade:
 - The `#ifdef TEST_CODE` block in `Internet.cpp` (~line 583) still has Windows
   separators and a one-argument `mkdir`; it has never compiled on any platform.
 
+## Corpus status (2026-09-06)
+
+**The engine parses real documents on macOS.** 14 of the 23 files in `tests/`
+parse end to end -- roughly 26,900 positions -- at 98.15-100% matched sentences:
+
+| Test | Positions | Matched |
+|---|---|---|
+| VBGVBD incorrect | 3,953 | 98.15% |
+| syntaxRelationFields | 3,460 | 99.09% |
+| graded_sentences 1-5 | 13,650 | 99.54-100% |
+| timeExpressions | 2,712 | 99.58% |
+| verb object | 1,170 | 100% |
+| time | 1,100 | 99.32% |
+| tokenization | 388 | 84.62% |
+| agreement | 338 | 100% |
+| testParsing / thatParsing | 102 | 100% |
+
+Four defects had to be fixed to get here (see the 2026-09-06 commits). Two stale
+caches also had to be deleted, and both regenerate automatically: the 2022
+`wordFormCache` -- its validity check compares the file's mtime against the DB
+rows' timestamps, and the restored dump preserved 2022-era timestamps, so a stale
+cache looks current -- and `tests/timeExpressions.txt.wordCacheFile`, which was
+from 2010 and declared 196 forms where the database now has 209.
+
+**The 9 that do not parse all fail the same way**, and none of them crashes: the
+tokenizer cannot find the source's configured start marker, logs `Unable to find
+start in tests/<name>.txt`, and skips the document (`cSource::scanUntil`,
+`source.cpp`). The marker text is demonstrably present -- in `Adversary.txt` it
+sits at character 96 of the decoded file and matches the logged marker exactly,
+`\r\n` included -- so the file is being read correctly and the failure is in the
+match. `scanUntil` requires the marker to be alone on a line (`aloneOnLine`) and
+these markers span two lines, which is the likely cause. Whether the markers or
+the matcher are wrong is an author decision, and the data is untidy either way:
+`Adversary` and `Roman` have no `sources` row at all, and the row for `Usage`
+says `tests\usage.txt` against a file named `Usage.txt`.
+
+Affected: Adversary, Nameres, Roman, Usage, date-time-number, lappinl,
+modification, `pattern matching`, resolution.
+
+**No behavioural comparison against the Windows build has been made.** The
+percentages look healthy, but nothing has checked them against what the same
+documents scored on Windows, which is the only way to know the parse is
+equivalent rather than merely successful. `tests/` is a corpus, not an oracle:
+nothing asserts what a document *should* score, so a regression that lowered
+match rates without crashing would pass unnoticed.
+
 ## Batch status
 
 | Batch | Scope | Status |

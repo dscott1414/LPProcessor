@@ -155,16 +155,19 @@ linked translation unit defined, and a long tail of type errors that the untyped
 
 Two limits on that, and they matter:
 
-**Nothing has parsed a real document.** There is no test suite, no corpus run, and
-no behavioural comparison against the Windows build. "Compiles, links, starts,
-fails cleanly" is the ceiling of what has been demonstrated. The changes most
-likely to have altered parser behaviour — the encoding-detection ladder, the
-binary source-cache codec, the bounded pattern-engine formatters — are exactly
-the ones a corpus run would catch and a startup check would not.
+**The corpus now runs; nothing compares it to Windows.** 14 of the 23 documents in
+`tests/` parse end to end at 98-100% matched sentences (see `MAC_PORT.md`,
+"Corpus status"). Getting there required fixing four defects the run itself
+exposed, which is exactly what it was for. But `tests/` is a corpus, not a test
+suite: nothing asserts what a document *should* score, and no result has been
+compared against the same document's score on Windows. A regression that lowered
+match rates without crashing would still pass unnoticed.
 
 **Not every finding was individually re-verified.** A broad sample across every
 category was checked against the source and found correct; the remainder rests on
 that hit rate. Treat the code, not any document, as authoritative.
 
-Running the test corpus against a live MySQL is the single highest-value thing
-anyone can do next.
+The single highest-value thing anyone can do next is decide the start-marker
+question in `MAC_PORT.md`'s "Corpus status" -- it is what stops the remaining 9
+documents -- and then capture the Windows scores for these same documents so the
+corpus becomes an oracle rather than a smoke test.
