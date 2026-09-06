@@ -1562,7 +1562,7 @@ void initialize()
 void validateCacheDir()
 {
 	// Batch B4a: access(F_OK) is the POSIX spelling of lp_waccess(path, 0).
-	if (access(lp_utf16_to_utf8(lpwstring(cacheDir)).c_str(), F_OK) < 0)
+	if (access(lpNarrowPath(lpwstring(cacheDir)).c_str(), F_OK) < 0)
 		lplog(LOG_FATAL_ERROR, u"Cache directory %s does not exist!", cacheDir);
 }
 
@@ -1617,10 +1617,6 @@ void printWordMatchingStatistics(int numWordsOverAllSource, int globalTotalUnmat
 	getArtists(u"compactLabel",u"Roc-A-Fella Records",mbArtistsTypes);
 	getReleases(u"compactLabel",u"Roc-A-Fella Records",mbReleasesTypes);
 	getRecordings(u"artist",u"Jay-Z",mbRecordingsTypes);
-// TEST thesaurus
-	// build thesaurus
-	//extern vector <sDefinition> thesaurus;
-	//for (int I = 0; I < thesaurus.size(); I++)
 	// synonym testing
 	//vector <set <lpwstring> > synonyms;
 	//source.getWordNetSynonymsOnly(u"car", synonyms, 1);

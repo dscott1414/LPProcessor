@@ -370,17 +370,26 @@ int cInternet::getWebPath(int where, lpwstring webAddress, lpwstring& buffer, lp
 	int exitCode = 0;
 	string spath;
 	wTM(path, spath, CP_ACP);
+	// spath is a narrow mirror of `path` handed to raw mkdir()/access()/open()
+	// below rather than to the lp_w* layer, so it does not get lpNarrowPath()'s
+	// separator translation for free. Translate the separators wTM just copied out
+	// of the wide path -- the u"%s\\%s" join above and the two that
+	// distributeToSubDirectories inserted -- before any of them reaches the OS.
+	// The two separators this block writes itself are POSIX below.
+	for (size_t sepIndex = 0; sepIndex < spath.size(); sepIndex++)
+		if (spath[sepIndex] == '\\')
+			spath[sepIndex] = '/';
 	deleteIllegalChars((char*)spath.c_str() + pathlen + 5);
 	spath[pathlen + 1] = spath[pathlen + 6];
 	spath[pathlen + 3] = spath[pathlen + 7];
 	spath[pathlen + 2] = 0;
 	if (mkdir(spath.c_str(), 0777) < 0 && errno == ENOENT)
 		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
-	spath[pathlen + 2] = '\\';
+	spath[pathlen + 2] = '/';
 	spath[pathlen + 4] = 0;
 	if (mkdir(spath.c_str(), 0777) < 0 && errno == ENOENT)
 		lplog(LOG_FATAL_ERROR, u"Cannot create directory %s.", path);
-	spath[pathlen + 4] = '\\';
+	spath[pathlen + 4] = '/';
 	lpchar_t* wp = lp_strstr(path, u"http");
 	if (wp && (wp - path) < 5)
 		lplog(LOG_FATAL_ERROR, u"Please remove http addresses from web path to avoid overuse of the h/t directory %s!", path);
@@ -510,7 +519,7 @@ int cInternet::runJavaJerichoHTML(lpwstring webAddress, lpwstring outputPath, st
 		char previousDirectory[MAX_PATH];
 	if (!getcwd(previousDirectory, sizeof(previousDirectory)))
 		return -1;
-	std::string mainDirectory = lp_utf16_to_utf8(getMainDir());
+	std::string mainDirectory = lpNarrowPath(getMainDir());
 	if (chdir(mainDirectory.c_str()) < 0)
 		lplog(LOG_FATAL_ERROR, u"Cannot find main directory %S.", mainDirectory.c_str());
 

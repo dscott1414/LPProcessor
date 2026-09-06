@@ -112,24 +112,6 @@
 class cSyntacticRelationGroup;
 #define MAX_LEN 2048
 
-// One thesaurus/dictionary entry as scraped by the get*.cpp acquisition code and written to
-// the MySQL thesaurus tables.  Narrow (char) strings because
-// the scraped sources are ASCII/UTF-8 byte streams, unlike the lpchar_t document text.
-//   mainEntry            - the headword being defined.
-//   wordType             - part of speech as given by the source ("noun", "verb", ...).
-//   primarySynonyms      - synonyms listed directly under the headword.
-//   accumulatedSynonyms/accumulatedAntonyms - synonyms/antonyms gathered transitively.
-//   concepts             - ontology/concept ids associated with the entry.
-//   rest                 - remaining unparsed lines of the entry, kept verbatim.
-typedef struct {
-	string mainEntry;
-	string wordType;
-	vector <string> primarySynonyms;
-	vector <string> accumulatedSynonyms, accumulatedAntonyms;
-	vector <int> concepts;
-	vector <string> rest;
-} sDefinition;
-
 #include "semanticRelations.h"
 
 #define MINIMUM_SALIENCE_WITH_MATCHED_ADJECTIVES -2500 // 2500 makes Irish Sinn Feiner work!

@@ -32,8 +32,9 @@ on the author's behalf.
    no callers, which makes it the obvious candidate, but wiring it in changes which
    words the parser will learn and is therefore a deliberate decision, not a
    drop-in. (It survived the dead-code sweep below for exactly this reason.) The
-   same gap exists in `specials_main.cpp`'s `getWordPOS()`, which now only performs
-   its dictionary.com existence check.
+   same gap exists in `specials_main.cpp`'s `getWordPOS()`, which now does nothing
+   but set `isNonEuropean` — its dictionary.com existence check has since been
+   removed too.
 
 2. **`ACCUMULATE_GROUPS` is an unfinished feature, not a bug.**
    In `syntacticRelations.h`/`.cpp`. `cSourceWordInfo::addRelation()`'s
@@ -68,8 +69,8 @@ Removing a secret from the tip of a branch does not un-publish it.
 
 ## Removed integrations
 
-Twitter, NewsBank and Merriam-Webster support has been removed from the tree
-entirely. Two consequences are worth knowing:
+Twitter, NewsBank, Merriam-Webster, thesaurus.com and dictionary.com support has
+been removed from the tree entirely. Several consequences are worth knowing:
 
 - `cSource::sourceTypeEnum` retains a `RETIRED_SOURCE_TYPE_3` placeholder where
   `NEWS_BANK_SOURCE_TYPE` used to be. **Do not delete or reorder it.** These
@@ -77,6 +78,19 @@ entirely. Two consequences are worth knowing:
   existing rows and binary source caches; removing the member would silently
   renumber every type after it.
 - The Merriam-Webster removal is what created Open item 1 above.
+- **`getSynonyms()` is now WordNet-only.** It used to fall back to a MySQL
+  `thesaurus` table and then to scraping thesaurus.com. `getThesaurus.cpp` is
+  deleted, along with `scrapeNewThesaurus`, `getSynonymsFromDB` and the
+  `sDefinition` record they filled. A word absent from WordNet now yields no
+  synonyms instead of reaching the network. The hand-maintained `synonymMap` and
+  `synonymDeletionMap` overrides still apply.
+- **`cWord::illegalWord()` no longer consults dictionary.com**, which means **more
+  words now count as legal than did before.** This one has teeth: `illegalWord` is
+  called from `identifyObjects.cpp` on the live parse path, so it changes what the
+  parser accepts, not just what a batch scan records. Its `mysql` parameter is now
+  unused and is kept only so the `word.h` signature is unchanged.
+- `-specials` step 4 (the Dictionary.com cache sweep that populated `notwords`) is
+  gone, matching how step 71 was retired earlier.
 - `LP_DB_HOST` is gone. `getDBHost()` was never called by anything — the database
   host comes from the `-server` command-line flag, which defaults to `localhost`.
   The environment variable had simply never been wired up.

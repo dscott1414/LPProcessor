@@ -1,24 +1,21 @@
 /*
-	getWordNet.cpp - WordNet + thesaurus synonym/hypernym/hyponym/VerbNet class helpers
+	getWordNet.cpp - WordNet synonym/hypernym/hyponym/VerbNet class helpers
 
 	Overview:
 		Wraps the Princeton WordNet C API (findtheinfo_ds, morphstr, index_lookup,
 		traceptrs_ds) to extract synonyms, antonyms, hypernyms, hyponyms, coordinate
-		terms, and familiarity counts. Falls back to a MySQL 'thesaurus' table and,
-		if that is empty, scrapes thesaurus.com. Also maps verbs onto Levin/VerbNet
-		classes and caches ordered hypernym chains.
+		terms, and familiarity counts. Also maps verbs onto Levin/VerbNet classes and
+		caches ordered hypernym chains.
 
 	Pipeline position:
 		Initialization (initWordNet, initializeNounVerbMapping) and later whenever
-		objects/speakers need synonym or "kind of" tests. scrape*Thesaurus are
-		batch/on-demand acquisition.
+		objects/speakers need synonym or "kind of" tests.
 
 	Key entry points:
 		- initWordNet / addToWordNet / checkexist
 		- getSynonyms / getWordNetSynonymsOnly / getAntonyms / getFamiliarity
 		- getHyperNyms / hasHyperNym / getAllOrderedHyperNyms
 		- analyzeNounClass / analyzeVerbNetClass / deriveMainEntry
-		- scrapeOldThesaurus / scrapeNewThesaurus / getSynonymsFromDB
 
 	Key data structures / globals:
 		- synonymMap / synonymDeletionMap / mostCommonSynonymMap - hand overrides
@@ -28,19 +25,19 @@
 		- internalSynonymMap[4] - per-POS memo of getSynonyms results
 
 	Dependencies:
-		WordNet dict files (wninit); MySQL thesaurus table; thesaurus.com HTTP;
-		source\\lists VerbNet already loaded for analyzeVerbNetClass.
+		WordNet dict files (wninit); source\\lists VerbNet already loaded for
+		analyzeVerbNetClass.
 
 	Notes / gotchas:
-		getSynonymsFromDB escapes 'word' (escaped(), source.h) before concatenating into SQL.
-		scrapeOldThesaurus/scrapeNewThesaurus build thesaurus.com URLs by concatenating word
-		with only a manual space->'+' pass (no general percent-encoding for '&'/'#'/etc in the
-		headword); left as-is since changing the wire format for these scrapers without a live
-		endpoint to verify against is riskier than the gap it closes. wordCheck always ends in
-		LOG_FATAL_ERROR by design (it is a diagnostic report-then-exit utility). WordNet
-		SynsetPtrs from findtheinfo_ds are not freed.
-*/
-#pragma warning(disable : 4786 ) // disable warning C4786
+		getSynonyms is WordNet-only. It used to fall back to a MySQL 'thesaurus'
+		table and then to scraping thesaurus.com; both were removed at the author's
+		request along with getThesaurus.cpp, so a word absent from WordNet now yields
+		no synonyms rather than reaching the network. synonymMap/synonymDeletionMap
+		still apply.
+		wordCheck always ends in LOG_FATAL_ERROR by design (it is a diagnostic
+		report-then-exit utility). WordNet SynsetPtrs from findtheinfo_ds are not
+		freed.
+*/#pragma warning(disable : 4786 ) // disable warning C4786
 // Batch B5: the Win32-only includes that used to head this file (windows.h and
 // friends) are gone; these are what the code below actually needs on macOS.
 #include <unistd.h>
@@ -78,7 +75,6 @@ unordered_map<lpwstring, vector < vector <string> > > orderedHyperNymsMap; // pr
 unordered_map<lpwstring, int > orderedHyperNymsNumMap; // protected with orderedHyperNymsMapSRWLock
 // used for agentiveNominalizations 
 unordered_map <lpwstring, set < lpwstring > > nounVerbMap; // initialized
-void printEntry(sDefinition d);
 
 // Walks synset_ptr (ptrlist then nextss), collecting lowercased space-normalized synonyms
 // per sense into words. Skips the query 'word' itself. ignoreTopLevel drops the first sense
@@ -176,235 +172,6 @@ bool checkexist(char* word)
 
 
 
-
-// Scrapes the current thesaurus.com/browse page into sDefinition rows (wordType, primary
-// synonym, accumulated synonyms/antonyms with complexity|length). LOG_FATAL_ERROR if the
-// expected HTML markers are missing mid-parse.
-void scrapeNewThesaurus(lpwstring word, int synonymType, vector <sDefinition>& vd)
-{
-	int space;
-	while ((space = word.find('_')) != lpwstring::npos)
-		word[space] = ' ';
-	lpwstring webAddress = u"http://thesaurus.com/browse/" + word + u"?posfilter=", epath = word + u".thesaurus.txt", filePathOut, buffer, cSynonymType, match, headers;
-	switch (synonymType)
-	{
-	case NOUN: webAddress += u"noun"; break;
-	case ADJ: webAddress += u"adjective";  break; // may not work! 
-	case VERB: webAddress += u"verb"; break;
-	case ADV: webAddress += u"adverb"; break; // may not work!
-	default: break;
-	}
-	//int lastNewLine = 1000;
-	while ((space = webAddress.find(' ')) != lpwstring::npos)
-		webAddress[space] = '+';
-	while ((space = epath.find(' ')) != lpwstring::npos)
-		epath[space] = '+';
-	cInternet::getWebPath(-1, webAddress, buffer, epath, u"webSearchCache", filePathOut, headers, synonymType, false, true);
-	if (buffer.find(u"<li id=\"words-gallery-no-results\">no thesaurus results</li>") != lpwstring::npos ||
-		buffer.find(u"there's not a match") != lpwstring::npos)
-		return;
-	size_t beginPos = 0;
-	lpwstring spaceTest;
-	if (firstMatch(buffer, u"<strong>0</strong>", u"<span>Synonyms found <span class=\"headword\">", beginPos, spaceTest, false) != lpwstring::npos)
-		return;
-	while (true)
-	{
-		sDefinition d;
-		wTM(word, d.mainEntry);
-		lpwstring beginString = u"<div class=\"synonym-description\">", endString = u"</div>", description, synonymList;
-		size_t endPos;
-		beginPos = buffer.find(beginString);
-		if (beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
-		{
-			description = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
-			buffer.erase(beginPos, endPos - beginPos);
-			/*
-				<div class="synonym-description">
-				<em class="txt">verb</em>
-				<strong class="ttl">dig and search</strong>
-				</div>
-				*/
-			lpwstring wordTypeStr;
-			beginPos = 0;
-			if (nextMatch(description, u"<em class=\"txt\">", u"</em>", beginPos, wordTypeStr, false))
-				lplog(LOG_FATAL_ERROR, u"Can't find wordType");
-			wTM(wordTypeStr, d.wordType);
-			lpwstring primarySynonym;
-			beginPos = 0;
-			if (nextMatch(description, u"<strong class=\"ttl\">", u"</strong>", beginPos, primarySynonym, false))
-				lplog(LOG_FATAL_ERROR, u"Can't find short description");
-			string ps;
-			d.primarySynonyms.push_back(wTM(primarySynonym, ps));
-			beginString = u"<div class=\"relevancy-list\">";
-			beginPos = buffer.find(beginString, beginPos);
-			if (beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
-			{
-				synonymList = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
-				buffer.erase(beginPos, endPos - beginPos);
-				lpwstring synonymEntry;
-				beginPos = 0;
-				while (!nextMatch(synonymList, u"<li", u"</li>", beginPos, synonymEntry, false))
-				{
-					/*
-					<li >
-					<a href="http://thesaurus.com/browse/embed"
-					data-id="1"
-					data-category="{&quot;name&quot;: &quot;relevant-3&quot;, &quot;color&quot;: &quot;#fcbb45&quot;}"
-					data-complexity="2"
-					data-length="2">
-					<span class="text">embed</span>
-					<span class="star inactive">star</span>
-					</a>
-					</li>
-					*/
-					size_t bp = 0;
-					lpwstring complexity, length, synonym;
-					if (nextMatch(synonymEntry, u"data-complexity=\"", u"\"", bp, complexity, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find complexity");
-					bp = 0;
-					if (nextMatch(synonymEntry, u"data-length=\"", u"\"", bp, length, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find length");
-					bp = 0;
-					if (nextMatch(synonymEntry, u"<span class=\"text\">", u"</span>", bp, synonym, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find synonym entry");
-					synonym += u"|" + complexity + u"|" + length;
-					string ss;
-					d.accumulatedSynonyms.push_back(wTM(synonym, ss));
-				}
-			}
-			else
-			{
-				lplog(LOG_FATAL_ERROR, u"Thesaurus has no synonyms");
-			}
-			size_t nextBeginPos = buffer.find(beginString);
-			beginString = u"<section class=\"container-info antonyms\" >";
-			endString = u"</section>";
-			beginPos = buffer.find(beginString);
-			// antonym list for next synonym
-			if (!(beginPos >= nextBeginPos && nextBeginPos != lpwstring::npos) &&
-				beginPos != lpwstring::npos && (endPos = buffer.find(endString, beginPos + beginString.length())) != lpwstring::npos)
-			{
-				lpwstring antonymList = buffer.substr(beginPos + beginString.length(), endPos - beginPos - beginString.length());
-				buffer.erase(beginPos, endPos - beginPos);
-				lpwstring antonymEntry;
-				beginPos = 0;
-				while (!nextMatch(antonymList, u"<li", u"</li>", beginPos, antonymEntry, false))
-				{
-					/*
-					<li >
-					<a href="http://thesaurus.com/browse/embed"
-					data-id="1"
-					data-category="{&quot;name&quot;: &quot;relevant-3&quot;, &quot;color&quot;: &quot;#fcbb45&quot;}"
-					data-complexity="2"
-					data-length="2">
-					<span class="text">embed</span>
-					<span class="star inactive">star</span>
-					</a>
-					</li>
-					*/
-					size_t bp = 0;
-					lpwstring complexity, length, antonym;
-					if (nextMatch(antonymEntry, u"data-complexity=\"", u"\"", bp, complexity, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find complexity");
-					bp = 0;
-					if (nextMatch(antonymEntry, u"data-length=\"", u"\"", bp, length, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find length");
-					if (nextMatch(antonymEntry, u"<span class=\"text\">", u"</span>", bp, antonym, false))
-						lplog(LOG_FATAL_ERROR, u"Can't find antonym entry");
-					antonym += u"|" + complexity + u"|" + length;
-					string as;
-					d.accumulatedAntonyms.push_back(wTM(antonym, as));
-				}
-			}
-			vd.push_back(d);
-		}
-		else
-		{
-			if (vd.empty())
-			{
-				//lplog(LOG_FATAL_ERROR, u"Thesaurus has no description");
-				//printf("\nThesaurus has no description for %S (%S)\n", word.c_str(), filePathOut.c_str());
-				break;
-			}
-			else
-				break;
-		}
-	}
-}
-
-void split(string str, vector <string>& words, const char* splitch);
-
-// SELECT accumulated/primary synonyms for mainEntry=word and wordType bitmask. word is
-// escaped (escaped(), source.h) before being concatenated into SQL. LOCKs thesaurus READ.
-// Returns true if any sense was pushed.
-bool getSynonymsFromDB(MYSQL mysql, lpwstring word, vector < unordered_set <lpwstring> >& synonyms, int synonymType)
-{
-	bool entriesAdded = false;
-	lpwstring query = u"select primarySynonyms, accumulatedSynonyms from thesaurus where mainEntry = '";
-	query += escaped(word) + u"' and ";
-	// thesaurus mappings
-	// "adj"=1, "adv"=2, "prep"=4, "pron"=8, "conj"=16, "det"=32, "interj"=64, "n"=128, "v"=256, NULL };
-	if (synonymType == 1) // NOUN
-		query += u"(wordType&128)=128";
-	else if (synonymType == 2) // VERB
-		query += u"(wordType&256)=256";
-	else if (synonymType == 3) // ADJ
-		query += u"(wordType&1)=1";
-	else if (synonymType == 4) // ADV
-		query += u"(wordType&2)=2";
-	if (!myquery(&mysql, u"LOCK TABLES thesaurus READ")) return false;
-	MYSQL_RES* result = NULL;
-	MYSQL_ROW sqlrow;
-	if (myquery(&mysql, (lpchar_t*)query.c_str(), result))
-	{
-		if ((sqlrow = mysql_fetch_row(result)) != NULL)
-		{
-			string primarySynonyms = (sqlrow[0] == NULL) ? "" : sqlrow[0];
-			string properties = (sqlrow[1] == NULL) ? "" : sqlrow[1];
-			int lastBegin = 0;
-			unordered_set <lpwstring> sense;
-			for (int s = 0; s < properties.size(); s++)
-				if (properties[s] == ';')
-				{
-					lpwstring wtmp;
-					mTW(properties.substr(lastBegin, s - lastBegin), wtmp);
-					if (!wtmp.empty() && wtmp[wtmp.length() - 1] == u'*')
-						wtmp.erase(wtmp.length() - 1);
-					sense.insert(wtmp);
-					lastBegin = s + 1;
-					entriesAdded = true;
-				}
-			vector <string> ps;
-			split(primarySynonyms, ps, ";");
-			for (int psi = 0; psi < ps.size(); psi++)
-			{
-				lpwstring tmpstr;
-				if (ps[psi].find(" ") == string::npos)
-					sense.insert(mTW(ps[psi], tmpstr));
-				else
-				{
-					int wo;
-					if ((wo = ps[psi].find(" or ")) != string::npos)
-					{
-						vector <string> words;
-						split(ps[psi], words, " ");
-						if (words.size() == 3 && words[1] == "or")
-						{
-							sense.insert(mTW(words[0], tmpstr));
-							sense.insert(mTW(words[2], tmpstr));
-						}
-					}
-				}
-			}
-			if (sense.size() > 0)
-				synonyms.push_back(sense);
-		}
-		mysql_free_result(result);
-	}
-	myquery(&mysql, u"UNLOCK TABLES");
-	return entriesAdded;
-}
-
 unordered_map <lpwstring, vector < unordered_set <lpwstring> > > internalSynonymMap[4];
 // Flattens the per-sense getSynonyms overload into one set.
 void cSource::getSynonyms(lpwstring word, unordered_set <lpwstring>& synonyms, int synonymType)
@@ -415,8 +182,8 @@ void cSource::getSynonyms(lpwstring word, unordered_set <lpwstring>& synonyms, i
 		synonyms.insert(synonymsSenses[s].begin(), synonymsSenses[s].end());
 }
 
-// WordNet SIMPTR + synonymMap + DB/scrapeNewThesaurus, minus synonymDeletionMap. Memoized
-// in internalSynonymMap[synonymType]. Ignores non-alpha/_ words and anything containing "http".
+// WordNet SIMPTR + synonymMap, minus synonymDeletionMap. Memoized in
+// internalSynonymMap[synonymType]. Ignores non-alpha/_ words and anything containing "http".
 void cSource::getSynonyms(lpwstring word, vector <unordered_set <lpwstring> >& synonyms, int synonymType)
 {
 	LFS
@@ -442,29 +209,6 @@ void cSource::getSynonyms(lpwstring word, vector <unordered_set <lpwstring> >& s
 	{
 		for (int I = 0; I < synonyms.size(); I++)
 			synonyms[I].insert(si->second);
-	}
-	if (iswalpha(word[0]))
-	{
-		if (!getSynonymsFromDB(mysql, word, synonyms, synonymType))
-		{
-			vector <sDefinition> d;
-			scrapeNewThesaurus(word, synonymType, d);
-			for (int n = 0; n < d.size(); n++)
-			{
-				unordered_set <lpwstring> sense;
-				for (int I = 0; I < d[n].accumulatedSynonyms.size(); I++)
-				{
-					lpwstring tmp;
-					mTW(d[n].accumulatedSynonyms[I], tmp);
-					transform(tmp.begin(), tmp.end(), tmp.begin(), (int(*)(int)) tolower);
-					lpchar_t chopSense = tmp.find('|');
-					if (chopSense != lpwstring::npos)
-						tmp.erase(chopSense);
-					sense.insert(tmp);
-				}
-				synonyms.push_back(sense);
-			}
-		}
 	}
 	si = synonymDeletionMap.find(word);
 	if (si != synonymDeletionMap.end())
@@ -1591,7 +1335,24 @@ int cSource::initializeNounVerbMapping(void)
 	readWikiNominalizations(mysql, nounVerbMap);
 
 	char noun[1024];
-	FILE* nounfp = fopen("F:\\Program Files (x86)\\WordNet\\2.1\\dict\\index.noun", "r");
+	// Only reached when source/lists/nounVerbMapping is missing (the branch above
+	// returns when it opens). This is an external WordNet 2.1 installation, not
+	// part of this tree or of caches/, and it is not present on macOS -- the path
+	// was the author's Windows install, "F:\\Program Files (x86)\\WordNet\\2.1\\
+	// dict\\index.noun". Overridable with LP_WORDNET_DICT for a machine that does
+	// have one. The NULL check is new: fopen's result was passed straight to
+	// fgets(), so a missing file segfaulted here rather than reporting anything.
+	const char* wordNetIndexNoun = getenv("LP_WORDNET_DICT");
+	if (!wordNetIndexNoun || !*wordNetIndexNoun)
+		wordNetIndexNoun = "/usr/local/WordNet-2.1/dict/index.noun";
+	FILE* nounfp = fopen(wordNetIndexNoun, "r");
+	if (!nounfp)
+	{
+		lplog(LOG_ERROR, u"initializeNounVerbMapping: cannot open WordNet index %S - %S. "
+			u"Rebuild source/lists/nounVerbMapping, or set LP_WORDNET_DICT to an index.noun.",
+			wordNetIndexNoun, strerror(errno));
+		return -1;
+	}
 	while (fgets(noun, 1024, nounfp))
 	{
 		char* ch = strchr(noun, ' ');

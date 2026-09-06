@@ -377,30 +377,25 @@ int startProcesses(MYSQL &mysql, int sourceType, int processKind, int step, int 
 // cannot be imposed from inside the process.
 
 
-bool existsInDictionaryDotCom(MYSQL *mysql,lpwstring word, bool &networkAccessed);
 bool detectNonEuropeanWord(lpwstring word);
 int cacheWebPath(lpwstring webAddress, lpwstring &buffer, lpwstring epath, lpwstring cacheTypePath, bool forceWebReread, bool &networkAccessed);
 int discoverInflections(set <int> posSet, bool plural, lpwstring word);
 
-// Dictionary.com existence check only.  Returns 0 always.  print is unused.
-// Non-European words skip the lookup.
+// Sets isNonEuropean and returns 0.  Nothing else: every parameter but `word` and
+// `isNonEuropean` is now unused.
 //
-// NOTE: this no longer produces a part-of-speech set.  It used to fill posSet from
-// the Merriam-Webster Collegiate API, which has been removed; posSet is now left
-// as the caller supplied it and `inflections` is untouched.  Callers that depend
-// on POS discovery need a replacement dictionary source wired in here.
-int getWordPOS(MYSQL *mysql,lpwstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, int &dictionaryComQueried, int &dictionaryComCacheQueried, bool logEverything)
+// NOTE: this no longer produces a part-of-speech set, and has no dictionary source
+// of any kind.  It used to fill posSet from the Merriam-Webster Collegiate API and
+// then check the word against dictionary.com; both integrations have been removed
+// at the author's request.  posSet is left as the caller supplied it and
+// `inflections` is untouched.  Callers that depend on POS discovery need a
+// replacement dictionary source wired in here.
+int getWordPOS(MYSQL *mysql,lpwstring word, set <int> &posSet, int &inflections, bool print, bool &isNonEuropean, bool logEverything)
 {
 	LFS
-	(void)posSet; (void)inflections; (void)print; (void)logEverything;
+	(void)mysql; (void)posSet; (void)inflections; (void)print; (void)logEverything;
 	if (isNonEuropean = detectNonEuropeanWord(word))
 		return 0;
-	bool networkAccessed;
-	existsInDictionaryDotCom(mysql, word, networkAccessed);
-	if (networkAccessed)
-		dictionaryComQueried++;
-	else
-		dictionaryComCacheQueried++;
 	return 0;
 }
 
@@ -821,68 +816,6 @@ void removeIllegalNames(const lpchar_t *basepath)
 	}
 }
 
-// Sweep Dictionary.com cache.  putInTable is true (word does not exist, so
-// record it in notwords and delete the now-redundant cache file) when either
-// "no results" marker is present in the cached page.
-void scanAllDictionaryDotCom(MYSQL mysql, const lpchar_t *basepath, int &numFilesProcessed, int &numNotOpenable, int &filesRemoved,int &removeErrors)
-{
-	// Batch B4b: lpDirectoryEntries replaces the
-	// FindFirstFile/FindNextFile/FindClose loop; lpEntry is the entry name,
-	// which is what lpEntry held.
-	lpwstring lpBase(basepath);
-	for (const lpwstring &lpEntryString : lpDirectoryEntries(lpBase, u"*"))
-	{
-		const lpchar_t *lpEntry = lpEntryString.c_str();
-		// must be an rdfTypes extension
-		if (lpEntry[0] == '.')
-			continue;
-		numFilesProcessed++;
-		lpchar_t completePath[1024];
-		lp_wsprintf(completePath, u"%s/%s", basepath, lpEntry);
-		if (lp_wIsDirectory(completePath))
-			scanAllDictionaryDotCom(mysql, completePath, numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
-		else
-		{
-			if ((numFilesProcessed & 31) == 0)
-				printf("%08d:unopenable=%02d removed=%08d cannot remove=%08d\r", numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
-			int fd;
-			if ((fd = lp_wopen(completePath, O_RDWR | O_BINARY)) < 0)
-			{
-				numNotOpenable++;
-				printf("\nscanAllDictionaryDotCom:Cannot read path %S - %s.\n", completePath, sys_errlist[errno]);
-			}
-			else
-			{
-				int bufferlen = lp_filelength(fd);
-				lpchar_t *tbuffer = (lpchar_t *)tcalloc(bufferlen + 10, 1);
-				::read(fd, tbuffer, bufferlen);
-				::close(fd);
-				bool putInTable = lp_strstr(tbuffer, u"No results found") || lp_strstr(tbuffer, u"dcom-no-result");
-				tfree(bufferlen + 10, tbuffer);
-				if (putInTable)
-				{
-					if (lp_strlen(lpEntry) > 31)
-						continue;
-					lpchar_t qt[2048];
-					lp_wsprintf(qt, u"INSERT INTO notwords VALUES ('%s')", lpEntry);
-					if (!myquery(&mysql, qt, true) && mysql_errno(&mysql) != ER_DUP_ENTRY)
-						removeErrors++;
-					else
-					{
-						if (lp_wremove(completePath))
-						{
-							removeErrors++;
-							lp_wprintf(u"\nremove failed on path %s (%d)\n", completePath, (int)errno);
-						}
-						else
-							filesRemoved++;
-					}
-				}
-			}
-		}
-	}
-	return;
-}
 
 class wordInfo
 {
@@ -997,7 +930,7 @@ int analyzeEnd(cSource source, int sourceId, lpwstring path, lpwstring etext, lp
 // after the SELECT implicitly unlocks wordfrequencymemory while result is still open.
 int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainstDB)
 {
-	int definedUnknownWord = 0, dictionaryComQueried = 0, dictionaryComCacheQueried = 0;
+	int definedUnknownWord = 0;
 	int I = 0, sumTotalFrequency = 0, sumProcessedTotalFrequency = 0;
 	MYSQL_RES * result;
 	MYSQL_ROW sqlrow = NULL;
@@ -1045,7 +978,7 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		if (setProperNoun = (totalFrequency > 4 && ((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency) > 95.0))
 			posSet.insert(cForms::gFindForm(u"noun"));
 		else
-			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean, dictionaryComQueried, dictionaryComCacheQueried,true);
+			getWordPOS(&mysql,word, posSet, inflections, false, isNonEuropean,true);
 		if (posSet.size() > 0)
 		{
 			int wordId;
@@ -1069,8 +1002,8 @@ int writeWordFormsFromCorpusWideAnalysis(MYSQL mysql,bool actuallyExecuteAgainst
 		}
 		numWordsProcessed++;
 		// remember word for further sources
-		lp_wprintf(u"%03I64d:%15.15s:unknown=%06d/%06d dictionaryCom(%06d,cache=%06d) [UpperCase=%05.1f] [totalFormsDeleted=%08I64d] frequency %I64d%% done\r",
-			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed, dictionaryComQueried, dictionaryComCacheQueried,
+		lp_wprintf(u"%03I64d:%15.15s:unknown=%06d/%06d [UpperCase=%05.1f] [totalFormsDeleted=%08I64d] frequency %I64d%% done\r",
+			numWordsProcessed*100/totalWords,word.c_str(), definedUnknownWord, numWordsProcessed,
 			((capitalizedFrequency + allCapsFrequency)*100.0 / totalFrequency), totalFormsDeleted, ((int64_t)sumProcessedTotalFrequency)*100/ sumTotalFrequency);
 	}
 	mysql_free_result(result);
@@ -1769,7 +1702,7 @@ int removeOldCacheFiles(cSource source)
 void testRDFType(cSource &source, lpwstring specialExtension)
 {
 	int sourceId = 25291;
-	lpwstring path = u"J:\\caches\\texts\\Schoonover, Frank E\\Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
+	lpwstring path = TEXTDIR u"/texts/Schoonover, Frank E/Jules of the Great Heart  Free Trapper and Outlaw in the Hudson Bay Region in the Early Days.txt";
 	if (!myquery(&source.mysql, u"LOCK TABLES words WRITE, words w WRITE, words mw WRITE,wordForms wf WRITE")) return;
 	Words.readWords(path, sourceId, false, u"");
 	vector <cTreeCat *> rdfTypes;
@@ -5915,7 +5848,7 @@ int testViterbiHMMMultiSource(cSource &source,const lpchar_t *databaseHost,int s
 		wordNum++;
 	}
 	lpwstring temp;
-	source.sourcePath = u"M:\\caches\\texts\\hmmViterbiMultiSource." + itos((int)totalSource, temp);
+	source.sourcePath = TEXTDIR u"/texts/hmmViterbiMultiSource." + itos((int)totalSource, temp);
 	testViterbiFromSource(source);
 	return 0;
 }
@@ -6033,21 +5966,14 @@ int lpSpecialsMain(int argc,lpchar_t *argv[])
 				startHit = true;
 			unordered_map<lpwstring, int> extensions;
 			unordered_map<lpwstring, int64_t> extensionSpace;
-			scanAllRDFTypes(source.mysql, startPath, startHit, u"M:\\dbPediaCache", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, numERDFRemoved, extensions, extensionSpace);
+			scanAllRDFTypes(source.mysql, startPath, startHit, CACHEDIR u"/dbPediaCache", numFilesProcessed, numNotOpenable, numNewestVersion, numOldVersion, removeErrors, populatedRDFs, numERDFRemoved, extensions, extensionSpace);
 		}
 		break;
-	case 4:
-		unlockTables(source.mysql);;
-		{
-			int numFilesProcessed = 0, numNotOpenable = 0, filesRemoved = 0, removeErrors = 0;
-			if (!myquery(&source.mysql, u"LOCK TABLES notwords WRITE"))
-				return -1;
-			scanAllDictionaryDotCom(source.mysql, u"J:\\caches\\DictionaryDotCom", numFilesProcessed, numNotOpenable, filesRemoved, removeErrors);
-		}
-		break;
+	// (Step 4 removed: it swept the Dictionary.com cache, recording words the site
+	// had no page for in the notwords table.)
 	case 5:
 		unlockTables(source.mysql);;
-		removeIllegalNames(u"M:\\dbPediaCache");
+		removeIllegalNames(CACHEDIR u"/dbPediaCache");
 		break;
 	case 6:
 		unlockTables(source.mysql);;
@@ -6089,7 +6015,7 @@ int lpSpecialsMain(int argc,lpchar_t *argv[])
 		syntaxCheck(source, step,specialExtension,true);
 		break;
 	case 70:
-		stanfordCheckTest(source, u"F:\\lp\\tests\\thatParsing.txt", 27568, true,u"",50,specialExtension);
+		stanfordCheckTest(source, LMAINDIR u"/tests/thatParsing.txt", 27568, true,u"",50,specialExtension);
 		break;
 	// (Step 71 removed: it was a Merriam-Webster plural-word probe.)
 	case 100:

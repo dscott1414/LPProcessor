@@ -19,10 +19,11 @@ cmake --build . --target lpcore -j 8 -- -k   # -k: keep going past the files tha
 cmake --build . --target lpchar_smoketest   && ./bin/lpchar_smoketest
 cmake --build . --target lpprocess_smoketest && ./bin/lpprocess_smoketest
 cmake --build . --target lp_smoketest        && ./bin/lp_smoketest
+cmake --build . --target lpfile_smoketest    && (cd .. && ./build/bin/lpfile_smoketest)
 ```
 
 **The port is complete.** All 48 `lpcore` files compile, `liblpcore.a` archives, and
-both `lp` and `CorpusAnalysis` link and run as arm64 binaries. The three smoke-test
+both `lp` and `CorpusAnalysis` link and run as arm64 binaries. The four smoke-test
 targets are deliberately independent of `lpcore` and must always pass.
 
 ## External dependencies — all resolved
@@ -40,21 +41,24 @@ The Connector/C version gap is worth flagging: this code was written against a
 much older Connector/C, so API drift (`my_bool`, retired `mysql_options` codes,
 and so on) is a live possibility for batch B5 to discover.
 
-**There are two MySQL installations on this machine — do not mix them.**
+**MySQL on this machine is now entirely arm64.**
 
-- `/opt/homebrew/opt/mysql-client` — Connector/C 26.7.0, **arm64**, client
-  libraries only. This is what CMake finds and what the binaries link against;
-  `MYSQL_LIBRARY` in `build/CMakeCache.txt` should always point here.
-- `/usr/local/mysql` → `/usr/local/mysql-8.0.23-macos10.15-x86_64` — a full
-  MySQL 8.0.23 **server**, x86_64, installed 2021. Its `libmysqlclient.dylib` is
-  x86_64 and would fail to link against an arm64 target with a confusing
-  architecture error. It is not on any CMake search path, and must not be added
-  to one.
+- `/opt/homebrew/opt/mysql-client` — Connector/C 26.7.0, arm64, client libraries
+  only. This is what CMake finds and what the binaries link against;
+  `MYSQL_LIBRARY` in `build/CMakeCache.txt` should point here.
+- `/opt/homebrew/opt/mysql@8.0` — MySQL **server** 8.0.46, arm64, running as a
+  login service via `brew services`. Configured in `/opt/homebrew/etc/my.cnf`.
 
-The split is fine and in fact convenient: link the arm64 client, and let B16
-connect over TCP to the x86_64 server (which runs under Rosetta) — a client and
-server of different architectures talk to each other normally. The server was not
-running as of 2026-09-04, so B16 will need it started.
+The x86_64 MySQL 8.0.23 that used to live at `/usr/local/mysql` (and ran under
+Rosetta) has been removed, along with the architecture-mismatch trap it created.
+
+The `lp` database is restored: 51 tables, 42.32 GB. One server setting is
+load-bearing rather than a tuning choice — `max_heap_table_size = 4G`.
+`WRMemoryCheck()` (`main.cpp`) mirrors all 25,040,632 rows of `wordRelations`
+into the MEMORY-engine `wordRelationsMemory` at startup, which measures 2.04 GB;
+under MySQL's 16 MB default only 206,388 rows fit before
+`ERROR 1114: The table 'wordrelationsmemory' is full`, so the parser could not
+start at all.
 
 ## Key design decisions (made once, in B0/B1 — later batches must not re-litigate)
 
@@ -78,6 +82,94 @@ running as of 2026-09-04, so B16 will need it started.
   **`lpProcess.h`/`lpProcess.cpp`** (added in B4a) along with the rest of the
   portable process layer, so `main.cpp` and `specials_main.cpp` share one copy
   rather than drifting apart the way their existing duplicated code already has.
+
+## Disk I/O — where it happens, and how paths are targeted
+
+Every filesystem access in the built engine is inventoried here, because the
+whole of it depends on one translation that is invisible when it breaks.
+
+**One chokepoint.** All 178 filesystem call sites reach the OS through
+`lpNarrowPath()` in `lpFile.cpp`. It encodes a wide path to UTF-8 *and translates
+`\` to `/`*. The `lp_w*` family (`lp_wfopen`, `lp_wopen`, `lp_wremove`,
+`lp_waccess`, `lp_wmkdir`, `lp_wrename`, `lp_wstat`, `lp_filelength`,
+`lp_wIsDirectory`, `lpDirectoryEntries`) all go through it, which covers ~150 of
+those sites. The rest are raw `open`/`access`/`mkdir` calls that narrow their own
+path; they call `lpNarrowPath()` directly, and are in `source.cpp` (3),
+`Internet.cpp` and `main.cpp`.
+
+**Why the translation is needed.** Paths here are built with `\`: 123 string
+literals of the form `u"%s\\dbPediaCache\\_%s.txt"`, plus
+`distributeToSubDirectories()` (`getDictionary.cpp`), which writes `\` into
+`path[1]` and `path[3]` by hand to build the two-level fan-out the caches use. On
+Windows that was the separator. On macOS `\` is an ordinary filename character,
+so without translation every constructed path names one long nonexistent file.
+
+**Why translating unconditionally is safe.** No path component can contain a
+backslash: `convertIllegalChars()` (`getWikipedia.cpp`) rewrites every character
+of `WCHAR_ILLEGAL_PATH_CHARS` — which contains both `\` and `/` — to `!` before a
+name is substituted into a path. So a `\` reaching `lpNarrowPath()` was always
+put there by the code as a separator, never by data. The restored caches agree:
+zero of their 3,775,294 files have a backslash in the name.
+
+This is what lets the roots be POSIX while all 123 `\`-separated literals stay
+untouched — the two spellings mix freely.
+
+**The roots** (`general.h`, all overridable):
+
+| Macro | Value | Env override | Also |
+|---|---|---|---|
+| `MAINDIR` / `LMAINDIR` | `/Users/davidscott/lp` | `LP_MAIN_DIR` | |
+| `CACHEDIR` | `/Users/davidscott/lp/caches` | `LP_CACHE_DIR` | `-cacheDir` |
+| `WEBSEARCH_CACHEDIR` | `/Users/davidscott/lp/caches` | `LP_WEBSEARCH_CACHE_DIR` | |
+| `TEXTDIR` | `/Users/davidscott/lp/caches` | `LP_TEXT_DIR` | |
+
+The three cache roots are one directory, as they were on Windows (`M:\caches`).
+They stay separate macros because each has its own environment override.
+
+**Working directory matters.** Roughly 32 reads use paths relative to the main
+directory (`source\lists\...`, `tests\...`). `initialize()` does `chdir("..")`,
+so **the binary must be launched from `<MAINDIR>/source`**; `startProcesses()`
+does `chdir("source")` and restores it. Launched from anywhere else, every one of
+those reads misses.
+
+**Verify with** `lpfile_smoketest` (below), run from the main directory.
+
+### What the caches contain, and what reads them
+
+| Directory | Size / files | Layout | Read by |
+|---|---|---|---|
+| `dbPediaCache` | 154 GB / 1,164,362 | char fan-out | `createOntology.cpp`, `questionAnswering.cpp` |
+| `texts` | 14 GB / 35,834 | by author | source loading (`TEXTDIR\texts`) |
+| `wikipediaCache` | 3.6 GB / 1,325,736 | char fan-out | `getWikipedia.cpp` |
+| `Webster` | *emptied* | — | nothing (deleted 2026-09-05) |
+| `gutenbergCatalog` | 901 MB / 58,969 | flat | **nothing in the built tree** |
+| `wordNetCache` | 434 MB / 111,204 | flat | `getWordNet.cpp` |
+| `musicBrainzCache` | 3.6 MB / 83 | char fan-out | `getMusicBrainz.cpp` |
+
+`caches/Webster` held the Merriam-Webster cache, orphaned when that integration
+was removed (see `CODE_REVIEW.md` open item 1). Its 4.5 GB / 1,079,105 files were
+deleted on 2026-09-05 at the author's request; the empty directory is left in
+place. `caches/gutenbergCatalog` (901 MB) is named only in `README.md` and is
+still present.
+
+`webSearchCache` does not exist yet and does not need to: `cInternet::getWebPath`
+`lp_wmkdir`s it before first use. `caches/DictionaryDotCom` never existed here and
+is no longer referenced — the `-specials` step that swept it has been removed.
+
+### Paths that still point at things this machine does not have
+
+Not errors, but a run touching them will fail rather than silently degrade:
+
+- `getWordNet.cpp` `initializeNounVerbMapping()` reads an external WordNet 2.1
+  `index.noun`, which is not installed. It is only reached when
+  `source/lists/nounVerbMapping` is missing — that file exists (452 KB), and the
+  branch above returns first. Its `fopen` result used to be passed straight to
+  `fgets()`, so a miss segfaulted; it is now checked, logs, and returns -1.
+  `LP_WORDNET_DICT` overrides the path.
+- `checkTypes/`, `correctRDF/` and `convertPDFTextToDatabase/` still contain
+  `F:\`, `G:\` and `E:\` paths. None is in the CMake build.
+- The `#ifdef TEST_CODE` block in `Internet.cpp` (~line 583) still has Windows
+  separators and a one-argument `mkdir`; it has never compiled on any platform.
 
 ## Batch status
 
@@ -259,8 +351,10 @@ Apple. If it ever recurs, that misleading message is the symptom.
 There is no test suite. Each batch's claim is backed by an actual compile of the
 files it owns, plus the two smoke-test binaries. Final state: from a clean tree, `cmake .. && cmake --build .` produces
 `liblpcore.a`, `lp` and `CorpusAnalysis` with exit code 0 and no compile errors.
-All three smoke tests pass: `lpchar_smoketest` (95 checks over the printf engine,
-UTF codec and string primitives), `lpprocess_smoketest` (40 checks that spawn,
+All four smoke tests pass: `lpchar_smoketest` (95 checks over the printf engine,
+UTF codec and string primitives), `lpfile_smoketest` (10 checks that a
+'\'-separated path literal joined to a POSIX root reaches the real file in
+`caches/`; run it from the main directory), `lpprocess_smoketest` (40 checks that spawn,
 signal and reap real processes, including a regression check that an argument
 containing spaces survives as exactly one argument), and `lp_smoketest`
 (toolchain, yajl, libcurl, JNI).

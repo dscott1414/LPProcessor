@@ -2,12 +2,12 @@
 	getDictionary.cpp - HTML/JSON dictionary scrape, form discovery, and path/cache helpers
 
 	Overview:
-		Runtime lexicon fill-in: dictionary.com HTML, WordNet, and Wiktionary
-		extracts. NOTE: cWord::getForms currently has no part-of-speech source wired
-		up at all -- see the comment on it below. Also owns the shared HTML-slice
-		helpers (takeLastMatch,
-		firstMatch, nextMatch, eliminateHTMLCharacterEntities) used by Wikipedia and
-		thesaurus scrapers, plus distributeToSubDirectories / getPath for cache files.
+		Runtime lexicon fill-in from WordNet and Wiktionary extracts. NOTE:
+		cWord::getForms currently has no part-of-speech source wired up at all --
+		see the comment on it below. Also owns the shared HTML-slice helpers
+		(takeLastMatch, firstMatch, nextMatch, eliminateHTMLCharacterEntities) used
+		by the Wikipedia scraper, plus distributeToSubDirectories / getPath for
+		cache files.
 
 	Pipeline position:
 		Called from cWord::getForms when a token is not already in the word table
@@ -15,14 +15,16 @@
 
 	Key entry points:
 		- cWord::getForms / checkAdd / splitWord / illegalWord
-		- existsInDictionaryDotCom / getWNForms
+		- getWNForms
 		- getInflection / discoverInflections / identifyFormClass
 		- takeLastMatch / firstMatch / nextMatch / firstMatchNonEmbedded
 		- distributeToSubDirectories / getPath / eliminateHTMLCharacterEntities
 
 	Dependencies:
-		dictionary.com; WordNet; yajl; webSearchCache cache dir; MySQL for
-		illegal-word checks.
+		WordNet; yajl; webSearchCache cache dir.
+		(The dictionary.com integration was removed at the author's request, which
+		is why illegalWord() no longer consults MySQL and its `mysql` parameter is
+		unused.)
 
 	Notes / gotchas:
 		firstMatch(lpchar_t* / char*) NUL-terminates the endString in
@@ -925,53 +927,6 @@ vector<lpwstring> classes = { u"adjective",u"adverb",u"verb",u"noun",u"interject
 vector<lpwstring> ignoreAfter = { u"prefix",u"suffix",u"phrase",u"saying",u"quotation",u"pronunciation spelling",u"script annotation",u"combining form",u"contraction",u"indefinite article",u"definite article" }; // must be processed after classes
 
 
-// returns false if not found by the site (or error)
-// True if dictionary.com has a definition page for word (cached). Sets networkAccessed if fetched.
-bool existsInDictionaryDotCom(MYSQL* mysql, lpwstring word, bool& networkAccessed)
-{
-	if (word.length() <= 2 || word.length() > 31)
-		return false;
-	//initializeDatabaseHandle(mysql, u"localhost", alreadyConnected);
-	MYSQL_RES* result;
-	int64_t numResults = 0;
-	lpchar_t qt[1024];
-	lpchar_t path[1024];
-	path[0] = '_';
-	lp_strcpy(path + 1, word.c_str());
-	convertIllegalChars(path + 1);
-	lp_snprintf(qt, 1024, u"select 1 from notwords where word = '%s'", path);
-	if (!myquery(mysql, u"LOCK TABLES notwords READ"))
-		return false;
-	if (myquery(mysql, qt, result))
-	{
-		numResults = mysql_num_rows(result);
-		mysql_free_result(result);
-	}
-	if (!myquery(mysql, u"UNLOCK TABLES"))
-		return false;
-	//lplog(LOG_INFO, u"*** existsInDictionaryDotCom: statement %s resulted in numRows=%d.", qt, numResults);
-	if (numResults > 0)
-		return false;
-
-	lpwstring buffer, diskPath;
-	if (cInternet::cacheWebPath(u"https://www.dictionary.com/browse/" + word, buffer, word, u"DictionaryDotCom", false, networkAccessed, diskPath))
-		return false;
-	if ((networkAccessed && cInternet::redirectUrl.find(u"noresults") != lpwstring::npos) ||
-		buffer.find(u"No results found") != lpwstring::npos ||
-		buffer.find(u"dcom-no-result") != lpwstring::npos ||
-		buffer.find(u"dcom-misspell") != lpwstring::npos)
-	{
-		if (!myquery(mysql, u"LOCK TABLES notwords WRITE"))
-			return false;
-		lp_wsprintf(qt, u"INSERT INTO notwords VALUES ('%s')", path);
-		myquery(mysql, qt, true);
-		lp_wremove(diskPath.c_str());
-		if (!myquery(mysql, u"UNLOCK TABLES"))
-			return false;
-		return false;
-	}
-	return true;
-}
 
 // True if word contains a codepoint outside the Latin/common punctuation range LP can inflect.
 // True if word cannot be represented in CP1252 without substitution.
@@ -988,6 +943,14 @@ bool detectNonEuropeanWord(lpwstring word)
 // True if sWord should not be added (too long, disqualified punctuation, or DB-blocked).
 bool cWord::illegalWord(MYSQL* mysql, lpwstring sWord)
 {
+	// `mysql` is now unused: this used to end with a dictionary.com existence
+	// check (existsInDictionaryDotCom), which rejected any word the site had no
+	// page for. That integration has been removed at the author's request, so the
+	// only remaining tests are the two below and MORE WORDS NOW COUNT AS LEGAL
+	// than did before. The parameter is kept because illegalWord() is declared in
+	// word.h and called from identifyObjects.cpp on the live parse path; changing
+	// its signature is a separate decision from removing the integration.
+	(void)mysql;
 	// non English word?
 	if (detectNonEuropeanWord(sWord) || sWord.find_first_of(u"��������������������������") != lpwstring::npos)
 		return true;
@@ -995,17 +958,13 @@ bool cWord::illegalWord(MYSQL* mysql, lpwstring sWord)
 	size_t whereQuote = sWord.find('\'');
 	if (whereQuote != lpwstring::npos && whereQuote > 0 && whereQuote < sWord.length() - 1)
 		return true;
-	// check dictionary.com for a sanity check
-	bool networkAccessed;
-	if (!existsInDictionaryDotCom(mysql, sWord, networkAccessed))
-		return true;
 	return false;
 }
 
 // this routine should look up words from wiktionary or some other dictionary
 // this returns >0 if word is found or WORD_NOT_FOUND if word lookup fails.
-// Discovers forms for an unknown sWord (MW API, dictionary.com, WordNet). Adds them via
-// checkAdd. Returns 0 if any form was added, negative if the word is illegal/empty.
+// Discovers forms for an unknown sWord. Adds them via checkAdd. Returns 0 if any
+// form was added, negative if the word is illegal/empty.
 // !!! NO DICTIONARY SOURCE IS WIRED UP.  This function always reports the word as
 // not found, so unknown words acquire no forms.
 //

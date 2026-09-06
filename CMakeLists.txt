@@ -228,7 +228,6 @@ set(LPCORE_SOURCES
   envConfig.cpp
   getDictionary.cpp
   getMusicBrainz.cpp
-  getThesaurus.cpp
   getWikipedia.cpp
   getWordNet.cpp
   getWordNetMaps.cpp
@@ -372,6 +371,24 @@ add_executable(lpprocess_smoketest EXCLUDE_FROM_ALL
   utfConvert.cpp
 )
 target_include_directories(lpprocess_smoketest PRIVATE ${CMAKE_SOURCE_DIR})
+
+# ---------------------------------------------------------------------------
+# lpFile path smoke test — same standalone pattern as the two above. Proves that
+# lpNarrowPath() joins this codebase's '\'-separated path literals onto a POSIX
+# root and reaches the real file, which is what lets general.h's roots be POSIX
+# while the 123 '\'-separated path literals stay untouched. Silent when broken
+# (every open() just misses and the engine re-fetches instead of using the
+# caches), so it is checked by running rather than by reading. Build and run:
+#   cmake --build <builddir> --target lpfile_smoketest
+#   <builddir>/bin/lpfile_smoketest      # from the main directory
+# ---------------------------------------------------------------------------
+add_executable(lpfile_smoketest EXCLUDE_FROM_ALL
+  lpfile_smoketest.cpp
+  lpFile.cpp
+  lpchar.cpp
+  utfConvert.cpp
+)
+target_include_directories(lpfile_smoketest PRIVATE ${CMAKE_SOURCE_DIR})
 
 message(STATUS "lp Mac port — through batch B3 (root headers)")
 message(STATUS "  LP_HAVE_WN=${LP_HAVE_WN}  LP_HAVE_MYSQL=${LP_HAVE_MYSQL}  JNI_FOUND=${JNI_FOUND}  CURL_FOUND=${CURL_FOUND}")

@@ -3,7 +3,7 @@
 
 	Overview:
 		Replaces the hardcoded MySQL password and third-party API keys that used
-		to live directly in DB.cpp / DBCreateSQLSchema.cpp / getThesaurus.cpp /
+		to live directly in DB.cpp / DBCreateSQLSchema.cpp /
 		questionAnsweringWebSearch.cpp / getDictionary.cpp (see CODE_REVIEW.md,
 		"Secrets in source"), and gives MAINDIR/CACHEDIR/WEBSEARCH_CACHEDIR/
 		TEXTDIR an env-var override on top of their general.h compile-time

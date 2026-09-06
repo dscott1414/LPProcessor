@@ -5,14 +5,12 @@
 		createDatabase() is the one-shot installer: connect (or create schema
 		`lp`), then CREATE the forms/sources/words/wordForms/wordFrequency/
 		noRDFTypes tables and the object/relation family.  The other functions
-		are CREATE TABLE helpers for thesaurus/groups/locations/time, plus
-		INSERT generators that seed `sources` from the BNC index, day
+		are INSERT generators that seed `sources` from the BNC index, day
 		numbers, the tests\\ directory, and QA parse-request paths.
 
 	Pipeline position:
 		Run once from main when the schema is missing.  generate*Sources is also
-		called from that path.  Thesaurus/group/location/time CREATEs are
-		orphaned (author notes they "do not exist within the database").
+		called from that path.
 
 	Key entry points:
 		- createDatabase() - full install.
@@ -57,34 +55,6 @@
 #include "QuestionAnswering.h"
 
 bool checkFull(MYSQL* mysql, lpchar_t* qt, size_t& len, bool flush, lpchar_t* qualifier);
-
-//maxSynonymAccumulatedSize = 552
-//maxAntonymAccumulatedSize = 106
-//maxPrimarySynonymAccumulatedSize = 86
-//maxConceptSize = 35
-
-
-/*
-typedef struct {
-string mainEntry;
-string wordType;
-vector <string> primarySynonyms;
-vector <string> accumulatedSynonyms, accumulatedAntonyms;
-vector <int> concepts;
-vector <string> rest;
-} sDefinition;
-
-*/
-// Append each narrow string as "value;" into a wide SQL literal, escaped.
-static void appendEscapedList(lpwstring& qt, const vector <string>& values)
-{
-	lpwstring wide;
-	for (unsigned int I = 0; I < values.size(); I++)
-	{
-		mTW(values[I], wide);
-		qt += escaped(wide) + u";";
-	}
-}
 
 
 

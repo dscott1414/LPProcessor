@@ -827,7 +827,6 @@
     <ClCompile Include="definePatterns.cpp" />
     <ClCompile Include="getDictionary.cpp" />
     <ClCompile Include="getMusicBrainz.cpp" />
-    <ClCompile Include="getThesaurus.cpp" />
     <ClCompile Include="getWikipedia.cpp" />
     <ClCompile Include="getWordNet.cpp" />
     <ClCompile Include="questionAnsweringWebSearch.cpp">

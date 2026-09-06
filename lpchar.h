@@ -175,12 +175,11 @@ void lp_towlower_str(lpwstring& s);
 // -- same NUL-terminated, in-place, ASCII-only contract as the lpwstring&
 // overload above.
 void lp_towlower_str(lpchar_t* s);
-// Batch B2 addition: narrow-char overload, replacing the 2 real _strlwr call
-// sites in getThesaurus.cpp (both `_strlwr((char*)me1.c_str())` on a narrow
-// std::string, i.e. genuinely char not lpchar_t -- _strlwr has no width issue
-// of its own, but it's an MSVC-CRT-only name with zero macOS equivalent, same
-// class of problem as the rest of this file). ASCII-only, mirrors the wide
-// version exactly.
+// Batch B2 addition: narrow-char overload for _strlwr, an MSVC-CRT-only name
+// with zero macOS equivalent (no width issue of its own, but the same class of
+// problem as the rest of this file). Its two call sites were in getThesaurus.cpp,
+// which has since been removed; kept as the narrow counterpart of the wide
+// overload above. ASCII-only, mirrors the wide version exactly.
 void lp_towlower_str(char* s);
 
 // Batch B2 addition: uppercasing counterpart to lp_towlower_str, replacing

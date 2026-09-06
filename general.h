@@ -81,11 +81,29 @@
 #define MIN_INT (~unsigned (0) ^ MAX_INT)     /* Most negative integer value. */
 #define MAX_SIGNED_SHORT 32767
 #define _MIL 1024*1024
-#define MAINDIR "F:\\lp"
-#define LMAINDIR u"F:\\lp"
-#define CACHEDIR u"M:\\caches"
-#define WEBSEARCH_CACHEDIR u"M:\\caches"
-#define TEXTDIR u"M:\\caches"
+// Compile-time filesystem roots. These are defaults only: envConfig.h's
+// getMainDir()/getCacheDir()/getWebSearchCacheDir()/getTextDir() prefer
+// LP_MAIN_DIR / LP_CACHE_DIR / LP_WEBSEARCH_CACHE_DIR / LP_TEXT_DIR when set, and
+// -cacheDir overrides the cache root again on the command line. They were the
+// author's Windows drive letters (MAINDIR "F:\\lp", the other three "M:\\caches")
+// and are now the macOS tree, where the restored 178 GB of caches actually live.
+//
+// Written with '/' on purpose. The rest of the codebase joins paths with '\'
+// (u"%s\\dbPediaCache\\_%s.txt" and the like); lpNarrowPath() in lpFile.cpp
+// translates every '\' to '/' at the point a path reaches the OS, so the two
+// spellings mix freely and only these roots needed changing rather than all 123
+// path literals.
+//
+// The three cache roots are one directory, as they were on Windows: the parser
+// reads texts/ under TEXTDIR, webSearchCache/ under WEBSEARCH_CACHEDIR, and
+// dbPediaCache/, wikipediaCache/, wordNetCache/, musicBrainzCache/ under CACHEDIR,
+// all of them siblings inside caches/. They are kept as three separate macros
+// because each has its own environment override.
+#define MAINDIR "/Users/davidscott/lp"
+#define LMAINDIR u"/Users/davidscott/lp"
+#define CACHEDIR u"/Users/davidscott/lp/caches"
+#define WEBSEARCH_CACHEDIR u"/Users/davidscott/lp/caches"
+#define TEXTDIR u"/Users/davidscott/lp/caches"
 #define MAX_COST 100000
 #define CONFIDENCE_NOMATCH 100000
 #define RDFLIBRARYTYPE_VERSION u'M'

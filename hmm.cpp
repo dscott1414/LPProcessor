@@ -1242,8 +1242,8 @@ void tagFromSource(cSource& source, vector <lpwstring>& model, int wordCountLimi
 	// Emission matrix: the probability that a word is tagged as a certain tag
 	vector <lpwstring> vocab = generateVocabFromSource(source, wordCountLimit);
 	vector<vector<double>> wordTagProbabilityMatrix = constructWordTagProbabilityMatrix(wordTagCountsMap, tagCountsMap, tags, vocab);
-	DIYDiskArray<double> probabilityMatrix((source.m.size() > 12000000) ? u"M:\\caches\\ViterbiProbabilityMatrixArray.tmp" : NULL);
-	DIYDiskArray<int> pathMatrix((source.m.size() > 25000000) ? u"M:\\caches\\ViterbiPathMatrixArray.tmp" : NULL);
+	DIYDiskArray<double> probabilityMatrix((source.m.size() > 12000000) ? CACHEDIR u"/ViterbiProbabilityMatrixArray.tmp" : NULL);
+	DIYDiskArray<int> pathMatrix((source.m.size() > 25000000) ? CACHEDIR u"/ViterbiPathMatrixArray.tmp" : NULL);
 	// Decode
 	unordered_map <lpwstring, int> vocabReverseLookup;
 	// Initialize start probabilities

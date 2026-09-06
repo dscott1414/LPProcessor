@@ -75,6 +75,15 @@
 #define ERROR_ALREADY_EXISTS EEXIST
 #endif
 
+// Encode a wide path to the bytes the OS wants, translating '\' separators to '/'.
+// Every lp_w* function below already applies this, so call it directly only where
+// a path is handed to a raw POSIX call instead of going through this layer (there
+// are a handful of such sites in source.cpp, Internet.cpp and main.cpp, which
+// open() a path they narrowed themselves). Use this rather than a bare
+// lp_utf16_to_utf8() for anything that is a path: lp_utf16_to_utf8 is the general
+// string encoder and deliberately does not touch separators.
+std::string lpNarrowPath(const lpwstring& path);
+
 // Direct replacements for the MSVC wide CRT. Each encodes the path to UTF-8 and
 // calls the ordinary POSIX/C function; return values and errno behaviour are those
 // of the underlying call.

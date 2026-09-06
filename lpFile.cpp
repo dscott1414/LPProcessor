@@ -8,10 +8,40 @@
 #include <errno.h>
 #include <string.h>
 
-// One place where a wide path becomes the bytes the OS wants.
+// One place where a wide path becomes the bytes the OS wants, and the one place
+// that translates path separators.
+//
+// Every path in this codebase is built with '\' separators -- 123 string literals
+// (u"%s\\dbPediaCache\\_%s.txt" and friends) plus distributeToSubDirectories(),
+// which writes '\' into path[1] and path[3] by hand. On Windows that was the
+// separator; on macOS '\' is an ordinary filename character, so without this
+// translation every constructed path names one long file that does not exist
+// rather than a file inside a directory.
+//
+// Translating unconditionally is safe here, and provably so: no path component
+// can ever legitimately contain a backslash, because convertIllegalChars()
+// (getWikipedia.cpp) rewrites every character of WCHAR_ILLEGAL_PATH_CHARS -- a
+// set that contains both '\' and '/' -- to '!' before a name is substituted into
+// a path. So a '\' surviving to this point was always put there by the code as a
+// separator, never by data. The restored caches agree: zero of their 3,775,294
+// files have a backslash in the name.
+//
+// '/' is left alone, so paths that are already POSIX (LP_CACHE_DIR, -cacheDir,
+// and the roots in general.h) pass through untouched and the two spellings mix
+// freely -- which is what lets a POSIX root be combined with the '\'-separated
+// literals without touching all 123 of them.
+std::string lpNarrowPath(const lpwstring& path)
+{
+	std::string narrow(lp_utf16_to_utf8(path));
+	for (size_t i = 0; i < narrow.size(); i++)
+		if (narrow[i] == '\\')
+			narrow[i] = '/';
+	return narrow;
+}
+
 static inline std::string narrowPath(const lpwstring& path)
 {
-	return std::string(lp_utf16_to_utf8(path));
+	return lpNarrowPath(path);
 }
 
 FILE* lp_wfopen(const lpchar_t* path, const char* mode)

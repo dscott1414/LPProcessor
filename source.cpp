@@ -2281,7 +2281,7 @@ bool cSource::FlushFile(int fd, void* buffer, int& where)
 bool cSource::writePatternUsage(lpwstring path, bool zeroOutPatternUsage)
 {
 	path += u".patternUsage";
-	int fd = ::open(lp_utf16_to_utf8(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	int fd = ::open(lpNarrowPath(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (fd < 0)
 	{
 		lplog(LOG_ERROR, u"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
@@ -2329,7 +2329,7 @@ bool cSource::write(lpwstring path, bool S2, bool makeCopyBeforeSourceWrite, lpw
 		else if (lp_wrename(path.c_str(), renamePath.c_str()) && errno != ENOENT)
 			lplog(LOG_ERROR, u"RENAME %s to %s - %S", path.c_str(), renamePath.c_str(), sys_errlist[errno]);
 	}
-	int fd = ::open(lp_utf16_to_utf8(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	int fd = ::open(lpNarrowPath(path).c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (fd < 0)
 	{
 		lplog(LOG_ERROR, u"Unable to open source %s - %s", path.c_str(), lastErrorMsg().c_str());
@@ -3010,10 +3010,10 @@ bool cSource::readSource(lpwstring& path, bool checkOnly, bool& parsedOnly, bool
 		//unescapeStr(path); // doesn't work on 'Twixt Land & Sea: Tales
 		lpwstring locationCache = path + u".SourceCache" + specialExtension;
 	if (checkOnly)
-		return access(lp_utf16_to_utf8(locationCache).c_str(), F_OK) == 0; // batch B5
+		return access(lpNarrowPath(locationCache).c_str(), F_OK) == 0; // batch B5
 	//lplog(LOG_WHERE, u"TRACEOPEN %s %s", path.c_str(), LP_TEXT(__func__).c_str());
 	// IOHANDLE fd = lp_wopen(locationCache.c_str(), O_RDWR | O_BINARY);   // MAX_PATH limitation
-	int fd = ::open(lp_utf16_to_utf8(locationCache).c_str(), O_RDONLY);
+	int fd = ::open(lpNarrowPath(locationCache).c_str(), O_RDONLY);
 	if (fd < 0)
 	{
 		// Batch B5: no ::close() here any more -- the Windows version closed the
