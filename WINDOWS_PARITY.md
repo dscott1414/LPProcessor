@@ -34,20 +34,59 @@ therefore findable.
   genuine fix — but it is a behavioural change relative to the 2022 build and is
   a candidate if a `__CLOSING__S1` divergence shows up.
 
-## Current state
+## Current state (macOS run 2)
 
 | | macOS | Windows |
 |---|---|---|
-| size | 67,349,081 | 70,569,669 |
+| size | 67,355,747 | 70,569,669 |
 | `sourceVersion` | 9 | 8 |
-| word matches | 100,633 | 100,657 |
+| word matches | 100,627 | 100,657 |
 
 `SOURCE_VERSION` was bumped 8→9 in the port commit `a6cd92c`. Since the format is
 unchanged, that bump was defensive rather than required; it will need to go back
 to 8 for byte-identity, but **not until the content matches**, or it would just
 hide the real differences.
 
-## First divergence
+## Result so far: the word sequences are identical
+
+Every one of the **100,627** words macOS produces matches the Windows reference
+**exactly, word for word**, across the whole 905 KB novel. Windows has 30 extra
+tokens and nothing else differs.
+
+| | words |
+|---|---|
+| macOS, first run | 100,633 |
+| macOS, second run | **100,627** |
+| Windows reference | 100,657 |
+
+Getting there resolved both classes of difference, and neither was what it looked
+like:
+
+**The 30 extra Windows tokens are a Windows bug, not a macOS omission.** They are
+thirty consecutive `in` at the very end of the file. The book ends
+`"And a damned good sport too," said Tommy.`, and macOS ends correctly with
+`said tommy . ||| ||| |||`. Those thirty tokens are the tokenizer running past
+the end of the decoded text — the same `bufferLen` defect fixed in `5b90003`,
+which the 2022 Windows build still had. **Byte-identity with this reference would
+require re-introducing that bug.**
+
+**The six multi-word tokens were a cold-start artifact, not a port bug.** On the
+first run macOS split `vice versa`, `au revoir` (×3) and `peche melba` (×2) into
+pairs. All three are real dictionary entries (ids 19914, 57776, 141877) — easy to
+miss because they carry `sourceId = 0`, not NULL, and the loader selects
+`WHERE sourceId IS NULL`, so only 7,981 words preload and the rest are fetched on
+demand *during* the parse. That is too late for `cWord::continueParse`, which
+joins multi-word tokens by binary-searching `multiElementWords` at tokenization
+time. The run then writes those words to `<source>.wordCacheFile`, so the *next*
+run loads them upfront and joins correctly. That per-source cache did not exist
+here — it was never shipped with the reference — which is why the first run
+differed and the second did not.
+
+**Practical consequence:** a first parse of any source will differ from a
+warmed-up one. Compare only second-or-later runs, or ship the `.wordCacheFile`
+alongside a reference cache.
+
+## First divergence (measured on run 1 — re-check against run 2)
 
 Record 0 (`|||`, the section separator) is **byte-identical**, 435 bytes on both.
 Record 1 is the word `prologue`: 485 bytes on macOS, 445 on Windows. Decoded:
@@ -89,8 +128,11 @@ if (effectiveSentenceLength <= 2)
   cache with the same 2022-03-12 timestamp, so that run wrote pattern usage. The
   run reproduced here used `-book 2 3 -BC 0 -SW -forceSourceReread -retry`. A
   different flag set would produce a different cache regardless of code.
-- **The 24 missing word matches.** macOS has 100,633 against Windows' 100,657.
-  That divergence is somewhere after record 1 and has not been located yet.
+- **A macOS cache cannot be read back.** `cSource::read` consumes all 100,627
+  records cleanly (`error=0`, `where=47,837,501` of `67,355,747`) and then fails
+  in the trailing sections — sentenceStarts / sections / speakerGroups / pema.
+  The file is not truncated; 19.5 MB follows the records. Writing a cache the
+  reader rejects is a bug in its own right, independent of Windows parity.
 
 ## How to reproduce
 
@@ -101,9 +143,12 @@ export WNSEARCHDIR=/Users/davidscott/lp/WordNet/2.1/dict
 ./build/bin/lp -book 2 3 -BC 0 -SW -forceSourceReread -retry
 ```
 
-**Send the logs to /dev/null first.** `Secret Adversary.txt` has 23 `~~` trace
+**Send the logs to /dev/null first.** `Secret Adversary.txt` carried 23 `~~` trace
 directives immediately after `PROLOGUE`, and an unredirected run wrote 39 GB into
-`main.lplog` in four minutes and kept growing. `ln -s /dev/null main.lplog`
+`main.lplog` in four minutes and kept growing. (They were changed to `~~~`, which
+disables them, on 2026-09-07 — note that this also zeroes the trace bits that
+`writeFlags` stores in every record, so a cache built with them off will differ
+from the Windows reference, whose dominant per-record mask is `0x07ffff`.) `ln -s /dev/null main.lplog`
 (and resolution, where, rescheck, …) discards the output without changing the
 parse — the traces cannot simply be turned off, because `cWordMatch::writeFlags`
 serializes them into the cache and they are part of the bytes being compared.
