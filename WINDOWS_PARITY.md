@@ -155,3 +155,38 @@ serializes them into the cache and they are part of the bytes being compared.
 
 Compare with `scratchpad/cmp_cache.py`, which decodes both headers and reports
 the first differing byte and its offset into the record stream.
+
+## The pipeline beyond parsing: three external dependencies
+
+The parse phase is solved (see above). Getting a *complete* cache — one with
+speaker groups and the S2 sections, as the Windows reference has — needs three
+things the macOS machine did not have. Found by bisecting `processSource`:
+
+1. **A cache the reader accepts.** `cSource::write` gates
+   `syntacticRelationGroups`/`timelineSegments` behind its `S2` argument, but
+   `cSource::read` read them unconditionally, so any cache written by the
+   `S2 == false` call at `main.cpp:1448` was rejected and the source silently
+   reparsed. **Fixed** in `a8d135a`; the existing cache now loads in 3 seconds
+   and `main.lplog` reports `already parsed.`
+2. **`dbpedia_downloads/2016-10/dbpedia_2016-10.nt`.**
+   `cOntology::readDbPediaOntology` (`createOntology.cpp:1140`) treats its
+   absence as `LOG_FATAL_ERROR`, which exits the process *after* a successful
+   parse. **Supplied by the author on 2026-09-07** (4.1 MB, narrow UTF-8, which
+   matches the `"rt"` + `lp_fgetws` reader it is opened with).
+3. **A local Virtuoso SPARQL endpoint on `localhost:8890`.** Still missing.
+   `cInternet::readPage` retries a failed SPARQL query
+   `internetWebSearchRetryAttempts` times, sleeping 30 s and printing
+   `restart virtuoso` between attempts, then gives up — and
+   `identifySpeakerGroups` dies. Nothing is listening on 8890 and Virtuoso is not
+   installed. The Windows machine evidently had it running.
+
+`caches/dbPediaCache` covers this query type — 6,509 cached
+`DISAMBIGUATE from REDIRECT(RESOURCES)` results — so most entities never reach
+the network. The run dies on a genuine miss: `:the_Daily_Mail`.
+
+**A lead worth checking before installing anything.** The cache holds
+`d/a/_Daily_Mail_cR1_TYPES*.html` — keyed on `Daily_Mail`, without the article —
+while the failing query asks for `the_Daily_Mail`. If the Windows build derived
+the key without the leading article, it would have hit the cache and never
+needed the server. That would make this another port defect rather than a
+missing dependency, and is cheaper to investigate than standing up Virtuoso.
