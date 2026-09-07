@@ -3530,8 +3530,14 @@ void cSource::preferRelatedObjects(int where)
 					objectString(m[where].objectMatches[offsetWithFrequency].object,tmpstr2,true).c_str(),verb->first.c_str());
 	if (wordsWithFrequency==1)
 	{
+		// Read the winner out before clearing. clear() destroys the elements, so
+		// indexing objectMatches[offsetWithFrequency] afterwards read a destroyed
+		// element inside the still-allocated buffer -- AddressSanitizer reports it as
+		// a container-overflow. The intent is "keep only the winner", so the value is
+		// captured first and the vector then rebuilt from it.
+		const int winnerObject = m[where].objectMatches[offsetWithFrequency].object;
 		m[where].objectMatches.clear();
-		m[where].objectMatches.push_back(cOM(m[where].objectMatches[offsetWithFrequency].object,SALIENCE_THRESHOLD));
+		m[where].objectMatches.push_back(cOM(winnerObject,SALIENCE_THRESHOLD));
 	}
 }
 
