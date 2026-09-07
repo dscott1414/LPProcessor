@@ -443,7 +443,19 @@ bool cSource::setTimeFlowTense(int where, int whereControllingEntity, int whereS
 		}
 		*/
 		int maxWO = max(whereObject, whereSubject);
-		if (m[maxWO].getObject() < 0 && whereSubject >= 0)
+		// maxWO >= 0 must be tested BEFORE m[maxWO] is read, not after. whereObject
+		// and whereSubject are both -1 when neither is set, so this indexed m[-1] --
+		// AddressSanitizer catches it as a read 16 bytes before the m allocation
+		// (element -1 begins 640 bytes before it; `object` sits at +624 within a
+		// cWordMatch), and in a release build it is what crashed identifySpeakerGroups
+		// 29% of the way through Secret Adversary.
+		//
+		// No behaviour changes when maxWO >= 0. When it is -1, whereSubject is -1 too
+		// (maxWO is their maximum), so `whereSubject >= 0` was already false and the
+		// assignment below never ran -- the only effect of the old order was the
+		// out-of-bounds read itself. The author's own guard on the next line shows
+		// the negative case was expected.
+		if (maxWO >= 0 && m[maxWO].getObject() < 0 && whereSubject >= 0)
 			maxWO = whereSubject;
 		if (maxWO >= 0)
 		{

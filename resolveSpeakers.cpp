@@ -5196,7 +5196,16 @@ int cSource::scanForSpeaker(int where,bool &definitelySpeaker,bool &crossedSecti
 	  for (audienceLimit=speakerObjectPosition; audienceLimit<(signed)m.size() && !isEOS(audienceLimit); audienceLimit++);
       for (audienceObjectPosition=speakerObjectPosition+1,im++; audienceObjectPosition<audienceLimit; im++,audienceObjectPosition++)
       {
-        if (im->word->first==u"to" && audienceObjectPosition+1<audienceLimit && (ao=m[m[audienceObjectPosition+1].principalWherePosition].getObject())!=cObject::eOBJECTS::UNKNOWN_OBJECT && 
+        // principalWherePosition is -1 when unset (source.h:308 initializes it so, and
+        // names.cpp guards it with >= 0 at three sites). Without the guard the inner
+        // lookup yields -1 and the outer m[-1] reads before the vector -- AddressSanitizer
+        // reports it 16 bytes before the m allocation, and it crashed resolveSpeakers.
+        // An unset principal position means there is no object to test, so the condition
+        // is false, which is what the surrounding code already assumes.
+        int pwp;
+        if (im->word->first==u"to" && audienceObjectPosition+1<audienceLimit &&
+            (pwp=m[audienceObjectPosition+1].principalWherePosition)>=0 &&
+            (ao=m[pwp].getObject())!=cObject::eOBJECTS::UNKNOWN_OBJECT && 
 					  (ao<0 || objects[ao].isAgent(true)))
         {
           audienceObjectPosition++;

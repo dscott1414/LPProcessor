@@ -985,8 +985,14 @@ int cSource::detectUnresolvableObjectsResolvableThroughSpeakerGroup(void)
 		for (set <int>::iterator si = futureSpeakers.begin(); si != futureSpeakers.end(); )
 			if (objects[*si].firstPhysicalManifestation >= 0 && objects[*si].firstPhysicalManifestation < speakerGroups[speakerGroups.size() - 1].sgBegin)
 			{
-				futureSpeakers.erase(*si);
-				currentSpeakers.erase(*si);
+				// Read the value before erasing it. `si` iterates futureSpeakers, so
+				// futureSpeakers.erase(*si) frees the very node si points at, and the
+				// next line then dereferenced it -- AddressSanitizer reports a
+				// heap-use-after-free on the set node. (The loop above is not affected:
+				// there si iterates currentSpeakers while the erase is on futureSpeakers.)
+				const int speaker = *si;
+				futureSpeakers.erase(speaker);
+				currentSpeakers.erase(speaker);
 				si = futureSpeakers.begin();
 			}
 			else
