@@ -22,10 +22,8 @@ So every remaining difference is a behavioural difference in the code, and is
 therefore findable.
 
 > **Correction (2026-09-07).** The table above asks the right four questions but
-> misses a fifth, and the fifth undercuts the heading. See
-> "[The reference cache predates HEAD by 15 commits](#the-reference-cache-predates-head-by-15-commits)":
-> byte-identity is achievable only against the revision that *wrote* the
-> reference, and that is not HEAD.
+> misses a fifth: *is HEAD the code that wrote the reference?* It is not. See
+> "[What actually wrote the reference cache](#what-actually-wrote-the-reference-cache)".
 
 ### The two pattern definitions that do differ
 
@@ -425,3 +423,96 @@ alongside `SOURCE_VERSION`. Run once against each cache, swapping
 `Secret Adversary.txt.SourceCache` for the `.from_windows.` copy in between.
 Both dumps and the comparison script are throwaway — the instrumentation was
 reverted after use.
+
+## What actually wrote the reference cache
+
+**`38aa63d` (2022-05-09, "SOLID cWordMatch::read")** — stated by the author, and
+consistent with the file: `sourceVersion` 8, and that commit is the one that
+last touched the reader. The 2022-03-12 mtime is misleading and led an earlier
+section of this file to name `b3833082`; that was wrong.
+
+HEAD differs from the writing revision along two independent axes:
+
+| | commits | residual lines in cache-relevant code |
+|---|---|---|
+| the author's own work after the reference (`38aa63d..a836a35`) | 7 | **2,910** |
+| port-era work (`a836a35..HEAD`) | 54 | **1,887** |
+
+"Residual" means what survives after canonicalizing the port's dialect
+(`L""`→`u""`, `wchar_t`→`lpchar_t`, `wcslen`→`lp_strlen`, the Win32→POSIX file
+API, …) and stripping comments — so it is a lower bound on real change, not a
+diff size. Tooling: `semdiff.py`, `percommit.py`, `classify.py`.
+
+### Port-era changes, classified
+
+Of the port-era hunks in cache-relevant files that encode a decision:
+**6 precedence, 6 bounds-guard, 13 Win32→POSIX I/O**, and the rest predicate
+changes. Six were checked individually and **cleared with proof**:
+
+| Change | Why it is safe |
+|---|---|
+| `pattern.cpp` dropped `if ((int)findPattern(...) < 0) p->rootPattern = p->num;` | `findPattern` returns `unsigned`, and its not-found sentinel is `patterns.size()`, so the test was never true. On not-found it already leaves `rootPattern == patterns.size()`, and `p->num = patterns.size()` is set at line 1280 with `patterns.push_back(p)` not until 1372 — so the dead branch's assignment was already the state. |
+| `patternMatchArray::read` bound weakened | 2022 read `count` **before** `copy()` filled it — an uninitialized member. HEAD checks the header, then checks the payload against `limit` as before. |
+| `generatePEMACount` `>` → `>=` | Only gates an `lplog(LOG_FATAL_ERROR)`. Never fired: 0 occurrences of "Incorrect PEMA Position" in either log. |
+| `writeABNF` `onlyAfterQuote` → `afterQuote` | 2022's `pattern.h` has no `onlyAfterQuote` member. `writeABNF` writes an ABNF dump, not the cache. |
+| `operator==`/`!=` taking by value → by const reference | Avoids a copy; same result. |
+| `if (block && m[I].flags & 1)` → `(m[I].flags & 1)` | `&` already binds tighter than `&&`. A no-op. |
+
+### The genuine port-era divergences
+
+These change decisions on ordinary input. None was needed to build or run on
+macOS; all are prior agents' correctness fixes, and every one moves the engine
+*away* from the reference.
+
+1. **`identifySpeakerGroups.cpp:2937,2939` — `sameSpeaker` inverted** (`3c5cb19`).
+   Two of its four branches returned `== end()`, i.e. true when the object was
+   **not** found — contradicting both the function's name and its own first
+   branch (`getObject() == getObject()`). HEAD returns `!= end()`. *Narrow*: one
+   caller, gated on `lastEmbeddedStory >= 0`.
+
+2. **`resolveObjects.cpp:735` — `containingSpeakerGroup` was dead** (`3c5cb19`).
+   In the reference it took **no parameter**:
+   ```cpp
+   for (int I = 0; I < (signed)speakerGroups.size(); I++)
+       if (speakerGroups[I].sgBegin >= I && speakerGroups[I].sgEnd < I)  // sgEnd < I <= sgBegin
+           return speakerGroups.begin() + I;
+   return speakerGroups.end();
+   ```
+   The predicate implies `sgEnd < sgBegin`, so it always returned `end()`. Its
+   one caller reads
+   `if (oi->objectClass == GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS && moSG != speakerGroups.end() && !intersect(...))`,
+   so that rejection **never fired on Windows** and can now fire. Confined to
+   gendered occupation/role objects.
+
+3. **`identifyObjects.cpp:225` — `isPleonastic` MEANS shifted** (`3c5cb19`).
+   `m[where+2]`/`m[where+3]` → `m[where+1]`/`m[where+2]`. For "it seems that …"
+   `where+1` is the correct reading (and the sibling MA test in the same scope
+   already used `where+1`), but it changes every *seems/appears/means/follows*
+   in the book.
+
+4. **`identifyObjects.cpp:251`** — `object.eliminated` → `objects[*s].eliminated`
+   (`3c5cb19`): a different object's flag now gates the comparison.
+
+5. **`resolveObjects.cpp`** — `localObjects[0].om.object` → `localObjects[s]...`:
+   the loop variable replaces a constant 0.
+
+6. **`names.cpp`** (`7ccd915`) — a condition narrowed:
+   ```
+   2022: w2 && (w1==NULL || (len1<=1 && len2>1) || (len1>1 && len2>1))   ==  w2 && (w1==NULL || len2>1)
+   HEAD: w2 && (w1==NULL || (len1<=1 && len2>1))
+   ```
+   HEAD now rejects `len1>1 && len2>1`, which the reference accepted.
+
+`3c5cb19` ("Refactor and optimize various source files") accounts for four of
+the six. `7ccd915` ("Add new recommender model files for Photon") changed 210
+lines of parser behaviour despite its subject line.
+
+### What this means for parity
+
+The word sequence already matches (100,627 tokens). The remaining cache
+differences are object- and speaker-level, and they have two sources: the
+author's 7 post-reference commits, which are intentional, and the six changes
+above, which are not. Only the second set is a candidate for reverting, and
+reverting them re-introduces the reference's bugs by design — `sameSpeaker`
+would again contradict its own name. That is the price of byte-identity, and it
+is a judgement call rather than a defect to fix.
