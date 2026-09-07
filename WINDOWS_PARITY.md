@@ -252,3 +252,57 @@ where the resource is `The_Daily_Mail`. DBpedia resource names are case-sensitiv
 so the query returns empty; `The_Daily_Mail` does resolve, redirecting to
 `Daily_Mail`. That is a key-construction bug, and it is why the cache under
 `caches/dbPediaCache` was being missed for this entity.
+
+## The DBpedia key casing: investigated, not a defect
+
+Recorded above as a lead: the engine queried `the_Daily_Mail` where DBpedia holds
+`The_Daily_Mail`. Chasing it showed there is no bug.
+
+`cSource::getObjectString` (`getWikipedia.cpp:1150`) takes a
+`removePrecedingUncapitalizedWordsFromProperNouns` flag, and the comment at line
+1253 states the intended usage: call once with it false and once with it true,
+"so that if there are no preceding uncapitalized words, nothing is done".
+`questionAnswering.cpp` does exactly that — `processWikipedia(..., false)` at line
+1869 and `(..., true)` at line 1884. So the lowercase form is the *first of two
+deliberate attempts*, and an empty result from it is expected.
+
+The runs confirm it: they created `dbPediaCache/T/h/_The_Daily_Mail.rdfTypes`,
+capitalised, and the cache holds 159 legitimate `_the_*` entries from the other
+arm of the pair. The original failure was solely the unreachable SPARQL server.
+
+## The remaining 11 word-level differences
+
+macOS appends 19 synthetic `in` tokens where Windows appended 30. Reading both
+caches through the engine and dumping each `in` token's `relObject` identifies
+them exactly:
+
+- Windows-only (12): word positions 846, 4145, 6117, 12072, 18117, 24985, 37605,
+  47804, 49747 (twice), 63647 (twice)
+- macOS-only (1): 26461
+
+Every one is a *where* question — "where shall we go?", "where shall we meet? and
+when?", "where does he come in?", "but if so, where was the girl…".
+
+The chain, traced by instrumenting the decision:
+
+1. `transformQuestionRelation` appends the token only when
+   `inQuestion && srg.whereVerb >= 0`, and then only for a where/when question
+   whose object passes `inObject`.
+2. For the missing cases `inQuestion` is **false**. For position 12072 the SRG is
+   logged as `where=12075 inQ=0 verb=12073 subj=12075 obj=12072` — obj is exactly
+   the object Windows transformed.
+3. `inQuestion` is the OR of `flagInQuestion` on the SRG's subject and object.
+4. That flag is set by the backward walk from a `?` in
+   `identifyObjects.cpp:1996-2026`, which stops at a quote
+   (`imtmp->word->second.query(quoteForm) < 0`) and flags a word only when
+   `imtmp->getObject() != -1 || imtmp->queryWinnerForm(relativizerForm) != -1`.
+
+So the divergence is upstream of the question logic: it is a difference in
+**object identification** for words inside quoted questions, which decides whether
+the backward walk flags them at all. Of the 27 where-questions macOS does
+classify, only 12 also pass `inObject`, so that predicate is worth examining in
+the same pass.
+
+This is a semantic difference, not a memory error, and the numbers are stable, so
+it can be attacked with a diff of object identification between the two caches
+rather than by crash-chasing.
