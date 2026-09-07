@@ -2642,15 +2642,30 @@ bool cSource::read(char* buffer, int& where, unsigned int total, bool& parsedOnl
 	if (!copy(count, buffer, where, total)) return false;
 	for (unsigned int I = 0; I < count && !error; I++)
 		objects.push_back(cObject(buffer, where, total, error));
-	if (!copy(count, buffer, where, total)) return false;
-	for (unsigned int I = 0; I < count && !error; I++)
+	// A cache ends here when it was written by cSource::write(..., S2 == false, ...):
+	// that call writes everything above but gates the syntacticRelationGroups and
+	// timelineSegments sections below behind S2. main.cpp:1448 makes exactly that
+	// call, before speaker resolution runs, so the shape is one the writer is
+	// entitled to produce -- and does, on any run that does not reach the second,
+	// S2 == true write at main.cpp:1476.
+	//
+	// Reading those two sections unconditionally made read() fail on such a cache
+	// (`copy` runs off the end and returns false), readSource logged "Error while
+	// reading file ... at position <count>", and the engine silently discarded the
+	// cache and reparsed the whole source -- turning a one-minute load into a full
+	// reparse, every time, for a file that was written exactly as intended.
+	if (where < (signed)total)
 	{
-		syntacticRelationGroups.push_back(cSyntacticRelationGroup(buffer, where, total, error));
-		getSRIMinMax(&syntacticRelationGroups[syntacticRelationGroups.size() - 1]);
+		if (!copy(count, buffer, where, total)) return false;
+		for (unsigned int I = 0; I < count && !error; I++)
+		{
+			syntacticRelationGroups.push_back(cSyntacticRelationGroup(buffer, where, total, error));
+			getSRIMinMax(&syntacticRelationGroups[syntacticRelationGroups.size() - 1]);
+		}
+		if (!copy(count, buffer, where, total)) return false;
+		for (unsigned int I = 0; I < count && !error; I++)
+			timelineSegments.push_back(cTimelineSegment(buffer, where, total, error));
 	}
-	if (!copy(count, buffer, where, total)) return false;
-	for (unsigned int I = 0; I < count && !error; I++)
-		timelineSegments.push_back(cTimelineSegment(buffer, where, total, error));
 	// fill locations
 	unsigned int I = 0;
 	for (vector <cWordMatch>::iterator im = m.begin(), imEnd = m.end(); im != imEnd; im++, I++)
