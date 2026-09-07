@@ -190,3 +190,65 @@ while the failing query asks for `the_Daily_Mail`. If the Windows build derived
 the key without the leading article, it would have hit the cache and never
 needed the server. That would make this another port defect rather than a
 missing dependency, and is cheaper to investigate than standing up Virtuoso.
+
+## Status after the resolution-phase fixes (2026-09-07)
+
+The whole pipeline now runs: parse, speaker identification, speaker resolution and
+object resolution, exit 0, **zero AddressSanitizer errors**, 26 s in the release
+build.
+
+| | macOS | Windows |
+|---|---|---|
+| cache size | 70,009,972 | 70,569,669 |
+| word matches | 100,646 | 100,657 |
+
+That is a 0.8% size gap, against 67,349,081 bytes and a missing speaker/S2
+section before this work.
+
+**Correction to an earlier entry in this file.** The 30 trailing `in` tokens in
+the Windows cache were recorded above as an artifact of the `bufferLen` overrun
+fixed in `5b90003`. That was wrong. The parse ends correctly on both platforms at
+`… said tommy . ||| ||| |||` (position 100,627); the trailing `in` tokens are
+appended afterwards, by `cSource::transformQuestionRelation`
+(`questionProcessing.cpp:1039`), which pushes one synthetic `in` per *where*/*when*
+question relation so that a web query reads "X was born in". They are deliberate.
+
+macOS now appends **19** of them where Windows appended **30**, and the word
+sequences are otherwise identical. So the remaining word-level gap is 11
+where/when question relations that macOS does not detect — a semantic difference
+in `getQuestionTypeAndQuestionInformationSourceObjects` / `inObject`, not a memory
+error and not tokenization.
+
+### The four memory errors that had to be fixed first
+
+Each was hidden behind the previous one; all four are undefined behaviour that
+Windows tolerated.
+
+| # | site | error |
+|---|---|---|
+| 1 | `setTimeFlowTense`, semanticRelations.cpp:446 | `m[maxWO]` read before the `maxWO >= 0` guard two lines below; both inputs are -1 when unset |
+| 2 | `detectUnresolvableObjectsResolvableThroughSpeakerGroup`, identifySpeakerGroups.cpp:988 | `futureSpeakers.erase(*si)` frees the node `si` points at, then the next line dereferences `si` |
+| 3 | `scanForSpeaker`, resolveSpeakers.cpp:5199 | `m[m[…].principalWherePosition]` with no guard on an inner value that is -1 when unset |
+| 4 | `preferRelatedObjects`, resolveSpeakers.cpp:3534 | `objectMatches.clear()` then `objectMatches[offsetWithFrequency]` to build its replacement |
+
+`scratchpad/asan_cycle.sh` runs one iteration (~60 s) and prints the error type,
+location and top frames.
+
+### External dependencies, all now satisfied
+
+Virtuoso 7.2.17 (`brew install virtuoso`; the formula has no `brew services`
+definition, so start `virtuoso-t +configfile virtuoso.ini` from
+`/opt/homebrew/opt/virtuoso/var/lib/virtuoso/db`). `NumberOfBuffers` raised from
+10,000 to 2,720,000 and the data directory added to `DirsAllowed`; the original
+ini is saved beside it as `virtuoso.ini.orig`. The 12 available DBpedia 2016-10
+files bulk-loaded in about 90 seconds — 59,433,866 triples. Runs now report zero
+`cannot read URL` failures.
+
+Three of the fifteen datasets the README lists are still absent:
+`yago_types.ttl`, `instance_types_transitive_en.ttl`, `interlanguage_links_en.ttl`.
+
+A separate defect worth chasing: the engine asks DBpedia for `the_Daily_Mail`
+where the resource is `The_Daily_Mail`. DBpedia resource names are case-sensitive,
+so the query returns empty; `The_Daily_Mail` does resolve, redirecting to
+`Daily_Mail`. That is a key-construction bug, and it is why the cache under
+`caches/dbPediaCache` was being missed for this entity.
