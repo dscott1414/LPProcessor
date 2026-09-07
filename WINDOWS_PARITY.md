@@ -516,3 +516,51 @@ above, which are not. Only the second set is a candidate for reverting, and
 reverting them re-introduces the reference's bugs by design — `sameSpeaker`
 would again contradict its own name. That is the price of byte-identity, and it
 is a judgement call rather than a defect to fix.
+
+## The experiment: reverting all six changed almost nothing
+
+Run on a throwaway branch, all six divergences restored to their `38aa63d`
+form, full reparse with `-forceSourceReread`, then `getObject()` dumped from the
+resulting cache and compared against the Windows reference over the 100,627
+real-word positions.
+
+| | `getObject` differences vs Windows |
+|---|---|
+| baseline (HEAD `7136179`) | 32,918 |
+| all six reverted | **32,918** |
+| experiment vs baseline | **2** |
+
+**Net movement toward the reference: zero.** The six reverts changed exactly two
+word positions in the whole book — 942 (`doctor`) and 33,820 (`doc`) — and
+neither ended up agreeing with Windows.
+
+Those two positions are themselves confirmation rather than noise: `doctor` and
+`doc` are occupation roles, and `containingSpeakerGroup`'s caller only fires for
+`GENDERED_OCC_ROLE_ACTIVITY_OBJECT_CLASS`. So that revert did precisely what the
+static reading predicted, and its blast radius really is two words.
+
+### What this settles
+
+**The port is not the cause of the object-level divergence.** The six changes
+are real differences from the reference and worth knowing about, but together
+they account for 2 of 32,918 differing positions — 0.006%. Reverting them buys
+nothing, and it would re-introduce the reference's bugs, so they should stay as
+they are.
+
+That leaves the author's own 7 post-reference commits (2,910 residual lines in
+cache-relevant code, including `resolveObjects.cpp`) as the remaining
+explanation for the object differences. Those are intentional engine changes, so
+"fixing" them is not on the table either — which means the object-level gap
+between HEAD and this reference is **expected**, not a defect.
+
+### If byte-identity is still wanted
+
+The only sound route is to build `38aa63d` itself and diff that against the
+reference. That isolates the port cleanly, because everything else is held
+constant. It is a real piece of work — `38aa63d` is MSVC/Windows source, and
+porting it is what this branch spent its time on — but it is the only comparison
+that answers the question being asked.
+
+Cheaper and probably more useful: treat the current cache as the baseline, and
+guard *reproducibility* (macOS run N vs run N+1, already green) rather than
+identity with a 2022 Windows artifact.
