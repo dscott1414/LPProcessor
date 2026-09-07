@@ -21,6 +21,12 @@ Four things had to be true, and all four are:
 So every remaining difference is a behavioural difference in the code, and is
 therefore findable.
 
+> **Correction (2026-09-07).** The table above asks the right four questions but
+> misses a fifth, and the fifth undercuts the heading. See
+> "[The reference cache predates HEAD by 15 commits](#the-reference-cache-predates-head-by-15-commits)":
+> byte-identity is achievable only against the revision that *wrote* the
+> reference, and that is not HEAD.
+
 ### The two pattern definitions that do differ
 
 - `questionProcessing.cpp`, `_DISPLACED_OBJECT[1]`: `","` → `u","`. **Mine**, and
@@ -29,10 +35,20 @@ therefore findable.
   have resolved it to something valid or its parse would have aborted the way
   macOS's did.
 - `definePatterns.cpp`, `__CLOSING__S1[1]`: `_HAIL_OBJECT{HAIL|OBJECT}` →
-  `{HAIL:OBJECT}`. Made by a **prior agent** in `8e1bd47` (2026-08-29), not by
-  this work. `:` is the tag separator this codebase uses, so it is probably a
-  genuine fix — but it is a behavioural change relative to the 2022 build and is
-  a candidate if a `__CLOSING__S1` divergence shows up.
+  `{HAIL:OBJECT}`. `git blame` puts this on `a6cd92c` (2026-09-04), the port's
+  `L"`→`u"` rename — so it is **mine**, not a prior agent's as this file
+  previously recorded. It is also behaviourally live: `:` is the tag separator
+  (`pattern.cpp:1194`) and `_ROLE` (`pattern.cpp:1937`) contains both `HAIL` and
+  `OBJECT`, so the edit turns one unrecognised tag into a valid `HAIL` role.
+  **Reverted to the original spelling**, because parity is the goal and the 2022
+  text is the author's. It is the only grammar difference the port introduced.
+
+  Worth knowing before "fixing" it again: both tag-parsing loops
+  (`pattern.cpp:1001` and `:1194`) never advance `tag`, so only the tag before
+  the first `:` is ever read and the rest are silently dropped — `{HON:HAIL}`
+  yields `HON` alone. That bug is **identical in the 2022 source** (lines 938 and
+  1120 there), so it is Windows-era, not a port regression, and correcting it
+  would itself break parity.
 
 ## Current state (macOS run 2)
 
@@ -306,3 +322,106 @@ the same pass.
 This is a semantic difference, not a memory error, and the numbers are stable, so
 it can be attacked with a diff of object identification between the two caches
 rather than by crash-chasing.
+
+## The reference cache predates HEAD by 15 commits
+
+This is the finding that reframes the parity goal, and it should have been
+checked first.
+
+`Secret Adversary.txt.from_windows.SourceCache` has mtime **2022-03-12** and
+carries `sourceVersion` 8. The revision current at that date is `b3833082`
+(2022-03-11, *"SOLID identifyObject"*). But the original author kept working on
+Windows for another two and a half months, through `a836a35` (2022-05-28) — 15
+commits, all of which are ancestors of HEAD:
+
+```
+a836a35 2022-05-28 SOLID
+b82c06c 2022-05-24 SOLID resolvePronoun (finish)
+34e92ab 2022-05-24 SOLID resolvePronoun resolveMetaGroupByAssociation
+d37d840 2022-05-22 SOLID identifySpeakerGroups startProcesses
+239c3a5 2022-05-21 SOLID resolveMetaGroupGenericOther
+a1237a0 2022-05-18 SOLID syntacticRelations, processEndOfPrimaryQuoteRS evaluateNounDeterminer
+84dd23f 2022-05-14 SOLID
+38aa63d 2022-05-09 SOLID cWordMatch::read
+f2b4347 2022-05-09 SOLID detectSyntacticRelationGroup
+a1dfade 2022-05-08 SOLID processExit and coreferenceFilterLL2345
+6c31586 2022-04-30 SOLID resolveFirstSecondPersonPronouns identifyDateTime
+1a2e719 2022-04-30 SOLID distributePOV
+ead1b4c 2022-04-27 SOLID
+5901f2c 2022-04-11 SOLID newSR, parseBuffer, createSpeakerGroup
+ce9f04e 2022-03-14 SOLID wmain, createWordCategories
+```
+
+`git diff b3833082 a836a35` over the files that decide object and role
+assignment:
+
+| File | Lines changed |
+|---|---|
+| `resolveObjects.cpp` | **1,040** |
+| `source.cpp` | 682 |
+| `syntacticRelations.cpp` | 327 |
+
+**HEAD is not the code that produced the reference cache.** Every commit is
+named *"SOLID &lt;function&gt;"*, which reads as refactoring toward the SOLID
+principles, so these changes may well be behaviour-preserving — but that is an
+inference from commit messages, and it is not established. A 1,040-line change
+to `resolveObjects.cpp` is the single most likely source of a difference in
+object identification, which is exactly what remains unexplained.
+
+What this does *not* undermine: the word sequence (100,627 tokens, identical),
+the parse reproducibility fix, the four memory errors, and the read-back fix.
+Those stand on their own.
+
+What it does mean: **byte-identity should be measured against `b3833082`, not
+against HEAD.** Chasing object differences on HEAD is chasing a moving target
+that includes the author's own post-reference work.
+
+### The object comparison, and why it is valid
+
+`getObject()` was dumped for every position from both caches, read back through
+the same binary, and compared over the 100,627 real-word prefix:
+
+| | count |
+|---|---|
+| word text differences | **0** |
+| `getObject` differences | 32,918 |
+| `flags` differences | 24,853 |
+| `objectRole` differences | 34,927 |
+| both have an object | 17,844 |
+| macOS only | 7,485 |
+| Windows only | 7,656 |
+
+Reading a version-8 cache with today's reader had to be justified first, because
+`cWordMatch::read` was edited on 2022-05-09, *after* the reference was written,
+with no version bump. It is sound: the field sequence is 43 operations on both
+sides once the extracted `readFlags`/`writeFlags` helpers are inlined, and the
+one real change — `traceTime` — was **appended** at bit 21 of the packed flags
+word, so all 21 earlier bits decode unchanged and no byte offset moves.
+
+The differences are not index drift (the delta decreases at 3,217 positions, and
+pure drift never decreases). They are an *anchoring* difference. On multi-word
+noun phrases macOS marks the first word and Windows marks the head noun; on
+single-word phrases they agree:
+
+```
+  pos  word          mac    win
+   22  two             7     -1     "two torpedoes"  — mac tags the determiner,
+   23  torpedoes      -1      6                        Windows the head noun
+   32  the             9     -1     "the boats"
+   33  boats          -1      8
+   43  women          12     10     single-word NP — both agree
+   45  children       13     11     single-word NP — both agree
+```
+
+That is the shape a change in object resolution would produce, which points back
+at the 1,040-line `resolveObjects.cpp` diff above rather than at the port.
+
+### Reproducing the object dump
+
+Add to `cSource::read`, after the `m.emplace_back` loop, a block guarded by
+`getenv("LP_DUMP_OBJ")` that writes `index, word, getObject(), flags,
+objectRole` per line and `exit(0)`s; temporarily accept `sourceVersion == 8`
+alongside `SOURCE_VERSION`. Run once against each cache, swapping
+`Secret Adversary.txt.SourceCache` for the `.from_windows.` copy in between.
+Both dumps and the comparison script are throwaway — the instrumentation was
+reverted after use.
