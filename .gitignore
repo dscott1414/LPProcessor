@@ -1,6 +1,7 @@
 *.ipch
 *.tlog
 /build/
+/build-asan/
 *.js
 *.html
 *.pdb
